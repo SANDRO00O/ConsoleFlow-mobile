@@ -8,8 +8,9 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <color name="splash_background">#438afe</color>
-    <color name="background">#fff</color>
-    <color name="input_background">#f4f4f4</color>
-    <color name="input_color">#606060</color>
+    <color name="splash_background">#000000</color>
+    <color name="background">#000000</color>
+    <color name="input_background">#0d0d0d</color>
+    <color name="input_color">#e0e0e0</color>
+    <color name="progress_color">#333333</color>
 </resources>

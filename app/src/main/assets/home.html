@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Search</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 24px;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 500px;
+    }
+
+    /* Search */
+    .search-box {
+      position: relative;
+      width: 100%;
+    }
+
+    .search-input {
+      width: 100%;
+      background: #0d0d0d;
+      border: 1px solid #1c1c1c;
+      border-radius: 10px;
+      padding: 15px 52px 15px 18px;
+      font-size: 16px;
+      color: #f0f0f0;
+      outline: none;
+      caret-color: #fff;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .search-input:focus {
+      border-color: #2e2e2e;
+    }
+
+    .search-input::placeholder {
+      color: #303030;
+    }
+
+    .search-btn {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      padding: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      opacity: 0.3;
+      transition: opacity 0.15s;
+    }
+
+    .search-btn:active { opacity: 0.7; }
+
+    .search-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: #fff;
+    }
+
+    /* Quick links */
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .link {
+      background: #0d0d0d;
+      border: 1px solid #181818;
+      border-radius: 8px;
+      padding: 9px 15px;
+      font-size: 13px;
+      color: #404040;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      letter-spacing: 0.01em;
+      user-select: none;
+    }
+
+    .link:active {
+      color: #888;
+      border-color: #2a2a2a;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="search-box">
+      <input
+        id="q"
+        class="search-input"
+        type="text"
+        placeholder="Search or enter URL..."
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        enterkeyhint="go"
+      >
+      <button class="search-btn" onclick="go()" aria-label="Go">
+        <svg viewBox="0 0 24 24">
+          <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="links">
+      <span class="link" onclick="nav('https://github.com')">GitHub</span>
+      <span class="link" onclick="nav('https://google.com')">Google</span>
+      <span class="link" onclick="nav('https://developer.mozilla.org')">MDN</span>
+      <span class="link" onclick="nav('https://stackoverflow.com')">Stack Overflow</span>
+      <span class="link" onclick="nav('https://developer.android.com')">Android Dev</span>
+      <span class="link" onclick="nav('https://npmjs.com')">npm</span>
+    </div>
+  </div>
+
+  <script>
+    var input = document.getElementById('q');
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') go();
+    });
+
+    function go() {
+      var val = input.value.trim();
+      if (val) Android.navigate(val);
+    }
+
+    function nav(url) {
+      Android.navigate(url);
+    }
+
+    // Auto-focus with small delay to let keyboard settle
+    setTimeout(function () { input.focus(); }, 150);
+  </script>
+</body>
+</html>

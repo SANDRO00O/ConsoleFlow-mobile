@@ -8,6 +8,7 @@
     android:orientation="vertical"
     tools:context=".MainActivity">
 
+    <!-- Top bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="@dimen/top_bar_height"
@@ -37,7 +38,7 @@
             android:inputType="textUri"
             android:maxLines="1"
             android:textColor="@color/input_color"
-            android:textColorHint="#9f9f9f"
+            android:textColorHint="#2e2e2e"
             android:textSize="15sp" />
 
         <ImageView
@@ -52,13 +53,12 @@
 
     </LinearLayout>
 
+    <!-- WebView area -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="1dp"
-        android:layout_marginBottom="1dp"
         android:layout_weight="1"
-        android:background="#d1d1d1">
+        android:background="@color/background">
 
         <WebView
             android:id="@+id/webView"
@@ -71,32 +71,39 @@
             android:layout_width="match_parent"
             android:layout_height="2dp"
             android:max="100"
-            android:progress="50" />
+            android:progress="50"
+            android:progressTint="@color/progress_color"
+            android:progressBackgroundTint="#00000000" />
 
     </FrameLayout>
 
+    <!-- Bottom nav bar: back | home | forward -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="40dp"
+        android:layout_height="44dp"
+        android:background="@color/background"
         android:baselineAligned="false"
         android:orientation="horizontal">
 
         <RelativeLayout style="@style/NavItem">
-
             <ImageView
                 android:id="@+id/goBack"
                 style="@style/NavIcon"
                 android:src="@drawable/arrow_left" />
-
         </RelativeLayout>
 
         <RelativeLayout style="@style/NavItem">
+            <ImageView
+                android:id="@+id/goHome"
+                style="@style/NavIcon"
+                android:src="@drawable/home" />
+        </RelativeLayout>
 
+        <RelativeLayout style="@style/NavItem">
             <ImageView
                 android:id="@+id/goForward"
                 style="@style/NavIcon"
                 android:src="@drawable/arrow_right" />
-
         </RelativeLayout>
 
     </LinearLayout>
