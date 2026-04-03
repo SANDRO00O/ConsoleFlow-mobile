@@ -27,7 +27,6 @@ import okhttp3.Request
 import java.io.UnsupportedEncodingException
 import java.net.URLEncoder
 
-// https://github.com/mengkunsoft/MkBrowser
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
@@ -38,9 +37,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnHome: ImageView
     private lateinit var favicon: ImageView
     private lateinit var manager: InputMethodManager
+    
     private val TAG = "Eruda.MainActivity"
     private val HOME_URL = "file:///android_asset/home.html"
-    var mFilePathCallback: ValueCallback<Array<Uri>>? = null
+    private var mFilePathCallback: ValueCallback<Array<Uri>>? = null
+
+    // متغير لتخزين كود Eruda في الذاكرة (Caching) لتجنب القراءة المتكررة من القرص
+    private var cachedErudaCode: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -133,6 +136,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * دالة لجلب كود Eruda من ملف assets مع ميزة التخزين المؤقت
+     */
+    private fun getErudaLib(): String {
+        if (cachedErudaCode == null) {
+            cachedErudaCode = try {
+                assets.open("eruda.js").bufferedReader().use { it.readText() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error reading eruda.js from assets", e)
+                ""
+            }
+        }
+        return cachedErudaCode ?: ""
+    }
+
     @Suppress("DEPRECATION")
     @SuppressLint("SetJavaScriptEnabled", "RequiresFeature")
     private fun initWebView() {
@@ -216,24 +234,33 @@ class MainActivity : AppCompatActivity() {
 
                 setTextUrl(view.title)
 
-                val script = """
-                    (function () {
-                        if (window.eruda) return;
-                        var define;
-                        if (window.define) {
-                            define = window.define;
-                            window.define = null;
-                        }
-                        var script = document.createElement('script');
-                        script.src = '//cdn.jsdelivr.net/npm/eruda';
-                        document.body.appendChild(script);
-                        script.onload = function () {
-                            eruda.init();
-                            if (define) window.define = define;
-                        }
-                    })();
-                """.trimIndent()
-                webView.evaluateJavascript(script) {}
+                // تحضير كود الحقن باستخدام الملف المحلي
+                val erudaContent = getErudaLib()
+                if (erudaContent.isNotEmpty()) {
+                    val script = """
+                        (function () {
+                            if (window.eruda) return;
+                            
+                            // حفظ الـ define الحالي في حال وجود محمل وحدات (Module Loader)
+                            var oldDefine;
+                            if (window.define) {
+                                oldDefine = window.define;
+                                window.define = null;
+                            }
+                            
+                            // حقن محتوى كود Eruda
+                            $erudaContent
+                            
+                            // تشغيل المكتبة
+                            if (window.eruda) {
+                                eruda.init();
+                                // استعادة define بعد التهيئة
+                                if (oldDefine) window.define = oldDefine;
+                            }
+                        })();
+                    """.trimIndent()
+                    webView.evaluateJavascript(script) {}
+                }
             }
         }
 
