@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page Error</title>
+  <style>
+  *{
+    -webkit-tap-highlight-color: transparent;
+  }
+    body {
+      background: #000000;
+      color: #fff;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      width: 100%;
+      margin: 0;
+      text-align: center;
+      padding: 0;
+    }
+    
+    svg {
+      width: 80px;
+      fill: #ff4c4c;
+      margin-bottom: 20px;
+    }
+    
+    button {
+      background: #333;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      margin-top: 20px;
+      cursor: pointer;
+    }
+    
+    button:active {
+      background: #555;
+    }
+  </style>
+</head>
+
+<body>
+  <svg viewBox="0 0 24 24">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+  </svg>
+  <h2>Webpage not available</h2>
+  <p id="desc">Could not load the requested page.</p>
+  <button onclick="retry()">Try Again</button>
+  
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetUrl = urlParams.get('url');
+    if (targetUrl) document.getElementById('desc').innerText = "Could not connect to:\n" + targetUrl;
+    
+    function retry() {
+      if (targetUrl) window.location.href = targetUrl;
+      else Android.navigate("");
+    }
+  </script>
+</body>
+
+</html>
