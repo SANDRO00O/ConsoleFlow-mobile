@@ -130,36 +130,40 @@
     </LinearLayout>
 
     <!-- Bottom Bar -->
-    <LinearLayout
-        android:id="@+id/bottomBar"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:background="#121212"
-        android:gravity="space_evenly"
-        android:orientation="horizontal"
-        app:layout_constraintBottom_toBottomOf="parent">
+<LinearLayout
+    android:id="@+id/bottomBar"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:background="#121212"
+    android:orientation="horizontal"
+    android:gravity="center_vertical" 
+    app:layout_constraintBottom_toBottomOf="parent">
 
-        <ImageView
-            android:id="@+id/goBack"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:padding="12dp"
-            android:src="@drawable/arrow_left" />
-            
-        <ImageView
-            android:id="@+id/goHome"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:padding="12dp"
-            android:src="@drawable/home" />
+    <ImageView
+        android:id="@+id/goBack"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1" 
+        android:padding="12dp"
+        android:src="@drawable/arrow_left" />
+        
+    <ImageView
+        android:id="@+id/goHome"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1" 
+        android:padding="12dp"
+        android:src="@drawable/home" />
 
-        <ImageView
-            android:id="@+id/goForward"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:padding="12dp"
-            android:src="@drawable/arrow_right" />
-    </LinearLayout>
+    <ImageView
+        android:id="@+id/goForward"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1" 
+        android:padding="12dp"
+        android:src="@drawable/arrow_right" />
+</LinearLayout>
+
 
     <!-- Floating Action Button for Consoleflow -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
