@@ -2,15 +2,17 @@ package space.karrarnazim.ConsoleFlow
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Dialog
 import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.net.http.SslError
-import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.util.Patterns
@@ -26,7 +28,6 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 
@@ -36,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var textUrl: EditText
     private lateinit var btnBookmark: ImageView
+    private lateinit var imgSearchEngine: ImageView
     private lateinit var findBar: LinearLayout
     private lateinit var fullscreenContainer: FrameLayout
 
@@ -49,17 +51,18 @@ class MainActivity : AppCompatActivity() {
     private val HOME_URL = "file:///android_asset/home.html"
     private val ERROR_URL = "file:///android_asset/error.html"
 
-    // Domains where OkHttp interception causes CAPTCHA / bot detection issues
+    // Domains that trigger CAPTCHA when intercepted by OkHttp — skip interception for these
     private val NO_INTERCEPT_DOMAINS = listOf(
         "google.com", "googleapis.com", "gstatic.com", "accounts.google.com",
         "bing.com", "microsoft.com", "live.com",
         "duckduckgo.com",
         "search.brave.com",
-        "yahoo.com",
-        "yandex.com"
+        "yahoo.com", "yandex.com"
     )
 
-    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
         if (permissions.values.all { it }) webPermissionRequest?.grant(webPermissionRequest?.resources)
         else webPermissionRequest?.deny()
     }
@@ -101,8 +104,12 @@ class MainActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         textUrl = findViewById(R.id.textUrl)
         btnBookmark = findViewById(R.id.btnBookmark)
+        imgSearchEngine = findViewById(R.id.imgSearchEngine)
         findBar = findViewById(R.id.findBar)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
+
+        // Load current search engine favicon
+        updateSearchEngineIcon()
     }
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
@@ -133,7 +140,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 progressBar.visibility = View.VISIBLE
-                // Fix: Don't show home.html or error.html path in the search bar
+                // Don't show file:// paths in the search bar
                 if (url == HOME_URL || url?.startsWith(ERROR_URL) == true) {
                     textUrl.setText("")
                 } else {
@@ -149,9 +156,9 @@ class MainActivity : AppCompatActivity() {
                 url?.let {
                     if (it != HOME_URL) prefsManager.addHistory(view?.title ?: "Unknown", it)
                 }
-                // Fallback Eruda injection for pages skipped by intercept (POST, no-intercept domains)
+                // Fallback Eruda injection (covers POST pages and NO_INTERCEPT_DOMAINS)
                 view?.evaluateJavascript(
-                    "if(!window.eruda) { var script = document.createElement('script'); script.src = 'https://eruda.local/eruda.js'; document.head.appendChild(script); script.onload = function() { eruda.init(); }; }",
+                    "if(!window.eruda){var s=document.createElement('script');s.src='https://eruda.local/eruda.js';document.head.appendChild(s);s.onload=function(){eruda.init();};}",
                     null
                 )
             }
@@ -167,11 +174,11 @@ class MainActivity : AppCompatActivity() {
                     } catch (e: Exception) { null }
                 }
 
-                // Skip interception for search engines and major sites to avoid CAPTCHA/bot detection
+                // Skip interception for search engines / major sites — prevents CAPTCHA
                 val host = request.url.host ?: ""
                 if (NO_INTERCEPT_DOMAINS.any { host.endsWith(it) }) return null
 
-                // Smart injection: inject Eruda script at the start of HTML pages
+                // Smart HTML injection for Eruda (captures early console errors)
                 if (request.isForMainFrame && request.method == "GET" && url.startsWith("http")) {
                     try {
                         val reqBuilder = Request.Builder().url(url)
@@ -189,7 +196,6 @@ class MainActivity : AppCompatActivity() {
 
                             html = html.replaceFirst("<head>", "<head>$injection$customJs", ignoreCase = true)
                             val inputStream = ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
-
                             return WebResourceResponse("text/html", response.header("Content-Encoding", "utf-8"), response.code, "OK", response.headers.toMap(), inputStream)
                         }
                     } catch (e: Exception) {
@@ -206,7 +212,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
-                AlertDialog.Builder(this@MainActivity)
+                AlertDialog.Builder(this@MainActivity, R.style.DarkDialog)
                     .setTitle("SSL Certificate Error")
                     .setMessage("The site's security certificate is not trusted. Continue anyway?")
                     .setPositiveButton("Continue") { _, _ -> handler.proceed() }
@@ -248,15 +254,12 @@ class MainActivity : AppCompatActivity() {
                         PermissionRequest.RESOURCE_VIDEO_CAPTURE -> androidPerms.add(Manifest.permission.CAMERA)
                     }
                 }
-                if (androidPerms.isNotEmpty()) {
-                    requestPermissionLauncher.launch(androidPerms.toTypedArray())
-                } else {
-                    request.grant(request.resources)
-                }
+                if (androidPerms.isNotEmpty()) requestPermissionLauncher.launch(androidPerms.toTypedArray())
+                else request.grant(request.resources)
             }
         }
 
-        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setMimeType(mimetype)
                 val cookies = CookieManager.getInstance().getCookie(url)
@@ -266,7 +269,10 @@ class MainActivity : AppCompatActivity() {
                 setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype))
                 allowScanningByMediaScanner()
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimetype))
+                setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_DOWNLOADS,
+                    URLUtil.guessFileName(url, contentDisposition, mimetype)
+                )
             }
             val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             dm.enqueue(request)
@@ -331,7 +337,7 @@ class MainActivity : AppCompatActivity() {
         val inputFind = findViewById<EditText>(R.id.findInput)
         val tvMatches = findViewById<TextView>(R.id.findMatches)
 
-        webView.setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
+        webView.setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
             tvMatches.text = if (numberOfMatches > 0) "${activeMatchOrdinal + 1}/$numberOfMatches" else "0/0"
         }
 
@@ -350,33 +356,56 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ── Custom dark menu dialog ────────────────────────────────────────────────
     private fun showMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
-        val menu = popup.menu
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val menuView = layoutInflater.inflate(R.layout.layout_main_menu, null)
+        dialog.setContentView(menuView)
 
-        menu.add("Bookmarks").setOnMenuItemClickListener { showBookmarksDialog(); true }
-        menu.add("History").setOnMenuItemClickListener { showHistoryDialog(); true }
-        menu.add("Find in Page").setOnMenuItemClickListener { findBar.visibility = View.VISIBLE; true }
-        menu.add("Desktop Mode").apply {
-            isCheckable = true
-            isChecked = prefsManager.desktopMode
-        }.setOnMenuItemClickListener {
-            prefsManager.desktopMode = !it.isChecked
+        // Transparent dialog window positioned near the top-right (below the 3-dot button)
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+            val lp = attributes
+            lp.gravity = Gravity.TOP or Gravity.END
+            lp.x = resources.getDimensionPixelSize(R.dimen.menu_margin)
+            lp.y = resources.getDimensionPixelSize(R.dimen.menu_top_offset)
+            lp.width = WindowManager.LayoutParams.WRAP_CONTENT
+            lp.height = WindowManager.LayoutParams.WRAP_CONTENT
+            attributes = lp
+        }
+
+        // Update desktop mode label to show current state
+        val menuDesktop = menuView.findViewById<TextView>(R.id.menuDesktopMode)
+        menuDesktop.text = if (prefsManager.desktopMode) "⊞  Desktop Mode  ✓" else "⊞  Desktop Mode"
+
+        menuView.findViewById<View>(R.id.menuBookmarks).setOnClickListener {
+            dialog.dismiss(); showBookmarksDialog()
+        }
+        menuView.findViewById<View>(R.id.menuHistory).setOnClickListener {
+            dialog.dismiss(); showHistoryDialog()
+        }
+        menuView.findViewById<View>(R.id.menuFindInPage).setOnClickListener {
+            dialog.dismiss(); findBar.visibility = View.VISIBLE
+        }
+        menuView.findViewById<View>(R.id.menuDesktopMode).setOnClickListener {
+            dialog.dismiss()
+            prefsManager.desktopMode = !prefsManager.desktopMode
             updateUserAgent()
-            webView.reload()
-            true
+            // Force full reload with new UA (reload() sometimes serves cached content)
+            val currentUrl = webView.url
+            if (!currentUrl.isNullOrEmpty() && currentUrl != HOME_URL) {
+                webView.loadUrl(currentUrl)
+            }
         }
-        menu.add("Settings").setOnMenuItemClickListener { showSettingsDialog(); true }
-        menu.add("Clear Data").setOnMenuItemClickListener {
-            WebStorage.getInstance().deleteAllData()
-            CookieManager.getInstance().removeAllCookies(null)
-            webView.clearCache(true)
-            webView.clearHistory()
-            prefsManager.clearHistory()
-            Toast.makeText(this, "Data Cleared", Toast.LENGTH_SHORT).show()
-            true
+        menuView.findViewById<View>(R.id.menuSettings).setOnClickListener {
+            dialog.dismiss(); showSettingsDialog()
         }
-        popup.show()
+        menuView.findViewById<View>(R.id.menuClearData).setOnClickListener {
+            dialog.dismiss(); clearData()
+        }
+
+        dialog.show()
     }
 
     private fun showBookmarksDialog() {
@@ -385,18 +414,15 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "No bookmarks saved", Toast.LENGTH_SHORT).show()
             return
         }
-        val titles = bookmarks.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this)
+        val titles = bookmarks.map { it.first.ifEmpty { it.second } }.toTypedArray()
+        AlertDialog.Builder(this, R.style.DarkDialog)
             .setTitle("Bookmarks")
-            .setItems(titles) { _, which ->
-                webView.loadUrl(bookmarks[which].second)
-            }
-            .setNeutralButton("Delete All") { _, _ ->
-                // Clear all bookmarks
-                val prefs = getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
-                prefs.edit().remove("bookmarks").apply()
-                Toast.makeText(this, "All bookmarks cleared", Toast.LENGTH_SHORT).show()
+            .setItems(titles) { _, which -> webView.loadUrl(bookmarks[which].second) }
+            .setNeutralButton("Clear All") { _, _ ->
+                getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
+                    .edit().remove("bookmarks").apply()
                 updateBookmarkIcon(webView.url ?: "")
+                Toast.makeText(this, "Bookmarks cleared", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Close", null)
             .show()
@@ -409,11 +435,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val titles = history.map { it.first.ifEmpty { it.second } }.toTypedArray()
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialog)
             .setTitle("History")
-            .setItems(titles) { _, which ->
-                webView.loadUrl(history[which].second)
-            }
+            .setItems(titles) { _, which -> webView.loadUrl(history[which].second) }
             .setNegativeButton("Close", null)
             .show()
     }
@@ -426,27 +450,68 @@ class MainActivity : AppCompatActivity() {
             "https://www.bing.com/search?q=",
             "https://search.brave.com/search?q="
         )
-
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialog)
             .setTitle("Select Search Engine")
             .setItems(engines) { _, which ->
                 prefsManager.searchEngine = urls[which]
-                Toast.makeText(this, "Search engine updated", Toast.LENGTH_SHORT).show()
+                updateSearchEngineIcon()
+                Toast.makeText(this, "${engines[which]} selected", Toast.LENGTH_SHORT).show()
             }
             .show()
     }
 
+    private fun clearData() {
+        WebStorage.getInstance().deleteAllData()
+        CookieManager.getInstance().removeAllCookies(null)
+        webView.clearCache(true)
+        webView.clearHistory()
+        prefsManager.clearHistory()
+        Toast.makeText(this, "Data Cleared", Toast.LENGTH_SHORT).show()
+    }
+
+    // ── User Agent & Desktop Mode ──────────────────────────────────────────────
     private fun updateUserAgent() {
-        webView.settings.userAgentString = if (prefsManager.desktopMode) {
-            // Real desktop User-Agent for proper desktop mode
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        val settings = webView.settings
+        if (prefsManager.desktopMode) {
+            // Real Chrome desktop UA — recognized by all major sites
+            settings.userAgentString =
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
         } else {
-            WebSettings.getDefaultUserAgent(this)
+            settings.userAgentString = WebSettings.getDefaultUserAgent(this)
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = false
         }
     }
 
+    // ── Search Engine Favicon ──────────────────────────────────────────────────
+    private fun updateSearchEngineIcon() {
+        val engine = prefsManager.searchEngine
+        val faviconUrl = when {
+            engine.contains("google")     -> "https://www.google.com/favicon.ico"
+            engine.contains("duckduckgo") -> "https://duckduckgo.com/favicon.ico"
+            engine.contains("bing")       -> "https://www.bing.com/favicon.ico"
+            engine.contains("brave")      -> "https://search.brave.com/favicon.ico"
+            else                          -> "https://www.google.com/favicon.ico"
+        }
+        Thread {
+            try {
+                val request = Request.Builder().url(faviconUrl).build()
+                val response = client.newCall(request).execute()
+                val bytes = response.body?.bytes() ?: return@Thread
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@Thread
+                runOnUiThread {
+                    imgSearchEngine.setImageBitmap(bitmap)
+                    imgSearchEngine.colorFilter = null  // Remove any tint filter once real icon loads
+                }
+            } catch (e: Exception) { /* keep default icon */ }
+        }.start()
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
     private fun updateBookmarkIcon(url: String) {
-        btnBookmark.alpha = if (prefsManager.isBookmarked(url)) 1.0f else 0.5f
+        btnBookmark.alpha = if (prefsManager.isBookmarked(url)) 1.0f else 0.45f
     }
 
     private fun hideKeyboard() {
@@ -465,7 +530,8 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun navigate(input: String) {
             runOnUiThread {
-                val finalUrl = if (Patterns.WEB_URL.matcher(input).matches()) "https://$input" else prefsManager.searchEngine + input
+                val finalUrl = if (Patterns.WEB_URL.matcher(input).matches()) "https://$input"
+                               else prefsManager.searchEngine + input
                 webView.loadUrl(finalUrl)
             }
         }

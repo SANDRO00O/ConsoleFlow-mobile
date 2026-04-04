@@ -12,5 +12,14 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_centerInParent">true</item>
     </style>
-    
+
+    <!-- Dark styled alert dialog matching app theme -->
+    <style name="DarkDialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:colorBackground">#111111</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:textColorSecondary">#AAAAAA</item>
+        <item name="colorAccent">#FFFFFF</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+
 </resources>

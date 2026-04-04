@@ -1,4 +1,6 @@
 <resources>
     <dimen name="top_bar_height">40dp</dimen>
     <dimen name="top_bar_bg_gap">5dp</dimen>
+    <dimen name="menu_margin">12dp</dimen>
+    <dimen name="menu_top_offset">60dp</dimen>
 </resources>
