@@ -399,9 +399,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSettingsDialog() {
-        // يمكن بناء ديالوج إعدادات بسيط (محرك بحث و Custom JS)
-        val view = layoutInflater.inflate(R.layout.dialog_settings, null) // تحتاج لصنع هذا الـ Layout أو بناءه برمجياً
-        // اختصاراً، سنستخدم AlertDialog مع خيارات Search Engine
         val engines = arrayOf("Google", "DuckDuckGo", "Bing", "Brave")
         val urls = arrayOf("https://www.google.com/search?q=", "https://duckduckgo.com/?q=", "https://www.bing.com/search?q=", "https://search.brave.com/search?q=")
         
