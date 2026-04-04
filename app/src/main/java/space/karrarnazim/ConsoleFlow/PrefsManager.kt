@@ -3,6 +3,7 @@ package space.karrarnazim.ConsoleFlow
 import android.content.Context
 import android.content.SharedPreferences
 import org.json.JSONArray
+import org.json.JSONObject
 
 class PrefsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
@@ -23,7 +24,6 @@ class PrefsManager(context: Context) {
         if (url == "file:///android_asset/home.html" || url.startsWith("file:///android_asset/error.html")) return
         val historyArray = getList("history")
         val newItem = "{\"title\":\"$title\", \"url\":\"$url\"}"
-        // إزالة التكرار
         for (i in 0 until historyArray.length()) {
             if (historyArray.getString(i).contains(url)) {
                 historyArray.remove(i)
@@ -31,7 +31,7 @@ class PrefsManager(context: Context) {
             }
         }
         historyArray.put(newItem)
-        if (historyArray.length() > 100) historyArray.remove(0) // آخر 100 عنصر
+        if (historyArray.length() > 100) historyArray.remove(0)
         prefs.edit().putString("history", historyArray.toString()).apply()
     }
 
@@ -65,6 +65,30 @@ class PrefsManager(context: Context) {
             if (bookmarks.getString(i).contains(url)) return true
         }
         return false
+    }
+
+    fun getBookmarks(): List<Pair<String, String>> {
+        val bookmarks = getList("bookmarks")
+        val list = mutableListOf<Pair<String, String>>()
+        for (i in 0 until bookmarks.length()) {
+            try {
+                val obj = JSONObject(bookmarks.getString(i))
+                list.add(Pair(obj.getString("title"), obj.getString("url")))
+            } catch (e: Exception) { }
+        }
+        return list
+    }
+
+    fun getHistory(): List<Pair<String, String>> {
+        val history = getList("history")
+        val list = mutableListOf<Pair<String, String>>()
+        for (i in history.length() - 1 downTo 0) {
+            try {
+                val obj = JSONObject(history.getString(i))
+                list.add(Pair(obj.getString("title"), obj.getString("url")))
+            } catch (e: Exception) { }
+        }
+        return list
     }
 
     private fun getList(key: String): JSONArray {

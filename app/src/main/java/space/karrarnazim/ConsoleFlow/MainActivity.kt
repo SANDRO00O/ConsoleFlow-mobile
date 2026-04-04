@@ -36,21 +36,29 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var textUrl: EditText
     private lateinit var btnBookmark: ImageView
-    private lateinit var fabEruda: View
     private lateinit var findBar: LinearLayout
     private lateinit var fullscreenContainer: FrameLayout
-    
+
     private lateinit var prefsManager: PrefsManager
     private val client = OkHttpClient.Builder().followRedirects(false).build()
-    
+
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPermissionRequest: PermissionRequest? = null
 
     private val HOME_URL = "file:///android_asset/home.html"
     private val ERROR_URL = "file:///android_asset/error.html"
-    
-    // Permission launcher للميكروفون والكاميرا
+
+    // Domains where OkHttp interception causes CAPTCHA / bot detection issues
+    private val NO_INTERCEPT_DOMAINS = listOf(
+        "google.com", "googleapis.com", "gstatic.com", "accounts.google.com",
+        "bing.com", "microsoft.com", "live.com",
+        "duckduckgo.com",
+        "search.brave.com",
+        "yahoo.com",
+        "yandex.com"
+    )
+
     private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         if (permissions.values.all { it }) webPermissionRequest?.grant(webPermissionRequest?.resources)
         else webPermissionRequest?.deny()
@@ -61,20 +69,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         prefsManager = PrefsManager(this)
-        
+
         initViews()
         setupWebView()
         setupListeners()
-        setupFabDrag()
-        
-        // استعادة الحالة عند تغيير اتجاه الشاشة
+
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState)
         } else {
             webView.loadUrl(HOME_URL)
         }
 
-        // التعامل مع زر الرجوع في النظام
         onBackPressedDispatcher.addCallback(this) {
             when {
                 customView != null -> hideCustomView()
@@ -96,7 +101,6 @@ class MainActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         textUrl = findViewById(R.id.textUrl)
         btnBookmark = findViewById(R.id.btnBookmark)
-        fabEruda = findViewById(R.id.fabEruda)
         findBar = findViewById(R.id.findBar)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
     }
@@ -129,9 +133,13 @@ class MainActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 progressBar.visibility = View.VISIBLE
-                textUrl.setText(url)
+                // Fix: Don't show home.html or error.html path in the search bar
+                if (url == HOME_URL || url?.startsWith(ERROR_URL) == true) {
+                    textUrl.setText("")
+                } else {
+                    textUrl.setText(url)
+                }
                 updateBookmarkIcon(url ?: "")
-                fabEruda.visibility = if (url == HOME_URL || url?.startsWith(ERROR_URL) == true) View.GONE else View.VISIBLE
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -141,14 +149,17 @@ class MainActivity : AppCompatActivity() {
                 url?.let {
                     if (it != HOME_URL) prefsManager.addHistory(view?.title ?: "Unknown", it)
                 }
-                // Fallback لتشغيل Eruda للمواقع التي تم تجاوزها في Intercept (مثل POST)
-                view?.evaluateJavascript("if(!window.eruda) { var script = document.createElement('script'); script.src = 'https://eruda.local/eruda.js'; document.head.appendChild(script); script.onload = function() { eruda.init(); }; }", null)
+                // Fallback Eruda injection for pages skipped by intercept (POST, no-intercept domains)
+                view?.evaluateJavascript(
+                    "if(!window.eruda) { var script = document.createElement('script'); script.src = 'https://eruda.local/eruda.js'; document.head.appendChild(script); script.onload = function() { eruda.init(); }; }",
+                    null
+                )
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
-                
-                // تقديم Eruda محلياً كأنه قادم من سيرفر لضمان تجنب مشاكل الـ CORS
+
+                // Serve Eruda locally to avoid CORS issues
                 if (url == "https://eruda.local/eruda.js") {
                     return try {
                         val stream = assets.open("eruda.js")
@@ -156,7 +167,11 @@ class MainActivity : AppCompatActivity() {
                     } catch (e: Exception) { null }
                 }
 
-                // حقن ذكي: نحقن سكريبت Eruda في بداية صفحات الـ HTML لتسجيل الأخطاء المبكرة
+                // Skip interception for search engines and major sites to avoid CAPTCHA/bot detection
+                val host = request.url.host ?: ""
+                if (NO_INTERCEPT_DOMAINS.any { host.endsWith(it) }) return null
+
+                // Smart injection: inject Eruda script at the start of HTML pages
                 if (request.isForMainFrame && request.method == "GET" && url.startsWith("http")) {
                     try {
                         val reqBuilder = Request.Builder().url(url)
@@ -166,15 +181,15 @@ class MainActivity : AppCompatActivity() {
 
                         val response = client.newCall(reqBuilder.build()).execute()
                         val contentType = response.header("Content-Type", "") ?: ""
-                        
+
                         if (contentType.contains("text/html")) {
                             var html = response.body?.string() ?: ""
                             val injection = "<script src=\"https://eruda.local/eruda.js\"></script><script>eruda.init();</script>"
                             val customJs = if (prefsManager.customJs.isNotEmpty()) "<script>${prefsManager.customJs}</script>" else ""
-                            
+
                             html = html.replaceFirst("<head>", "<head>$injection$customJs", ignoreCase = true)
                             val inputStream = ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
-                            
+
                             return WebResourceResponse("text/html", response.header("Content-Encoding", "utf-8"), response.code, "OK", response.headers.toMap(), inputStream)
                         }
                     } catch (e: Exception) {
@@ -205,7 +220,6 @@ class MainActivity : AppCompatActivity() {
                 progressBar.progress = newProgress
             }
 
-            // دعم الـ Fullscreen (فيديو يوتيوب وغيرها)
             override fun onShowCustomView(view: View, callback: CustomViewCallback) {
                 customView = view
                 customViewCallback = callback
@@ -225,7 +239,6 @@ class MainActivity : AppCompatActivity() {
                 window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
             }
 
-            // طلبات الصلاحيات (كاميرا، ميكروفون، موقع)
             override fun onPermissionRequest(request: PermissionRequest) {
                 webPermissionRequest = request
                 val androidPerms = mutableListOf<String>()
@@ -243,7 +256,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // دعم التنزيلات
         webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setMimeType(mimetype)
@@ -266,7 +278,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupListeners() {
         swipeRefresh.setOnRefreshListener { webView.reload() }
 
-        // إيقاف التحديث عند السحب إذا كان المستخدم لم يصل لأعلى الصفحة
         webView.viewTreeObserver.addOnScrollChangedListener {
             swipeRefresh.isEnabled = webView.scrollY == 0
         }
@@ -283,7 +294,6 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        // نسخ الرابط عند الضغط مطولاً
         textUrl.setOnLongClickListener {
             val popup = PopupMenu(this, textUrl)
             popup.menu.add("Copy URL").setOnMenuItemClickListener {
@@ -318,10 +328,9 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnMenu).setOnClickListener { showMenu(it) }
 
-        // Find in Page Logic
         val inputFind = findViewById<EditText>(R.id.findInput)
         val tvMatches = findViewById<TextView>(R.id.findMatches)
-        
+
         webView.setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
             tvMatches.text = if (numberOfMatches > 0) "${activeMatchOrdinal + 1}/$numberOfMatches" else "0/0"
         }
@@ -334,51 +343,23 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnFindNext).setOnClickListener { webView.findNext(true) }
         findViewById<View>(R.id.btnFindPrev).setOnClickListener { webView.findNext(false) }
-        findViewById<View>(R.id.btnFindClose).setOnClickListener { 
+        findViewById<View>(R.id.btnFindClose).setOnClickListener {
             findBar.visibility = View.GONE
             webView.clearMatches()
             hideKeyboard()
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility")
-    private fun setupFabDrag() {
-        var dX = 0f
-        var dY = 0f
-        var lastAction = 0
-
-        fabEruda.setOnTouchListener { view, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    dX = view.x - event.rawX
-                    dY = view.y - event.rawY
-                    lastAction = MotionEvent.ACTION_DOWN
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    view.y = event.rawY + dY
-                    view.x = event.rawX + dX
-                    lastAction = MotionEvent.ACTION_MOVE
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (lastAction == MotionEvent.ACTION_DOWN) {
-                        // Toggle Eruda
-                        webView.evaluateJavascript("if(window.eruda) { var e = document.querySelector('.eruda-container'); if(e) e.style.display = e.style.display==='none'?'block':'none'; }", null)
-                    }
-                }
-                else -> return@setOnTouchListener false
-            }
-            true
-        }
-    }
-
     private fun showMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
         val menu = popup.menu
-        
+
+        menu.add("Bookmarks").setOnMenuItemClickListener { showBookmarksDialog(); true }
+        menu.add("History").setOnMenuItemClickListener { showHistoryDialog(); true }
         menu.add("Find in Page").setOnMenuItemClickListener { findBar.visibility = View.VISIBLE; true }
-        menu.add("Desktop Mode").apply { 
+        menu.add("Desktop Mode").apply {
             isCheckable = true
-            isChecked = prefsManager.desktopMode 
+            isChecked = prefsManager.desktopMode
         }.setOnMenuItemClickListener {
             prefsManager.desktopMode = !it.isChecked
             updateUserAgent()
@@ -398,10 +379,54 @@ class MainActivity : AppCompatActivity() {
         popup.show()
     }
 
+    private fun showBookmarksDialog() {
+        val bookmarks = prefsManager.getBookmarks()
+        if (bookmarks.isEmpty()) {
+            Toast.makeText(this, "No bookmarks saved", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val titles = bookmarks.map { it.first }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Bookmarks")
+            .setItems(titles) { _, which ->
+                webView.loadUrl(bookmarks[which].second)
+            }
+            .setNeutralButton("Delete All") { _, _ ->
+                // Clear all bookmarks
+                val prefs = getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
+                prefs.edit().remove("bookmarks").apply()
+                Toast.makeText(this, "All bookmarks cleared", Toast.LENGTH_SHORT).show()
+                updateBookmarkIcon(webView.url ?: "")
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showHistoryDialog() {
+        val history = prefsManager.getHistory()
+        if (history.isEmpty()) {
+            Toast.makeText(this, "No history", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val titles = history.map { it.first.ifEmpty { it.second } }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("History")
+            .setItems(titles) { _, which ->
+                webView.loadUrl(history[which].second)
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun showSettingsDialog() {
         val engines = arrayOf("Google", "DuckDuckGo", "Bing", "Brave")
-        val urls = arrayOf("https://www.google.com/search?q=", "https://duckduckgo.com/?q=", "https://www.bing.com/search?q=", "https://search.brave.com/search?q=")
-        
+        val urls = arrayOf(
+            "https://www.google.com/search?q=",
+            "https://duckduckgo.com/?q=",
+            "https://www.bing.com/search?q=",
+            "https://search.brave.com/search?q="
+        )
+
         AlertDialog.Builder(this)
             .setTitle("Select Search Engine")
             .setItems(engines) { _, which ->
@@ -412,21 +437,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateUserAgent() {
-        val defaultUserAgent = WebSettings.getDefaultUserAgent(this)
         webView.settings.userAgentString = if (prefsManager.desktopMode) {
-            defaultUserAgent.replace("Mobile", "eliboM").replace("Android", "diordnA") // خدعة بسيطة لتغيير الـ UA
+            // Real desktop User-Agent for proper desktop mode
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         } else {
-            defaultUserAgent
+            WebSettings.getDefaultUserAgent(this)
         }
     }
 
     private fun updateBookmarkIcon(url: String) {
-        if (prefsManager.isBookmarked(url)) {
-            // غير لون الأيقونة أو ضع أيقونة نجمة ممتلئة (يجب إضافة drawable)
-            btnBookmark.alpha = 1.0f 
-        } else {
-            btnBookmark.alpha = 0.5f
-        }
+        btnBookmark.alpha = if (prefsManager.isBookmarked(url)) 1.0f else 0.5f
     }
 
     private fun hideKeyboard() {

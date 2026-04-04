@@ -43,7 +43,7 @@
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:padding="4dp"
-            android:src="@drawable/star_outline" /> <!-- تحتاج لإضافة أيقونة نجمة -->
+            android:src="@drawable/star_outline" />
 
         <ImageView
             android:id="@+id/btnMenu"
@@ -51,7 +51,7 @@
             android:layout_height="32dp"
             android:layout_marginStart="4dp"
             android:padding="4dp"
-            android:src="@drawable/menu" /> <!-- تحتاج لإضافة أيقونة 3 نقاط -->
+            android:src="@drawable/menu" />
     </LinearLayout>
 
     <ProgressBar
@@ -126,56 +126,42 @@
             android:id="@+id/btnFindClose"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:src="@drawable/close" /> <!-- أضف أيقونة إغلاق -->
+            android:src="@drawable/close" />
     </LinearLayout>
 
     <!-- Bottom Bar -->
-<LinearLayout
-    android:id="@+id/bottomBar"
-    android:layout_width="match_parent"
-    android:layout_height="48dp"
-    android:background="#121212"
-    android:orientation="horizontal"
-    android:gravity="center_vertical" 
-    app:layout_constraintBottom_toBottomOf="parent">
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="#121212"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        app:layout_constraintBottom_toBottomOf="parent">
 
-    <ImageView
-        android:id="@+id/goBack"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1" 
-        android:padding="12dp"
-        android:src="@drawable/arrow_left" />
-        
-    <ImageView
-        android:id="@+id/goHome"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1" 
-        android:padding="12dp"
-        android:src="@drawable/home" />
+        <ImageView
+            android:id="@+id/goBack"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:padding="12dp"
+            android:src="@drawable/arrow_left" />
 
-    <ImageView
-        android:id="@+id/goForward"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1" 
-        android:padding="12dp"
-        android:src="@drawable/arrow_right" />
-</LinearLayout>
+        <ImageView
+            android:id="@+id/goHome"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:padding="12dp"
+            android:src="@drawable/home" />
 
-
-    <!-- Floating Action Button for Consoleflow -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabEruda"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:src="@drawable/tool"
-        app:backgroundTint="#333333"
-        app:tint="#FFFFFF"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/bottomBar"
-        app:layout_constraintEnd_toEndOf="parent" />
+        <ImageView
+            android:id="@+id/goForward"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:padding="12dp"
+            android:src="@drawable/arrow_right" />
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
