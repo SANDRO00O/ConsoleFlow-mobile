@@ -4,16 +4,16 @@ id 'org.jetbrains.kotlin.android'
 }
 
 android {
-namespace 'io.liriliri.eruda'
+namespace 'space.karrarnazim.ConsoleFlow'
 compileSdk 35
 
 defaultConfig {
-applicationId "io.liriliri.eruda"
+applicationId "space.karrarnazim.ConsoleFlow"
 minSdk 21
 targetSdk 35
 versionCode 3
-versionName "2.0.0"
-archivesBaseName = "eruda-v$versionName"
+versionName "1.0.0"
+archivesBaseName = "ConsoleFlow-v$versionName"
 }
 
 buildTypes {

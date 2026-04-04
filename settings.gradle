@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "Eruda"
+rootProject.name = "ConsoleFlow"
 include ':app'
