@@ -1,111 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="220dp"
+    android:layout_width="230dp"
     android:layout_height="wrap_content"
     android:background="@drawable/menu_popup_bg"
     android:orientation="vertical"
-    android:paddingVertical="8dp"
-    android:clipToOutline="true"
-    android:elevation="12dp">
+    android:paddingVertical="6dp"
+    android:clipToOutline="true">
 
-    <!-- Bookmarks -->
-    <LinearLayout android:id="@+id/menuBookmarks"
-        android:layout_width="match_parent" android:layout_height="48dp"
-        android:orientation="horizontal" android:gravity="center_vertical"
-        android:paddingHorizontal="18dp" android:background="@drawable/menu_item_ripple">
-        <ImageView android:layout_width="20dp" android:layout_height="20dp"
-            android:src="@drawable/ic_menu_bookmarks"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
-            android:text="Bookmarks" android:textColor="#FFFFFF"
-            android:textSize="14sp" android:fontFamily="sans-serif"/>
-    </LinearLayout>
+    <TextView
+        android:id="@+id/menuBookmarks"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:text="★  Bookmarks"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:letterSpacing="0.01"
+        android:background="@drawable/menu_item_ripple" />
 
-    <!-- Divider -->
-    <View android:layout_width="match_parent" android:layout_height="0.5dp"
-        android:layout_marginHorizontal="16dp" android:background="#222222"/>
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginHorizontal="14dp"
+        android:background="#2A2A2A" />
 
-    <!-- History -->
-    <LinearLayout android:id="@+id/menuHistory"
-        android:layout_width="match_parent" android:layout_height="48dp"
-        android:orientation="horizontal" android:gravity="center_vertical"
-        android:paddingHorizontal="18dp" android:background="@drawable/menu_item_ripple">
-        <ImageView android:layout_width="20dp" android:layout_height="20dp"
-            android:src="@drawable/ic_menu_history"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
-            android:text="History" android:textColor="#FFFFFF"
-            android:textSize="14sp" android:fontFamily="sans-serif"/>
-    </LinearLayout>
+    <TextView
+        android:id="@+id/menuHistory"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:text="◷  History"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:letterSpacing="0.01"
+        android:background="@drawable/menu_item_ripple" />
 
-    <View android:layout_width="match_parent" android:layout_height="0.5dp"
-        android:layout_marginHorizontal="16dp" android:background="#222222"/>
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginHorizontal="14dp"
+        android:background="#2A2A2A" />
 
-    <!-- Find in Page -->
-    <LinearLayout android:id="@+id/menuFindInPage"
-        android:layout_width="match_parent" android:layout_height="48dp"
-        android:orientation="horizontal" android:gravity="center_vertical"
-        android:paddingHorizontal="18dp" android:background="@drawable/menu_item_ripple">
-        <ImageView android:layout_width="20dp" android:layout_height="20dp"
-            android:src="@drawable/ic_menu_find"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
-            android:text="Find in Page" android:textColor="#FFFFFF"
-            android:textSize="14sp" android:fontFamily="sans-serif"/>
-    </LinearLayout>
+    <TextView
+        android:id="@+id/menuFindInPage"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:text="⊕  Find in Page"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:letterSpacing="0.01"
+        android:background="@drawable/menu_item_ripple" />
 
-    <View android:layout_width="match_parent" android:layout_height="0.5dp"
-        android:layout_marginHorizontal="16dp" android:background="#222222"/>
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginHorizontal="14dp"
+        android:background="#2A2A2A" />
 
-    <!-- Desktop Mode -->
-    <LinearLayout android:id="@+id/menuDesktopMode"
-        android:layout_width="match_parent" android:layout_height="48dp"
-        android:orientation="horizontal" android:gravity="center_vertical"
-        android:paddingHorizontal="18dp" android:background="@drawable/menu_item_ripple">
-        <ImageView android:layout_width="20dp" android:layout_height="20dp"
-            android:src="@drawable/ic_menu_desktop"/>
-        <TextView android:id="@+id/menuDesktopLabel"
-            android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:layout_marginStart="14dp"
-            android:text="Desktop Mode" android:textColor="#FFFFFF"
-            android:textSize="14sp" android:fontFamily="sans-serif"/>
-        <TextView android:id="@+id/menuDesktopCheck"
-            android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="✓" android:textColor="#AAAAAA"
-            android:textSize="14sp" android:visibility="gone"/>
-    </LinearLayout>
+    <TextView
+        android:id="@+id/menuDesktopMode"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:text="⊞  Desktop Mode"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:letterSpacing="0.01"
+        android:background="@drawable/menu_item_ripple" />
 
-    <View android:layout_width="match_parent" android:layout_height="0.5dp"
-        android:layout_marginHorizontal="16dp" android:background="#222222"/>
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginHorizontal="14dp"
+        android:background="#2A2A2A" />
 
-    <!-- Settings -->
-    <LinearLayout android:id="@+id/menuSettings"
-        android:layout_width="match_parent" android:layout_height="48dp"
-        android:orientation="horizontal" android:gravity="center_vertical"
-        android:paddingHorizontal="18dp" android:background="@drawable/menu_item_ripple">
-        <ImageView android:layout_width="20dp" android:layout_height="20dp"
-            android:src="@drawable/ic_menu_settings"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
-            android:text="Settings" android:textColor="#FFFFFF"
-            android:textSize="14sp" android:fontFamily="sans-serif"/>
-    </LinearLayout>
+    <TextView
+        android:id="@+id/menuSettings"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:text="⚙  Settings"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:letterSpacing="0.01"
+        android:background="@drawable/menu_item_ripple" />
 
-    <View android:layout_width="match_parent" android:layout_height="1dp"
-        android:layout_marginHorizontal="16dp" android:layout_marginVertical="4dp"
-        android:background="#2A2A2A"/>
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginHorizontal="14dp"
+        android:background="#2A2A2A" />
 
-    <!-- Clear Data -->
-    <LinearLayout android:id="@+id/menuClearData"
-        android:layout_width="match_parent" android:layout_height="48dp"
-        android:orientation="horizontal" android:gravity="center_vertical"
-        android:paddingHorizontal="18dp" android:background="@drawable/menu_item_ripple">
-        <ImageView android:layout_width="20dp" android:layout_height="20dp"
-            android:src="@drawable/ic_menu_clear"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
-            android:text="Clear Data" android:textColor="#FF4444"
-            android:textSize="14sp" android:fontFamily="sans-serif"/>
-    </LinearLayout>
+    <TextView
+        android:id="@+id/menuClearData"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:text="✕  Clear Data"
+        android:textColor="#FF4444"
+        android:textSize="14sp"
+        android:letterSpacing="0.01"
+        android:background="@drawable/menu_item_ripple" />
 
 </LinearLayout>
