@@ -2,14 +2,14 @@ package space.karrarnazim.ConsoleFlow
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Dialog
+import android.app.Activity
 import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.net.http.SslError
@@ -51,14 +51,23 @@ class MainActivity : AppCompatActivity() {
     private val HOME_URL = "file:///android_asset/home.html"
     private val ERROR_URL = "file:///android_asset/error.html"
 
-    // Domains that trigger CAPTCHA when intercepted by OkHttp — skip interception for these
     private val NO_INTERCEPT_DOMAINS = listOf(
         "google.com", "googleapis.com", "gstatic.com", "accounts.google.com",
         "bing.com", "microsoft.com", "live.com",
-        "duckduckgo.com",
-        "search.brave.com",
+        "duckduckgo.com", "search.brave.com",
         "yahoo.com", "yandex.com"
     )
+
+    // Settings activity launcher — refresh engine icon on return
+    private val settingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK || result.resultCode == Activity.RESULT_CANCELED) {
+            updateSearchEngineIcon()
+            // Apply potentially changed desktop mode
+            updateUserAgent()
+        }
+    }
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -107,12 +116,10 @@ class MainActivity : AppCompatActivity() {
         imgSearchEngine = findViewById(R.id.imgSearchEngine)
         findBar = findViewById(R.id.findBar)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
-
-        // Load current search engine favicon
         updateSearchEngineIcon()
     }
 
-    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
+    @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
         val settings = webView.settings
         settings.javaScriptEnabled = true
@@ -131,16 +138,13 @@ class MainActivity : AppCompatActivity() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val url = request.url.toString()
                 if (url.startsWith("http:") || url.startsWith("https:") || url.startsWith("file:")) return false
-                return try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    true
-                } catch (e: Exception) { true }
+                return try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); true }
+                catch (e: Exception) { true }
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 progressBar.visibility = View.VISIBLE
-                // Don't show file:// paths in the search bar
                 if (url == HOME_URL || url?.startsWith(ERROR_URL) == true) {
                     textUrl.setText("")
                 } else {
@@ -153,10 +157,7 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 swipeRefresh.isRefreshing = false
                 progressBar.visibility = View.INVISIBLE
-                url?.let {
-                    if (it != HOME_URL) prefsManager.addHistory(view?.title ?: "Unknown", it)
-                }
-                // Fallback Eruda injection (covers POST pages and NO_INTERCEPT_DOMAINS)
+                url?.let { if (it != HOME_URL) prefsManager.addHistory(view?.title ?: "Unknown", it) }
                 view?.evaluateJavascript(
                     "if(!window.eruda){var s=document.createElement('script');s.src='https://eruda.local/eruda.js';document.head.appendChild(s);s.onload=function(){eruda.init();};}",
                     null
@@ -165,56 +166,44 @@ class MainActivity : AppCompatActivity() {
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
-
-                // Serve Eruda locally to avoid CORS issues
                 if (url == "https://eruda.local/eruda.js") {
                     return try {
                         val stream = assets.open("eruda.js")
                         WebResourceResponse("application/javascript", "utf-8", stream)
                     } catch (e: Exception) { null }
                 }
-
-                // Skip interception for search engines / major sites — prevents CAPTCHA
                 val host = request.url.host ?: ""
                 if (NO_INTERCEPT_DOMAINS.any { host.endsWith(it) }) return null
-
-                // Smart HTML injection for Eruda (captures early console errors)
                 if (request.isForMainFrame && request.method == "GET" && url.startsWith("http")) {
                     try {
                         val reqBuilder = Request.Builder().url(url)
                         request.requestHeaders.forEach { (k, v) -> reqBuilder.addHeader(k, v) }
                         val cookie = CookieManager.getInstance().getCookie(url)
                         if (cookie != null) reqBuilder.addHeader("Cookie", cookie)
-
                         val response = client.newCall(reqBuilder.build()).execute()
                         val contentType = response.header("Content-Type", "") ?: ""
-
                         if (contentType.contains("text/html")) {
                             var html = response.body?.string() ?: ""
                             val injection = "<script src=\"https://eruda.local/eruda.js\"></script><script>eruda.init();</script>"
                             val customJs = if (prefsManager.customJs.isNotEmpty()) "<script>${prefsManager.customJs}</script>" else ""
-
                             html = html.replaceFirst("<head>", "<head>$injection$customJs", ignoreCase = true)
                             val inputStream = ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
                             return WebResourceResponse("text/html", response.header("Content-Encoding", "utf-8"), response.code, "OK", response.headers.toMap(), inputStream)
                         }
-                    } catch (e: Exception) {
-                        return null
-                    }
+                    } catch (e: Exception) { return null }
                 }
                 return super.shouldInterceptRequest(view, request)
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (request.isForMainFrame) {
+                if (request.isForMainFrame)
                     view.loadUrl("$ERROR_URL?url=${URLEncoder.encode(request.url.toString(), "UTF-8")}")
-                }
             }
 
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                 AlertDialog.Builder(this@MainActivity, R.style.DarkDialog)
                     .setTitle("SSL Certificate Error")
-                    .setMessage("The site's security certificate is not trusted. Continue anyway?")
+                    .setMessage("The site's certificate is not trusted. Continue anyway?")
                     .setPositiveButton("Continue") { _, _ -> handler.proceed() }
                     .setNegativeButton("Go Back") { _, _ -> handler.cancel() }
                     .show()
@@ -227,11 +216,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onShowCustomView(view: View, callback: CustomViewCallback) {
-                customView = view
-                customViewCallback = callback
+                customView = view; customViewCallback = callback
                 fullscreenContainer.addView(view)
                 fullscreenContainer.visibility = View.VISIBLE
                 webView.visibility = View.GONE
+                @Suppress("DEPRECATION")
                 window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
                         or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
             }
@@ -242,6 +231,7 @@ class MainActivity : AppCompatActivity() {
                 webView.visibility = View.VISIBLE
                 customView = null
                 customViewCallback?.onCustomViewHidden()
+                @Suppress("DEPRECATION")
                 window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
             }
 
@@ -260,7 +250,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
-            val request = DownloadManager.Request(Uri.parse(url)).apply {
+            val req = DownloadManager.Request(Uri.parse(url)).apply {
                 setMimeType(mimetype)
                 val cookies = CookieManager.getInstance().getCookie(url)
                 addRequestHeader("cookie", cookies)
@@ -269,13 +259,9 @@ class MainActivity : AppCompatActivity() {
                 setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype))
                 allowScanningByMediaScanner()
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                setDestinationInExternalPublicDir(
-                    Environment.DIRECTORY_DOWNLOADS,
-                    URLUtil.guessFileName(url, contentDisposition, mimetype)
-                )
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimetype))
             }
-            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            dm.enqueue(request)
+            (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
             Toast.makeText(applicationContext, "Downloading File", Toast.LENGTH_LONG).show()
         }
     }
@@ -283,19 +269,12 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("ClickableViewAccessibility")
     private fun setupListeners() {
         swipeRefresh.setOnRefreshListener { webView.reload() }
-
         webView.viewTreeObserver.addOnScrollChangedListener {
             swipeRefresh.isEnabled = webView.scrollY == 0
         }
 
         textUrl.setOnEditorActionListener { _, _, _ ->
-            val input = textUrl.text.toString().trim()
-            val finalUrl = if (Patterns.WEB_URL.matcher(input).matches()) {
-                if (!input.startsWith("http")) "https://$input" else input
-            } else {
-                prefsManager.searchEngine + URLEncoder.encode(input, "utf-8")
-            }
-            webView.loadUrl(finalUrl)
+            navigateFromInput(textUrl.text.toString().trim())
             hideKeyboard()
             true
         }
@@ -303,21 +282,16 @@ class MainActivity : AppCompatActivity() {
         textUrl.setOnLongClickListener {
             val popup = PopupMenu(this, textUrl)
             popup.menu.add("Copy URL").setOnMenuItemClickListener {
-                val clip = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                clip.setPrimaryClip(ClipData.newPlainText("URL", webView.url))
-                Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
-                true
+                (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager)
+                    .setPrimaryClip(ClipData.newPlainText("URL", webView.url))
+                Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show(); true
             }
             popup.menu.add("Share URL").setOnMenuItemClickListener {
-                val share = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, webView.url)
-                }
-                startActivity(Intent.createChooser(share, "Share URL"))
-                true
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"; putExtra(Intent.EXTRA_TEXT, webView.url)
+                }, "Share URL")); true
             }
-            popup.show()
-            true
+            popup.show(); true
         }
 
         findViewById<View>(R.id.goBack).setOnClickListener { if (webView.canGoBack()) webView.goBack() }
@@ -326,8 +300,7 @@ class MainActivity : AppCompatActivity() {
 
         btnBookmark.setOnClickListener {
             val url = webView.url ?: return@setOnClickListener
-            val title = webView.title ?: "Bookmark"
-            val added = prefsManager.toggleBookmark(title, url)
+            val added = prefsManager.toggleBookmark(webView.title ?: "Bookmark", url)
             updateBookmarkIcon(url)
             Toast.makeText(this, if (added) "Bookmarked" else "Removed", Toast.LENGTH_SHORT).show()
         }
@@ -336,91 +309,89 @@ class MainActivity : AppCompatActivity() {
 
         val inputFind = findViewById<EditText>(R.id.findInput)
         val tvMatches = findViewById<TextView>(R.id.findMatches)
-
         webView.setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
             tvMatches.text = if (numberOfMatches > 0) "${activeMatchOrdinal + 1}/$numberOfMatches" else "0/0"
         }
-
         inputFind.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) { webView.findAllAsync(s.toString()) }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
-
         findViewById<View>(R.id.btnFindNext).setOnClickListener { webView.findNext(true) }
         findViewById<View>(R.id.btnFindPrev).setOnClickListener { webView.findNext(false) }
         findViewById<View>(R.id.btnFindClose).setOnClickListener {
-            findBar.visibility = View.GONE
-            webView.clearMatches()
-            hideKeyboard()
+            findBar.visibility = View.GONE; webView.clearMatches(); hideKeyboard()
         }
     }
 
-    // ── Custom dark menu dialog ────────────────────────────────────────────────
-    private fun showMenu(anchor: View) {
-        val dialog = Dialog(this)
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        val menuView = layoutInflater.inflate(R.layout.layout_main_menu, null)
-        dialog.setContentView(menuView)
-
-        // Transparent dialog window positioned near the top-right (below the 3-dot button)
-        dialog.window?.apply {
-            setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
-            val lp = attributes
-            lp.gravity = Gravity.TOP or Gravity.END
-            lp.x = resources.getDimensionPixelSize(R.dimen.menu_margin)
-            lp.y = resources.getDimensionPixelSize(R.dimen.menu_top_offset)
-            lp.width = WindowManager.LayoutParams.WRAP_CONTENT
-            lp.height = WindowManager.LayoutParams.WRAP_CONTENT
-            attributes = lp
+    // ── Navigate helper — fixes double https:// prefix bug ────────────────────
+    private fun navigateFromInput(input: String) {
+        val url = when {
+            input.startsWith("http://") || input.startsWith("https://") -> input
+            Patterns.WEB_URL.matcher(input).matches() -> "https://$input"
+            else -> prefsManager.searchEngine + URLEncoder.encode(input, "utf-8")
         }
+        webView.loadUrl(url)
+    }
 
-        // Update desktop mode label to show current state
-        val menuDesktop = menuView.findViewById<TextView>(R.id.menuDesktopMode)
-        menuDesktop.text = if (prefsManager.desktopMode) "⊞  Desktop Mode  ✓" else "⊞  Desktop Mode"
+    // ── Menu — PopupWindow (no animation delay) ────────────────────────────────
+    @SuppressLint("InflateParams")
+    private fun showMenu(anchor: View) {
+        val menuView = layoutInflater.inflate(R.layout.layout_main_menu, null)
+
+        val popup = PopupWindow(
+            menuView,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        )
+        popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        popup.elevation = 16f
+        popup.isOutsideTouchable = true
+        popup.animationStyle = 0   // no animation → instant open
+
+        // Desktop Mode checkmark
+        val checkView = menuView.findViewById<TextView>(R.id.menuDesktopCheck)
+        checkView.visibility = if (prefsManager.desktopMode) View.VISIBLE else View.GONE
 
         menuView.findViewById<View>(R.id.menuBookmarks).setOnClickListener {
-            dialog.dismiss(); showBookmarksDialog()
+            popup.dismiss(); showBookmarksDialog()
         }
         menuView.findViewById<View>(R.id.menuHistory).setOnClickListener {
-            dialog.dismiss(); showHistoryDialog()
+            popup.dismiss(); showHistoryDialog()
         }
         menuView.findViewById<View>(R.id.menuFindInPage).setOnClickListener {
-            dialog.dismiss(); findBar.visibility = View.VISIBLE
+            popup.dismiss(); findBar.visibility = View.VISIBLE
         }
         menuView.findViewById<View>(R.id.menuDesktopMode).setOnClickListener {
-            dialog.dismiss()
+            popup.dismiss()
             prefsManager.desktopMode = !prefsManager.desktopMode
             updateUserAgent()
-            // Force full reload with new UA (reload() sometimes serves cached content)
-            val currentUrl = webView.url
-            if (!currentUrl.isNullOrEmpty() && currentUrl != HOME_URL) {
-                webView.loadUrl(currentUrl)
-            }
+            val cur = webView.url
+            if (!cur.isNullOrEmpty() && cur != HOME_URL) webView.loadUrl(cur)
         }
         menuView.findViewById<View>(R.id.menuSettings).setOnClickListener {
-            dialog.dismiss(); showSettingsDialog()
+            popup.dismiss()
+            settingsLauncher.launch(Intent(this, SettingsActivity::class.java))
         }
         menuView.findViewById<View>(R.id.menuClearData).setOnClickListener {
-            dialog.dismiss(); clearData()
+            popup.dismiss(); clearData()
         }
 
-        dialog.show()
+        // Show anchored to top-right corner below the menu button
+        popup.showAsDropDown(anchor, 0, 4)
     }
 
     private fun showBookmarksDialog() {
         val bookmarks = prefsManager.getBookmarks()
-        if (bookmarks.isEmpty()) {
-            Toast.makeText(this, "No bookmarks saved", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val titles = bookmarks.map { it.first.ifEmpty { it.second } }.toTypedArray()
+        if (bookmarks.isEmpty()) { Toast.makeText(this, "No bookmarks saved", Toast.LENGTH_SHORT).show(); return }
         AlertDialog.Builder(this, R.style.DarkDialog)
             .setTitle("Bookmarks")
-            .setItems(titles) { _, which -> webView.loadUrl(bookmarks[which].second) }
+            .setItems(bookmarks.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, i ->
+                webView.loadUrl(bookmarks[i].second)
+            }
             .setNeutralButton("Clear All") { _, _ ->
-                getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
-                    .edit().remove("bookmarks").apply()
+                getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE).edit().remove("bookmarks").apply()
                 updateBookmarkIcon(webView.url ?: "")
                 Toast.makeText(this, "Bookmarks cleared", Toast.LENGTH_SHORT).show()
             }
@@ -430,33 +401,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun showHistoryDialog() {
         val history = prefsManager.getHistory()
-        if (history.isEmpty()) {
-            Toast.makeText(this, "No history", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val titles = history.map { it.first.ifEmpty { it.second } }.toTypedArray()
+        if (history.isEmpty()) { Toast.makeText(this, "No history", Toast.LENGTH_SHORT).show(); return }
         AlertDialog.Builder(this, R.style.DarkDialog)
             .setTitle("History")
-            .setItems(titles) { _, which -> webView.loadUrl(history[which].second) }
-            .setNegativeButton("Close", null)
-            .show()
-    }
-
-    private fun showSettingsDialog() {
-        val engines = arrayOf("Google", "DuckDuckGo", "Bing", "Brave")
-        val urls = arrayOf(
-            "https://www.google.com/search?q=",
-            "https://duckduckgo.com/?q=",
-            "https://www.bing.com/search?q=",
-            "https://search.brave.com/search?q="
-        )
-        AlertDialog.Builder(this, R.style.DarkDialog)
-            .setTitle("Select Search Engine")
-            .setItems(engines) { _, which ->
-                prefsManager.searchEngine = urls[which]
-                updateSearchEngineIcon()
-                Toast.makeText(this, "${engines[which]} selected", Toast.LENGTH_SHORT).show()
+            .setItems(history.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, i ->
+                webView.loadUrl(history[i].second)
             }
+            .setNegativeButton("Close", null)
             .show()
     }
 
@@ -469,11 +420,10 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Data Cleared", Toast.LENGTH_SHORT).show()
     }
 
-    // ── User Agent & Desktop Mode ──────────────────────────────────────────────
+    // ── User Agent ─────────────────────────────────────────────────────────────
     private fun updateUserAgent() {
         val settings = webView.settings
         if (prefsManager.desktopMode) {
-            // Real Chrome desktop UA — recognized by all major sites
             settings.userAgentString =
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             settings.useWideViewPort = true
@@ -485,38 +435,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ── Search Engine Favicon ──────────────────────────────────────────────────
+    // ── Search Engine Icon (local drawable, no network needed) ────────────────
     private fun updateSearchEngineIcon() {
-        val engine = prefsManager.searchEngine
-        val faviconUrl = when {
-            engine.contains("google")     -> "https://www.google.com/favicon.ico"
-            engine.contains("duckduckgo") -> "https://duckduckgo.com/favicon.ico"
-            engine.contains("bing")       -> "https://www.bing.com/favicon.ico"
-            engine.contains("brave")      -> "https://search.brave.com/favicon.ico"
-            else                          -> "https://www.google.com/favicon.ico"
+        val iconRes = when {
+            prefsManager.searchEngine.contains("google")     -> R.drawable.ic_engine_google
+            prefsManager.searchEngine.contains("duckduckgo") -> R.drawable.ic_engine_ddg
+            prefsManager.searchEngine.contains("bing")       -> R.drawable.ic_engine_bing
+            prefsManager.searchEngine.contains("brave")      -> R.drawable.ic_engine_brave
+            else                                             -> R.drawable.ic_engine_google
         }
-        Thread {
-            try {
-                val request = Request.Builder().url(faviconUrl).build()
-                val response = client.newCall(request).execute()
-                val bytes = response.body?.bytes() ?: return@Thread
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@Thread
-                runOnUiThread {
-                    imgSearchEngine.setImageBitmap(bitmap)
-                    imgSearchEngine.colorFilter = null  // Remove any tint filter once real icon loads
-                }
-            } catch (e: Exception) { /* keep default icon */ }
-        }.start()
+        imgSearchEngine.setImageResource(iconRes)
+        imgSearchEngine.colorFilter = null
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────────
     private fun updateBookmarkIcon(url: String) {
         btnBookmark.alpha = if (prefsManager.isBookmarked(url)) 1.0f else 0.45f
     }
 
     private fun hideKeyboard() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(textUrl.windowToken, 0)
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+            .hideSoftInputFromWindow(textUrl.windowToken, 0)
     }
 
     private fun hideCustomView() {
@@ -529,11 +467,7 @@ class MainActivity : AppCompatActivity() {
     inner class SearchBridge {
         @JavascriptInterface
         fun navigate(input: String) {
-            runOnUiThread {
-                val finalUrl = if (Patterns.WEB_URL.matcher(input).matches()) "https://$input"
-                               else prefsManager.searchEngine + input
-                webView.loadUrl(finalUrl)
-            }
+            runOnUiThread { navigateFromInput(input) }
         }
     }
 }
