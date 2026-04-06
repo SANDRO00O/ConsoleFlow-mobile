@@ -12,11 +12,11 @@
 <br>
 
 <p align="center">
-  <img src="https://via.placeholder.com/250x500.png?text=Home+Screen" width="200" alt="Home Screen">
+  <img src="screenshots/1.jpg" width="200" alt="Home Screen">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="https://via.placeholder.com/250x500.png?text=Eruda+Console" width="200" alt="Console View">
+  <img src="screenshots/2.jpg" width="200" alt="Console View">
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="https://via.placeholder.com/250x500.png?text=App+Menu" width="200" alt="Menu View">
+  <img src="screenshots/3.jpg" width="200" alt="Menu View">
 </p>
 
 *Note: Replace placeholder images above with your actual app screenshots.*
