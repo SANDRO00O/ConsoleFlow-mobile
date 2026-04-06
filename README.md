@@ -4,10 +4,12 @@
 
 **A lightweight, developer-focused Android web browser that brings desktop-like debugging to mobile.**
 
-[![Android Min SDK](https://img.shields.io/badge/Min%20SDK-21%20(Lollipop)-3DDC84?logo=android&logoColor=white&style=for-the-badge)](#)
-[![Kotlin](https://img.shields.io/badge/Kotlin-1.9.22-7F52FF?logo=kotlin&logoColor=white&style=for-the-badge)](#)
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=for-the-badge)](#)
-[![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](#)
+[![Open Source](https://img.shields.io/badge/Open%20Source-Yes!-brightgreen?style=for-the-badge)](#)
+[![Status](https://img.shields.io/badge/Status-Still%20Beta-orange?style=for-the-badge)](#)
+[![GitHub stars](https://img.shields.io/github/stars/SANDRO00O/ConsoleFlow-mobile?style=for-the-badge&logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/SANDRO00O/ConsoleFlow-mobile?style=for-the-badge&logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/network/members)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](https://github.com/SANDRO00O/ConsoleFlow-mobile/blob/main/LICENSE)
+
 
 <br>
 
@@ -55,7 +57,7 @@ ConsoleFlow is ready to use right out of the box.
 - **Architecture:** Universal. The application is built entirely on Android framework APIs and Java/Kotlin bytecode, meaning it supports all device architectures (armeabi-v7a, arm64-v8a, x86, x86_64) without compatibility issues.
 
 ### Download & Install
-1. Go to the [Releases page](https://github.com/karrarnazim/ConsoleFlow/releases/latest).
+1. Go to the [Releases page](https://github.com/SANDRO00O/ConsoleFlow-mobile/releases).
 2. Download the latest `ConsoleFlow.apk` file.
 3. Open the downloaded file to install it on your Android device.
    *(Note: You may need to enable "Install unknown apps" in your device settings).*
@@ -78,7 +80,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 **Karrar Nazim** - [portfolio](https://karrarnazim.space)
 
-Project Link: [https://github.com/karrarnazim/ConsoleFlow](https://github.com/karrarnazim/ConsoleFlow)
+Project Link: [https://github.com/SANDRO00O/ConsoleFlow-mobile](https://github.com/SANDRO00O/ConsoleFlow-mobile)
 
 ---
 <div align="center">
