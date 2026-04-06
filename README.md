@@ -20,9 +20,6 @@
   &nbsp;&nbsp;&nbsp;&nbsp;
   <img src="screenshots/3.jpg" width="200" alt="Menu View">
 </p>
-
-*Note: Replace placeholder images above with your actual app screenshots.*
-
 </div>
 
 ## About The Project
