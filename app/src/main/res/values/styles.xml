@@ -13,6 +13,12 @@
         <item name="android:layout_centerInParent">true</item>
     </style>
 
+    <style name="SwitchTheme" parent="Theme.AppCompat">
+        <item name="colorControlActivated">#FFFFFF</item>
+        <item name="colorSwitchThumbNormal">#888888</item>
+        <item name="android:colorForeground">#FFFFFF</item>
+    </style>
+
     <!-- Dark styled alert dialog matching app theme -->
     <style name="DarkDialog" parent="Theme.AppCompat.Dialog.Alert">
         <item name="android:colorBackground">#111111</item>

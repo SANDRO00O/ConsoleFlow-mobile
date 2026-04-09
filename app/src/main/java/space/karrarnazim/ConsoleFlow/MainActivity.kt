@@ -290,10 +290,10 @@ class MainActivity : AppCompatActivity() {
 
         textUrl.setOnEditorActionListener { _, _, _ ->
             val input = textUrl.text.toString().trim()
-            val finalUrl = if (Patterns.WEB_URL.matcher(input).matches()) {
-                if (!input.startsWith("http")) "https://$input" else input
-            } else {
-                prefsManager.searchEngine + URLEncoder.encode(input, "utf-8")
+            val finalUrl = when {
+                input.startsWith("http://") || input.startsWith("https://") -> input
+                Patterns.WEB_URL.matcher(input).matches() -> "https://$input"
+                else -> prefsManager.searchEngine + URLEncoder.encode(input, "utf-8")
             }
             webView.loadUrl(finalUrl)
             hideKeyboard()
@@ -366,6 +366,8 @@ class MainActivity : AppCompatActivity() {
         // Transparent dialog window positioned near the top-right (below the 3-dot button)
         dialog.window?.apply {
             setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+            // Disable entry animation for instant appearance
+            setWindowAnimations(0)
             val lp = attributes
             lp.gravity = Gravity.TOP or Gravity.END
             lp.x = resources.getDimensionPixelSize(R.dimen.menu_margin)
@@ -375,9 +377,9 @@ class MainActivity : AppCompatActivity() {
             attributes = lp
         }
 
-        // Update desktop mode label to show current state
-        val menuDesktop = menuView.findViewById<TextView>(R.id.menuDesktopMode)
-        menuDesktop.text = if (prefsManager.desktopMode) "⊞  Desktop Mode  ✓" else "⊞  Desktop Mode"
+        // Update desktop mode check mark
+        val checkView = menuView.findViewById<android.widget.TextView>(R.id.menuDesktopModeCheck)
+        checkView.visibility = if (prefsManager.desktopMode) View.VISIBLE else View.GONE
 
         menuView.findViewById<View>(R.id.menuBookmarks).setOnClickListener {
             dialog.dismiss(); showBookmarksDialog()
@@ -392,7 +394,6 @@ class MainActivity : AppCompatActivity() {
             dialog.dismiss()
             prefsManager.desktopMode = !prefsManager.desktopMode
             updateUserAgent()
-            // Force full reload with new UA (reload() sometimes serves cached content)
             val currentUrl = webView.url
             if (!currentUrl.isNullOrEmpty() && currentUrl != HOME_URL) {
                 webView.loadUrl(currentUrl)
@@ -443,6 +444,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSettingsDialog() {
+        val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val view = layoutInflater.inflate(R.layout.layout_settings, null)
+        dialog.setContentView(view)
+
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+            setWindowAnimations(0)
+            val lp = attributes
+            lp.gravity = Gravity.BOTTOM
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT
+            lp.height = WindowManager.LayoutParams.WRAP_CONTENT
+            attributes = lp
+        }
+
+        // Set current search engine label
         val engines = arrayOf("Google", "DuckDuckGo", "Bing", "Brave")
         val urls = arrayOf(
             "https://www.google.com/search?q=",
@@ -450,14 +467,72 @@ class MainActivity : AppCompatActivity() {
             "https://www.bing.com/search?q=",
             "https://search.brave.com/search?q="
         )
-        AlertDialog.Builder(this, R.style.DarkDialog)
-            .setTitle("Select Search Engine")
-            .setItems(engines) { _, which ->
-                prefsManager.searchEngine = urls[which]
-                updateSearchEngineIcon()
-                Toast.makeText(this, "${engines[which]} selected", Toast.LENGTH_SHORT).show()
+        val currentEngineLabel = when {
+            prefsManager.searchEngine.contains("google")     -> "Google"
+            prefsManager.searchEngine.contains("duckduckgo") -> "DuckDuckGo"
+            prefsManager.searchEngine.contains("bing")       -> "Bing"
+            prefsManager.searchEngine.contains("brave")      -> "Brave"
+            else -> "Google"
+        }
+        view.findViewById<TextView>(R.id.settingSearchEngineValue).text = currentEngineLabel
+
+        // Desktop mode switch
+        val switchDesktop = view.findViewById<android.widget.Switch>(R.id.switchDesktopMode)
+        switchDesktop.isChecked = prefsManager.desktopMode
+        switchDesktop.setOnCheckedChangeListener { _, isChecked ->
+            prefsManager.desktopMode = isChecked
+            updateUserAgent()
+            val currentUrl = webView.url
+            if (!currentUrl.isNullOrEmpty() && currentUrl != HOME_URL) {
+                webView.loadUrl(currentUrl)
             }
-            .show()
+        }
+        view.findViewById<View>(R.id.settingDesktopMode).setOnClickListener {
+            switchDesktop.isChecked = !switchDesktop.isChecked
+        }
+
+        // Search engine picker
+        view.findViewById<View>(R.id.settingSearchEngine).setOnClickListener {
+            AlertDialog.Builder(this, R.style.DarkDialog)
+                .setTitle("Select Search Engine")
+                .setItems(engines) { _, which ->
+                    prefsManager.searchEngine = urls[which]
+                    view.findViewById<TextView>(R.id.settingSearchEngineValue).text = engines[which]
+                    updateSearchEngineIcon()
+                    Toast.makeText(this, "${engines[which]} selected", Toast.LENGTH_SHORT).show()
+                }
+                .show()
+        }
+
+        // Custom JS editor
+        view.findViewById<View>(R.id.settingCustomJs).setOnClickListener {
+            val input = android.widget.EditText(this).apply {
+                setText(prefsManager.customJs)
+                setTextColor(0xFFFFFFFF.toInt())
+                setBackgroundColor(0xFF1A1A1A.toInt())
+                setPadding(32, 24, 32, 24)
+                hint = "// Your JavaScript here..."
+                setHintTextColor(0xFF555555.toInt())
+                isSingleLine = false
+                minLines = 4
+            }
+            AlertDialog.Builder(this, R.style.DarkDialog)
+                .setTitle("Custom JavaScript")
+                .setView(input)
+                .setPositiveButton("Save") { _, _ ->
+                    prefsManager.customJs = input.text.toString()
+                    Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        // Clear data
+        view.findViewById<View>(R.id.settingClearData).setOnClickListener {
+            dialog.dismiss(); clearData()
+        }
+
+        dialog.show()
     }
 
     private fun clearData() {
@@ -495,15 +570,20 @@ class MainActivity : AppCompatActivity() {
             engine.contains("brave")      -> "https://search.brave.com/favicon.ico"
             else                          -> "https://www.google.com/favicon.ico"
         }
+        // Use a separate client that follows redirects for favicon fetching
+        val faviconClient = OkHttpClient.Builder().followRedirects(true).build()
         Thread {
             try {
-                val request = Request.Builder().url(faviconUrl).build()
-                val response = client.newCall(request).execute()
+                val request = Request.Builder()
+                    .url(faviconUrl)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build()
+                val response = faviconClient.newCall(request).execute()
                 val bytes = response.body?.bytes() ?: return@Thread
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@Thread
                 runOnUiThread {
                     imgSearchEngine.setImageBitmap(bitmap)
-                    imgSearchEngine.colorFilter = null  // Remove any tint filter once real icon loads
+                    imgSearchEngine.colorFilter = null
                 }
             } catch (e: Exception) { /* keep default icon */ }
         }.start()
@@ -530,8 +610,11 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun navigate(input: String) {
             runOnUiThread {
-                val finalUrl = if (Patterns.WEB_URL.matcher(input).matches()) "https://$input"
-                               else prefsManager.searchEngine + input
+                val finalUrl = when {
+                    input.startsWith("http://") || input.startsWith("https://") -> input
+                    Patterns.WEB_URL.matcher(input).matches() -> "https://$input"
+                    else -> prefsManager.searchEngine + input
+                }
                 webView.loadUrl(finalUrl)
             }
         }

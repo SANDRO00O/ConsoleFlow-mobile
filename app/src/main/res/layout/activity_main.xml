@@ -22,8 +22,7 @@
             android:layout_width="26dp"
             android:layout_height="26dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/tool"
-            android:tint="#FFFFFF" />
+            android:src="@drawable/ic_find" />
 
         <EditText
             android:id="@+id/textUrl"
