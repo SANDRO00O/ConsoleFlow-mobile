@@ -1,0 +1,44 @@
+Categories:
+  - Internet
+
+License: GPL-3.0-only
+
+WebSite: https://github.com/karrarnazim/ConsoleFlow
+SourceCode: https://github.com/karrarnazim/ConsoleFlow
+IssueTracker: https://github.com/karrarnazim/ConsoleFlow/issues
+
+AutoName: ConsoleFlow
+
+Description: |-
+  ConsoleFlow is a developer-focused Android browser built on WebView.
+  It automatically injects Eruda — a mobile-friendly JavaScript console —
+  into every page you visit, so you can inspect elements, debug scripts,
+  view network requests, and catch errors directly on your device without
+  needing a desktop.
+
+  Features:
+  * Automatic Eruda console injection on all pages
+  * Custom JavaScript injection per session
+  * Desktop mode (switches User-Agent to Chrome desktop)
+  * Bookmarks and browsing history
+  * Find in page
+  * Multiple search engines: Google, DuckDuckGo, Bing, Brave
+  * Dark theme throughout
+  * Download manager integration
+  * No telemetry, no tracking, no ads
+
+RepoType: git
+Repo: https://github.com/karrarnazim/ConsoleFlow
+
+Builds:
+  - versionName: 1.0.0
+    versionCode: 3
+    commit: v1.0.0
+    subdir: app
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 1.0.0
+CurrentVersionCode: 3
