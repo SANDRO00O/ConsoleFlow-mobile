@@ -1,14 +1,9 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:statusBarColor">@color/background</item>
-        <item name="android:navigationBarColor">@color/background</item>
-        <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
+        <item name="android:statusBarColor">@color/background</item><item name="android:navigationBarColor">@color/background</item><item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
     </style>
     <!-- Use Theme.SplashScreen (not IconBackground) so ic_launcher shows directly on black bg -->
     <style name="AppTheme.SplashScreen" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/splash_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
-        <item name="windowSplashScreenAnimationDuration">300</item>
-        <item name="postSplashScreenTheme">@style/AppTheme</item>
+        <item name="windowSplashScreenBackground">@color/splash_background</item><item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item><item name="windowSplashScreenAnimationDuration">300</item><item name="postSplashScreenTheme">@style/AppTheme</item>
     </style>
 </resources>
