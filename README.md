@@ -1,7 +1,7 @@
 <div align="center">
 
 <p align="center">
-<img src="screenshots/banner.png">
+<img src="screenshots/banner.png" width="400">
 </p>
  
 <br>
