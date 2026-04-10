@@ -3,9 +3,9 @@ Categories:
 
 License: GPL-3.0-only
 
-WebSite: https://github.com/karrarnazim/ConsoleFlow
-SourceCode: https://github.com/karrarnazim/ConsoleFlow
-IssueTracker: https://github.com/karrarnazim/ConsoleFlow/issues
+WebSite: https://github.com/SANDRO00O/ConsoleFlow-mobile
+SourceCode: https://github.com/SANDRO00O/ConsoleFlow-mobile
+IssueTracker: https://github.com/SANDRO00O/ConsoleFlow-mobile/issues
 
 AutoName: ConsoleFlow
 
@@ -28,7 +28,7 @@ Description: |-
   * No telemetry, no tracking, no ads
 
 RepoType: git
-Repo: https://github.com/karrarnazim/ConsoleFlow
+Repo: https://github.com/SANDRO00O/ConsoleFlow-mobile
 
 Builds:
   - versionName: 1.0.0
