@@ -193,7 +193,7 @@ class MainActivity : AppCompatActivity() {
 
                             // Strip inline CSP meta tags — prevents them from blocking eruda
                             html = html.replace(
-                                Regex("<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>", RegexOption.IGNORE_CASE),
+                                Regex("""<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>""", RegexOption.IGNORE_CASE),
                                 ""
                             )
 
