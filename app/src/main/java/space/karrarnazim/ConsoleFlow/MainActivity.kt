@@ -1,6 +1,7 @@
 package space.karrarnazim.ConsoleFlow
 
 import android.Manifest
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.app.DownloadManager
@@ -66,6 +67,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         prefsManager = PrefsManager(this)
