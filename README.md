@@ -1,7 +1,11 @@
 <div align="center">
 
+<p align="center">
 <img src="screenshots/banner.png">
-
+</p>
+ 
+<br>
+ 
 **A lightweight, developer-focused Android web browser that brings desktop-like debugging to mobile.**
 
 [![Open Source](https://img.shields.io/badge/Open%20Source-Yes!-brightgreen?style=for-the-badge)](#)
