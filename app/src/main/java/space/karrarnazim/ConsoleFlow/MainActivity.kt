@@ -9,7 +9,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.net.http.SslError
@@ -24,7 +23,6 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -68,7 +66,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         prefsManager = PrefsManager(this)
@@ -558,33 +555,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ── Search Engine Favicon ──────────────────────────────────────────────────
+    // ── Search Engine Icon (local drawables — no network needed) ──────────────
     private fun updateSearchEngineIcon() {
         val engine = prefsManager.searchEngine
-        val faviconUrl = when {
-            engine.contains("google")     -> "https://www.google.com/favicon.ico"
-            engine.contains("duckduckgo") -> "https://duckduckgo.com/favicon.ico"
-            engine.contains("bing")       -> "https://www.bing.com/favicon.ico"
-            engine.contains("brave")      -> "https://search.brave.com/favicon.ico"
-            else                          -> "https://www.google.com/favicon.ico"
+        val iconRes = when {
+            engine.contains("google")     -> R.drawable.ic_engine_google
+            engine.contains("duckduckgo") -> R.drawable.ic_engine_duckduckgo
+            engine.contains("bing")       -> R.drawable.ic_engine_bing
+            engine.contains("brave")      -> R.drawable.ic_engine_brave
+            else                          -> R.drawable.ic_engine_google
         }
-        // Use a separate client that follows redirects for favicon fetching
-        val faviconClient = OkHttpClient.Builder().followRedirects(true).build()
-        Thread {
-            try {
-                val request = Request.Builder()
-                    .url(faviconUrl)
-                    .header("User-Agent", "Mozilla/5.0")
-                    .build()
-                val response = faviconClient.newCall(request).execute()
-                val bytes = response.body?.bytes() ?: return@Thread
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@Thread
-                runOnUiThread {
-                    imgSearchEngine.setImageBitmap(bitmap)
-                    imgSearchEngine.colorFilter = null
-                }
-            } catch (e: Exception) { /* keep default icon */ }
-        }.start()
+        imgSearchEngine.setImageResource(iconRes)
+        imgSearchEngine.colorFilter = null
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
