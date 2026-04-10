@@ -42,7 +42,6 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon
 
-      # ── قراءة البيانات من ملف JSON ──────────────────────────────────────
       - name: Read Metadata
         id: metadata
         run: |
@@ -56,7 +55,6 @@ jobs:
           echo "pre=$PRE" >> $GITHUB_OUTPUT
           echo "apk_custom_name=$APK_NAME" >> $GITHUB_OUTPUT
 
-      # ── تحديد مكان الـ APK وإعادة تسميته ───────────────────────────────
       - name: Locate and Rename APK
         id: apk
         run: |
@@ -68,7 +66,6 @@ jobs:
           
           echo "path=$NEW_PATH" >> $GITHUB_OUTPUT
 
-      # ── تحديد معلومات الإصدار (Tag & Title) ─────────────────────────────
       - name: Determine release info
         id: info
         run: |
@@ -77,24 +74,16 @@ jobs:
             echo "tag=$TAG" >> $GITHUB_OUTPUT
             echo "title=${{ steps.metadata.outputs.name }} $TAG" >> $GITHUB_OUTPUT
           else
-            SHORT="${GITHUB_SHA::7}"
             echo "tag=latest-build" >> $GITHUB_OUTPUT
-            echo "title=${{ steps.metadata.outputs.name }} (Dev-$SHORT)" >> $GITHUB_OUTPUT
+            echo "title=${{ steps.metadata.outputs.name }}" >> $GITHUB_OUTPUT
           fi
 
-      # ── رفع الإصدار النهائي ─────────────────────────────────────────────
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.info.outputs.tag }}
           name: ${{ steps.info.outputs.title }}
           prerelease: ${{ steps.metadata.outputs.pre }}
-          body: |
-            ${{ steps.metadata.outputs.body }}
-
-            ---
-            **معلومات البناء:**
-            - الالتزام: `${{ github.sha }}`
-            - التاريخ: ${{ github.event.head_commit.timestamp }}
+          body: ${{ steps.metadata.outputs.body }}
           files: ${{ steps.apk.outputs.path }}
           generate_release_notes: true
