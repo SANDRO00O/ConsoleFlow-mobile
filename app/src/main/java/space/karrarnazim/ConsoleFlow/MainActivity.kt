@@ -41,7 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fullscreenContainer: FrameLayout
 
     private lateinit var prefsManager: PrefsManager
-    private val client = OkHttpClient.Builder().followRedirects(false).build()
+    private val client = OkHttpClient.Builder().followRedirects(true).build()
 
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -190,12 +190,29 @@ class MainActivity : AppCompatActivity() {
 
                         if (contentType.contains("text/html")) {
                             var html = response.body?.string() ?: ""
-                            val injection = "<script src=\"https://eruda.local/eruda.js\"></script><script>eruda.init();</script>"
+
+                            // Strip inline CSP meta tags — prevents them from blocking eruda
+                            html = html.replace(
+                                Regex("<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>", RegexOption.IGNORE_CASE),
+                                ""
+                            )
+
+                            // Set __erudaLoaded=true so onPageFinished fallback won't double-init
+                            val injection = "<script src=\"https://eruda.local/eruda.js\"></script>" +
+                                "<script>eruda.init();window.__erudaLoaded=true;</script>"
                             val customJs = if (prefsManager.customJs.isNotEmpty()) "<script>${prefsManager.customJs}</script>" else ""
 
                             html = html.replaceFirst("<head>", "<head>$injection$customJs", ignoreCase = true)
+
+                            // Strip CSP response headers — prevents them from blocking eruda
+                            val filteredHeaders = response.headers.toMap().toMutableMap()
+                            filteredHeaders.remove("Content-Security-Policy")
+                            filteredHeaders.remove("content-security-policy")
+                            filteredHeaders.remove("X-Content-Security-Policy")
+                            filteredHeaders.remove("X-WebKit-CSP")
+
                             val inputStream = ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
-                            return WebResourceResponse("text/html", response.header("Content-Encoding", "utf-8"), response.code, "OK", response.headers.toMap(), inputStream)
+                            return WebResourceResponse("text/html", response.header("Content-Encoding", "utf-8"), response.code, "OK", filteredHeaders, inputStream)
                         }
                     } catch (e: Exception) {
                         return null
