@@ -1,6 +1,6 @@
 <div align="center">
 
-# ConsoleFlow
+<img src="screenshots/banner.png">
 
 **A lightweight, developer-focused Android web browser that brings desktop-like debugging to mobile.**
 
