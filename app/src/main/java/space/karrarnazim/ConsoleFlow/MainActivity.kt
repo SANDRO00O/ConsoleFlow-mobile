@@ -156,9 +156,9 @@ class MainActivity : AppCompatActivity() {
                 url?.let {
                     if (it != HOME_URL) prefsManager.addHistory(view?.title ?: "Unknown", it)
                 }
-                // Fallback Eruda injection (covers POST pages and NO_INTERCEPT_DOMAINS)
+                // Fallback Eruda injection — XHR + eval bypasses CSP script-src restrictions
                 view?.evaluateJavascript(
-                    "if(!window.eruda){var s=document.createElement('script');s.src='https://eruda.local/eruda.js';document.head.appendChild(s);s.onload=function(){eruda.init();};}",
+                    "(function(){if(window.__erudaLoaded)return;window.__erudaLoaded=true;var x=new XMLHttpRequest();x.open('GET','https://eruda.local/eruda.js',true);x.onload=function(){try{eval(x.responseText);eruda.init();}catch(e){}};x.send();})()",
                     null
                 )
             }
@@ -282,11 +282,9 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupListeners() {
+        // Only allow pull-to-refresh when WebView is truly at top (not during upward scroll)
+        swipeRefresh.setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 }
         swipeRefresh.setOnRefreshListener { webView.reload() }
-
-        webView.viewTreeObserver.addOnScrollChangedListener {
-            swipeRefresh.isEnabled = webView.scrollY == 0
-        }
 
         textUrl.setOnEditorActionListener { _, _, _ ->
             val input = textUrl.text.toString().trim()
