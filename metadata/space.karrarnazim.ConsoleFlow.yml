@@ -9,24 +9,6 @@ IssueTracker: https://github.com/SANDRO00O/ConsoleFlow-mobile/issues
 
 AutoName: ConsoleFlow
 
-Description: |-
-  ConsoleFlow is a developer-focused Android browser built on WebView.
-  It automatically injects Eruda — a mobile-friendly JavaScript console —
-  into every page you visit, so you can inspect elements, debug scripts,
-  view network requests, and catch errors directly on your device without
-  needing a desktop.
-
-  Features:
-  * Automatic Eruda console injection on all pages
-  * Custom JavaScript injection per session
-  * Desktop mode (switches User-Agent to Chrome desktop)
-  * Bookmarks and browsing history
-  * Find in page
-  * Multiple search engines: Google, DuckDuckGo, Bing, Brave
-  * Dark theme throughout
-  * Download manager integration
-  * No telemetry, no tracking, no ads
-
 RepoType: git
 Repo: https://github.com/SANDRO00O/ConsoleFlow-mobile
 
