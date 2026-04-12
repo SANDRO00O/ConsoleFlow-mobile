@@ -39,8 +39,8 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Read Metadata
         id: metadata
@@ -49,7 +49,7 @@ jobs:
           BODY=$(jq -r '.release_body' builddata.json)
           PRE=$(jq -r '.is_prerelease' builddata.json)
           APK_NAME=$(jq -r '.apk_name' builddata.json)
-
+          
           echo "name=$NAME" >> $GITHUB_OUTPUT
           echo "body=$BODY" >> $GITHUB_OUTPUT
           echo "pre=$PRE" >> $GITHUB_OUTPUT
@@ -58,12 +58,12 @@ jobs:
       - name: Locate and Rename APK
         id: apk
         run: |
-          ORIGINAL_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          ORIGINAL_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
           NEW_NAME="${{ steps.metadata.outputs.apk_custom_name }}"
-          NEW_PATH="app/build/outputs/apk/release/$NEW_NAME"
-
+          NEW_PATH="app/build/outputs/apk/debug/$NEW_NAME"
+          
           mv "$ORIGINAL_PATH" "$NEW_PATH"
-
+          
           echo "path=$NEW_PATH" >> $GITHUB_OUTPUT
 
       - name: Determine release info
