@@ -39,29 +39,7 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Decode Keystore and convert to JKS
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > consoleflow.p12
-          keytool -importkeystore \
-            -srckeystore consoleflow.p12 \
-            -srcstoretype PKCS12 \
-            -srcstorepass "$KEYSTORE_PASSWORD" \
-            -srcalias consoleflow \
-            -destkeystore consoleflow.jks \
-            -deststoretype JKS \
-            -deststorepass "$KEYSTORE_PASSWORD" \
-            -destkeypass "$KEY_PASSWORD" \
-            -alias consoleflow \
-            -noprompt
-
       - name: Build Release APK
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Read Metadata
