@@ -35,7 +35,6 @@ import okhttp3.Request
 import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 
-// ── Tab data ───────────────────────────────────────────────────────────────
 data class TabState(
     val id: Int,
     var title: String = "New Tab",
@@ -65,10 +64,12 @@ class MainActivity : AppCompatActivity() {
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPermissionRequest: PermissionRequest? = null
 
-    private val HOME_URL = "file:///android_asset/home.html"
+    private val HOME_URL  = "file:///android_asset/home.html"
     private val ERROR_URL = "file:///android_asset/error.html"
 
-    // Domains where OkHttp interception is skipped (avoid CAPTCHA)
+    // ★ Cache UA string for safe access from background thread (shouldInterceptRequest)
+    @Volatile private var cachedUserAgent: String = ""
+
     private val NO_INTERCEPT_DOMAINS = listOf(
         "google.com", "googleapis.com", "gstatic.com", "accounts.google.com",
         "bing.com", "microsoft.com", "live.com",
@@ -76,13 +77,13 @@ class MainActivity : AppCompatActivity() {
         "yahoo.com", "yandex.com"
     )
 
-    // ── Tab management ─────────────────────────────────────────────────────
+    // ── Tabs ───────────────────────────────────────────────────────────────
     private val tabs = mutableListOf<TabState>()
     private var activeTabId = 0
-    private var nextTabId = 1
+    private var nextTabId   = 1
     private lateinit var tabAdapter: TabAdapter
 
-    // ── Permission launcher ────────────────────────────────────────────────
+    // ── Launchers ──────────────────────────────────────────────────────────
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
@@ -90,15 +91,9 @@ class MainActivity : AppCompatActivity() {
         else webPermissionRequest?.deny()
     }
 
-    // ── QR scan launcher ──────────────────────────────────────────────────
     private val qrScanLauncher = registerForActivityResult(ScanContract()) { result: ScanIntentResult ->
         result.contents?.let { scanned ->
-            val url = when {
-                scanned.startsWith("http://") || scanned.startsWith("https://") -> scanned
-                Patterns.WEB_URL.matcher(scanned).matches() -> "https://$scanned"
-                else -> prefsManager.searchEngine + URLEncoder.encode(scanned, "utf-8")
-            }
-            webView.loadUrl(url)
+            navigateTo(scanned)
         }
     }
 
@@ -155,34 +150,26 @@ class MainActivity : AppCompatActivity() {
         tabsRecycler        = findViewById(R.id.tabsRecycler)
         tabCount            = findViewById(R.id.tabCount)
 
-        tabAdapter = TabAdapter(
-            tabs,
-            onTabClick  = { tab -> switchToTab(tab) },
-            onTabClose  = { tab -> closeTab(tab) }
+        tabAdapter = TabAdapter(tabs,
+            onTabClick = { tab -> switchToTab(tab) },
+            onTabClose = { tab -> closeTab(tab) }
         )
-        // 2-column Chrome-style grid
         tabsRecycler.layoutManager = GridLayoutManager(this, 2)
-        tabsRecycler.adapter = tabAdapter
+        tabsRecycler.adapter       = tabAdapter
 
         updateSearchEngineIcon()
     }
 
     // ── Tab operations ─────────────────────────────────────────────────────
     private fun switchToTab(tab: TabState) {
-        // Capture thumbnail of current tab before leaving
         captureAndStoreThumbnail()
-
         tabs.find { it.id == activeTabId }?.let {
             it.title = webView.title ?: "Tab"
-            it.url   = webView.url ?: HOME_URL
+            it.url   = webView.url   ?: HOME_URL
         }
-
         activeTabId = tab.id
         tabsOverlay.visibility = View.GONE
-
-        val dest = tab.url.takeIf { it.isNotBlank() } ?: HOME_URL
-        webView.loadUrl(dest)
-
+        webView.loadUrl(tab.url.takeIf { it.isNotBlank() } ?: HOME_URL)
         tabAdapter.setActive(tab.id)
         updateTabCount()
     }
@@ -202,29 +189,23 @@ class MainActivity : AppCompatActivity() {
         tabs[idx].thumbnail = null
         tabs.removeAt(idx)
         tabAdapter.notifyItemRemoved(idx)
-        if (tabs.isEmpty()) {
-            openNewTab()
-        } else if (tab.id == activeTabId) {
-            switchToTab(tabs.getOrNull(maxOf(0, idx - 1)) ?: tabs.first())
-        }
+        if (tabs.isEmpty()) openNewTab()
+        else if (tab.id == activeTabId) switchToTab(tabs.getOrNull(maxOf(0, idx - 1)) ?: tabs.first())
         updateTabCount()
     }
 
     private fun updateTabCount() {
         tabCount.text = tabs.size.toString()
-        val countLabel = if (tabsOverlay.visibility == View.VISIBLE)
-            "Tabs (${tabs.size})" else "Tabs"
-        findViewById<TextView?>(R.id.tabsTitle)?.text = countLabel
+        val lbl = if (tabsOverlay.visibility == View.VISIBLE) "Tabs (${tabs.size})" else "Tabs"
+        findViewById<TextView?>(R.id.tabsTitle)?.text = lbl
     }
 
-    /** Capture a small bitmap of the current WebView for the tab thumbnail. */
     private fun captureAndStoreThumbnail() {
         try {
             val w = webView.width.coerceAtLeast(1)
             val h = (w * 0.625f).toInt().coerceAtLeast(1)
             val full = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
-            val canvas = Canvas(full)
-            webView.draw(canvas)
+            webView.draw(Canvas(full))
             val thumb = Bitmap.createScaledBitmap(full, 360, 225, true)
             if (thumb !== full) full.recycle()
             tabs.find { it.id == activeTabId }?.let { t ->
@@ -234,19 +215,20 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
-    // ─────────────────────────────────────────────────────────────────────
+    // ── WebView setup ──────────────────────────────────────────────────────
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
         with(webView.settings) {
-            javaScriptEnabled          = true
-            domStorageEnabled          = true
-            databaseEnabled            = true
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled   = true
             setSupportZoom(true)
-            builtInZoomControls        = true
-            displayZoomControls        = false
-            mixedContentMode           = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            builtInZoomControls  = true
+            displayZoomControls  = false
+            mixedContentMode     = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             mediaPlaybackRequiresUserGesture = false
         }
+        // ★ applyUserAgent also populates cachedUserAgent (safe for background thread)
         applyUserAgent()
         webView.addJavascriptInterface(SearchBridge(), "Android")
 
@@ -262,17 +244,15 @@ class MainActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 progressBar.visibility = View.VISIBLE
-                if (url == HOME_URL || url?.startsWith(ERROR_URL) == true) {
-                    textUrl.setText("")
-                } else {
-                    textUrl.setText(url)
-                }
+                textUrl.setText(
+                    if (url == HOME_URL || url?.startsWith(ERROR_URL) == true) "" else url
+                )
                 updateBookmarkIcon(url ?: "")
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                swipeRefresh.isRefreshing = false
+                swipeRefresh.isRefreshing  = false
                 progressBar.visibility = View.INVISIBLE
                 url?.let {
                     if (it != HOME_URL && !it.startsWith(ERROR_URL))
@@ -282,61 +262,58 @@ class MainActivity : AppCompatActivity() {
                         tab.url   = it
                     }
                 }
-                // ── Eruda fallback injection ───────────────────────────────
-                // Only fires if OkHttp injection didn't already init eruda
-                // (__erudaReady is set to true ONLY after eruda.init() succeeds)
-                view?.evaluateJavascript("""
-                    (function(){
-                        if(window.__erudaReady) return;
-                        if(typeof eruda !== 'undefined'){
-                            try{ eruda.init(); window.__erudaReady=true; }catch(e){}
-                            return;
-                        }
-                        var x=new XMLHttpRequest();
-                        x.open('GET','https://eruda.local/eruda.js',true);
-                        x.onload=function(){
-                            if(window.__erudaReady) return;
-                            try{
-                                eval(x.responseText);
-                                eruda.init();
-                                window.__erudaReady=true;
-                            }catch(e){}
-                        };
-                        x.onerror=function(){};
-                        x.send();
-                    })()
-                """.trimIndent(), null)
+                // ── Eruda fallback ─────────────────────────────────────────
+                // Fires for pages where OkHttp injection didn't run
+                // (home.html, error.html, search-engine pages, failed OkHttp calls)
+                // ★ Uses simple single-line string — no trimIndent, no multiline issues
+                view?.evaluateJavascript(
+                    "(function(){" +
+                    "if(window.__erudaInited)return;" +
+                    "if(typeof eruda!=='undefined'){" +
+                        "try{eruda.init();window.__erudaInited=true;}catch(e){}" +
+                        "return;" +
+                    "}" +
+                    "var x=new XMLHttpRequest();" +
+                    "x.open('GET','https://eruda.local/eruda.js',true);" +
+                    "x.onload=function(){" +
+                        "if(window.__erudaInited)return;" +
+                        "try{eval(x.responseText);eruda.init();window.__erudaInited=true;}catch(e){}" +
+                    "};" +
+                    "x.send();" +
+                    "})()",
+                    null
+                )
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
 
-                // ── Serve Eruda from local assets ──────────────────────────
+                // ── Serve eruda from local assets ──────────────────────────
                 if (url == "https://eruda.local/eruda.js") {
                     return try {
-                        val stream = assets.open("eruda.js")
-                        WebResourceResponse("application/javascript", "utf-8", stream)
+                        WebResourceResponse("application/javascript", "utf-8", assets.open("eruda.js"))
                     } catch (_: Exception) { null }
                 }
 
-                // ── Skip OkHttp interception for search engines / auth domains
+                // ── Skip OkHttp interception for auth/search domains ───────
                 val host = request.url.host ?: ""
                 if (NO_INTERCEPT_DOMAINS.any { host == it || host.endsWith(".$it") }) return null
 
-                // ── OkHttp-based HTML interception (injects Eruda, strips CSP) ──
+                // ── OkHttp HTML injection ──────────────────────────────────
                 if (request.isForMainFrame && request.method == "GET" && url.startsWith("http")) {
                     try {
-                        // ★ Fix desktop mode: always use the current WebView UA,
-                        //   never trust request.requestHeaders["User-Agent"] which
-                        //   may carry a stale value from before the mode toggle.
-                        val currentUA = webView.settings.userAgentString
-                            ?: WebSettings.getDefaultUserAgent(this@MainActivity)
+                        // ★ USE cachedUserAgent (set on main thread) — NOT webView.settings
+                        //   webView.settings must only be accessed on the main thread;
+                        //   shouldInterceptRequest runs on a background thread.
+                        val ua = cachedUserAgent.ifEmpty {
+                            WebSettings.getDefaultUserAgent(view.context)
+                        }
 
                         val reqBuilder = Request.Builder().url(url)
                         request.requestHeaders.forEach { (k, v) ->
                             if (k.lowercase() != "user-agent") reqBuilder.addHeader(k, v)
                         }
-                        reqBuilder.header("User-Agent", currentUA)
+                        reqBuilder.header("User-Agent", ua)
 
                         val cookie = CookieManager.getInstance().getCookie(url)
                         if (!cookie.isNullOrEmpty()) reqBuilder.header("Cookie", cookie)
@@ -353,57 +330,37 @@ class MainActivity : AppCompatActivity() {
                                     RegexOption.IGNORE_CASE), ""
                             )
 
-                            // Build custom JS snippet if user has any
-                            val customJs = prefsManager.customJs
+                            // ★ Eruda injection — single-line, no trimIndent,
+                            //   no multiline string issues.
+                            // ★ Uses __erudaInited flag (set only after eruda.init() succeeds)
+                            //   so the onPageFinished fallback won't double-initialize.
+                            val erudaTag  = "<script src=\"https://eruda.local/eruda.js\"></script>"
+                            val erudaInit = "<script>(function(){" +
+                                "if(window.__erudaInited)return;" +
+                                "try{eruda.init();window.__erudaInited=true;}catch(e){}" +
+                                "})()</script>"
+                            val customJsTag = prefsManager.customJs
                                 .takeIf { it.isNotEmpty() }
                                 ?.let { "<script>$it</script>" } ?: ""
 
-                            // ★ Eruda injection — __erudaReady is set only AFTER
-                            //   eruda.init() to prevent the fallback from re-running
-                            //   on a successfully-injected page.
-                            // ★ We also clear any stale Eruda localStorage keys that
-                            //   could cause "disappeared console / need to clear data" bugs.
-                            val erudaScript = """
-                                <script src="https://eruda.local/eruda.js"></script>
-                                <script>
-                                (function(){
-                                    try {
-                                        var ks=[];
-                                        for(var i=0;i<localStorage.length;i++){
-                                            var k=localStorage.key(i);
-                                            if(k&&k.indexOf('eruda')===0) ks.push(k);
-                                        }
-                                        ks.forEach(function(k){localStorage.removeItem(k);});
-                                    }catch(e){}
-                                    try {
-                                        if(window.__erudaReady) return;
-                                        eruda.init();
-                                        window.__erudaReady=true;
-                                    }catch(e){}
-                                })();
-                                </script>
-                            """.trimIndent()
-
                             html = html.replaceFirst(
-                                "<head>", "<head>$erudaScript$customJs",
+                                "<head>",
+                                "<head>$erudaTag$erudaInit$customJsTag",
                                 ignoreCase = true
                             )
 
                             // Strip CSP response headers
-                            val hdrs = response.headers.toMap().toMutableMap().apply {
-                                remove("Content-Security-Policy")
-                                remove("content-security-policy")
-                                remove("X-Content-Security-Policy")
-                                remove("X-WebKit-CSP")
-                                // Prevent WebView from caching modified HTML
-                                // so that future reloads also get Eruda injected
-                                put("Cache-Control", "no-store, no-cache")
-                            }
+                            val hdrs = response.headers.toMap().toMutableMap()
+                            hdrs.remove("Content-Security-Policy")
+                            hdrs.remove("content-security-policy")
+                            hdrs.remove("X-Content-Security-Policy")
+                            hdrs.remove("X-WebKit-CSP")
 
-                            val stream = ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
                             return WebResourceResponse(
                                 "text/html", "utf-8",
-                                response.code, "OK", hdrs, stream
+                                response.code, "OK",
+                                hdrs,
+                                ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
                             )
                         }
                     } catch (_: Exception) { return null }
@@ -412,9 +369,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
-                if (req.isForMainFrame) {
+                if (req.isForMainFrame)
                     view.loadUrl("$ERROR_URL?url=${URLEncoder.encode(req.url.toString(), "UTF-8")}")
-                }
             }
 
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
@@ -433,7 +389,6 @@ class MainActivity : AppCompatActivity() {
                 progressBar.progress = newProgress
             }
 
-            /** Capture favicon when browser receives it */
             override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
                 super.onReceivedIcon(view, icon)
                 icon ?: return
@@ -478,8 +433,7 @@ class MainActivity : AppCompatActivity() {
         webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
             val req = DownloadManager.Request(Uri.parse(url)).apply {
                 setMimeType(mimetype)
-                val cookies = CookieManager.getInstance().getCookie(url)
-                addRequestHeader("cookie", cookies)
+                addRequestHeader("cookie", CookieManager.getInstance().getCookie(url))
                 addRequestHeader("User-Agent", userAgent)
                 setDescription("Downloading file...")
                 setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype))
@@ -501,10 +455,8 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 }
         swipeRefresh.setOnRefreshListener { webView.reload() }
 
-        // URL bar
         textUrl.setOnEditorActionListener { _, _, _ ->
-            navigateTo(textUrl.text.toString().trim())
-            hideKeyboard(); true
+            navigateTo(textUrl.text.toString().trim()); hideKeyboard(); true
         }
         textUrl.setOnLongClickListener {
             PopupMenu(this, textUrl).apply {
@@ -523,17 +475,12 @@ class MainActivity : AppCompatActivity() {
             }; true
         }
 
-        // Bottom nav
-        findViewById<View>(R.id.btnBackArea).setOnClickListener {
-            if (webView.canGoBack()) webView.goBack()
-        }
-        findViewById<View>(R.id.btnForwardArea).setOnClickListener {
-            if (webView.canGoForward()) webView.goForward()
-        }
-        findViewById<View>(R.id.btnHomeArea).setOnClickListener {
-            webView.loadUrl(HOME_URL)
-        }
-        // Tabs
+        // Bottom navigation
+        findViewById<View>(R.id.btnBackArea).setOnClickListener    { if (webView.canGoBack())    webView.goBack()    }
+        findViewById<View>(R.id.btnForwardArea).setOnClickListener { if (webView.canGoForward()) webView.goForward() }
+        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { webView.loadUrl(HOME_URL) }
+
+        // Tabs toggle
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
             if (tabsOverlay.visibility == View.VISIBLE) {
                 tabsOverlay.visibility = View.GONE
@@ -541,7 +488,7 @@ class MainActivity : AppCompatActivity() {
                 captureAndStoreThumbnail()
                 tabs.find { it.id == activeTabId }?.let {
                     it.title = webView.title ?: "Tab"
-                    it.url   = webView.url ?: HOME_URL
+                    it.url   = webView.url   ?: HOME_URL
                 }
                 tabAdapter.setActive(activeTabId)
                 tabAdapter.notifyDataSetChanged()
@@ -549,16 +496,14 @@ class MainActivity : AppCompatActivity() {
                 tabsOverlay.visibility = View.VISIBLE
             }
         }
-        findViewById<View>(R.id.btnNewTab).setOnClickListener { openNewTab() }
-        // Menu
+        findViewById<View>(R.id.btnNewTab).setOnClickListener  { openNewTab() }
         findViewById<View>(R.id.btnMenuArea).setOnClickListener { showMenuSheet() }
 
         // Top-bar bookmark
         btnBookmark.setOnClickListener {
             val url = webView.url ?: return@setOnClickListener
             if (url == HOME_URL || url.startsWith(ERROR_URL)) return@setOnClickListener
-            val title = webView.title ?: "Bookmark"
-            val added = prefsManager.toggleBookmark(title, url)
+            val added = prefsManager.toggleBookmark(webView.title ?: "Bookmark", url)
             updateBookmarkIcon(url)
             Toast.makeText(this, if (added) "Bookmarked" else "Removed", Toast.LENGTH_SHORT).show()
         }
@@ -578,8 +523,8 @@ class MainActivity : AppCompatActivity() {
         // Find in page
         val inputFind = findViewById<EditText>(R.id.findInput)
         val tvMatches = findViewById<TextView>(R.id.findMatches)
-        webView.setFindListener { ordinal, total, _ ->
-            tvMatches.text = if (total > 0) "${ordinal + 1}/$total" else "0/0"
+        webView.setFindListener { ord, total, _ ->
+            tvMatches.text = if (total > 0) "${ord + 1}/$total" else "0/0"
         }
         inputFind.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) { webView.findAllAsync(s.toString()) }
@@ -589,18 +534,19 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnFindNext).setOnClickListener  { webView.findNext(true)  }
         findViewById<View>(R.id.btnFindPrev).setOnClickListener  { webView.findNext(false) }
         findViewById<View>(R.id.btnFindClose).setOnClickListener {
-            findBar.visibility = View.GONE; webView.clearMatches(); hideKeyboard()
+            findBar.visibility = View.GONE
+            webView.clearMatches()
+            hideKeyboard()
         }
     }
 
     // ── Bottom sheet menu ──────────────────────────────────────────────────
     private fun showMenuSheet() {
         val sheet = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
-        val view  = layoutInflater.inflate(R.layout.layout_main_menu, null)
-        sheet.setContentView(view)
+        val v = layoutInflater.inflate(R.layout.layout_main_menu, null)
+        sheet.setContentView(v)
 
-        // Reflect current desktop mode state in label
-        val desktopLabel = view.findViewById<TextView>(R.id.menuDesktopModeLabel)
+        val desktopLabel = v.findViewById<TextView>(R.id.menuDesktopModeLabel)
         if (prefsManager.desktopMode) {
             desktopLabel.text = "Desktop On"
             desktopLabel.setTextColor(0xFFFFFFFF.toInt())
@@ -609,24 +555,24 @@ class MainActivity : AppCompatActivity() {
             desktopLabel.setTextColor(0xFFCCCCCC.toInt())
         }
 
-        view.findViewById<View>(R.id.menuNightMode).setOnClickListener {
+        v.findViewById<View>(R.id.menuNightMode).setOnClickListener {
             sheet.dismiss()
-            webView.evaluateJavascript("""
-                (function(){
-                    var el=document.getElementById('__cf_night');
-                    if(el){el.remove();}else{
-                        var s=document.createElement('style');
-                        s.id='__cf_night';
-                        s.textContent='html{filter:invert(1) hue-rotate(180deg)!important}'
-                            +'img,video,canvas{filter:invert(1) hue-rotate(180deg)!important}';
-                        document.head.appendChild(s);
-                    }
-                })()
-            """.trimIndent(), null)
+            webView.evaluateJavascript(
+                "(function(){" +
+                "var el=document.getElementById('__cf_night');" +
+                "if(el){el.remove();}else{" +
+                "var s=document.createElement('style');" +
+                "s.id='__cf_night';" +
+                "s.textContent='html{filter:invert(1) hue-rotate(180deg)!important}" +
+                "img,video,canvas{filter:invert(1) hue-rotate(180deg)!important}';" +
+                "document.head.appendChild(s);" +
+                "}" +
+                "})()", null
+            )
         }
-        view.findViewById<View>(R.id.menuBookmarks).setOnClickListener  { sheet.dismiss(); showBookmarksDialog() }
-        view.findViewById<View>(R.id.menuHistory).setOnClickListener    { sheet.dismiss(); showHistoryDialog()   }
-        view.findViewById<View>(R.id.menuShare).setOnClickListener {
+        v.findViewById<View>(R.id.menuBookmarks).setOnClickListener  { sheet.dismiss(); showBookmarksDialog() }
+        v.findViewById<View>(R.id.menuHistory).setOnClickListener    { sheet.dismiss(); showHistoryDialog()   }
+        v.findViewById<View>(R.id.menuShare).setOnClickListener {
             sheet.dismiss()
             val url = webView.url ?: return@setOnClickListener
             startActivity(Intent.createChooser(
@@ -636,27 +582,25 @@ class MainActivity : AppCompatActivity() {
                     putExtra(Intent.EXTRA_SUBJECT, webView.title ?: "")
                 }, "Share"))
         }
-        view.findViewById<View>(R.id.menuFindInPage).setOnClickListener {
+        v.findViewById<View>(R.id.menuFindInPage).setOnClickListener {
             sheet.dismiss(); findBar.visibility = View.VISIBLE
         }
-        view.findViewById<View>(R.id.menuDesktopMode).setOnClickListener {
+        v.findViewById<View>(R.id.menuDesktopMode).setOnClickListener {
             sheet.dismiss()
             prefsManager.desktopMode = !prefsManager.desktopMode
+            // ★ applyUserAgent updates BOTH webView.settings AND cachedUserAgent on main thread
             applyUserAgent()
-            // ★ Fix: clear cache and reload so OkHttp re-fetches with new UA.
-            //   applyUserAgent() updates webView.settings.userAgentString;
-            //   shouldInterceptRequest() reads it fresh for every OkHttp request.
             val cur = webView.url
             if (!cur.isNullOrEmpty() && cur != HOME_URL) {
                 webView.clearCache(false)
                 webView.reload()
             }
         }
-        view.findViewById<View>(R.id.menuSettings).setOnClickListener {
+        v.findViewById<View>(R.id.menuSettings).setOnClickListener {
             sheet.dismiss()
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        view.findViewById<View>(R.id.menuClearData).setOnClickListener {
+        v.findViewById<View>(R.id.menuClearData).setOnClickListener {
             sheet.dismiss()
             AlertDialog.Builder(this, R.style.DarkDialog)
                 .setTitle("Clear Browsing Data")
@@ -668,16 +612,13 @@ class MainActivity : AppCompatActivity() {
         sheet.show()
     }
 
-    // ── Dialogs ────────────────────────────────────────────────────────────
     private fun showBookmarksDialog() {
-        val bookmarks = prefsManager.getBookmarks()
-        if (bookmarks.isEmpty()) {
-            Toast.makeText(this, "No bookmarks saved", Toast.LENGTH_SHORT).show(); return
-        }
+        val bks = prefsManager.getBookmarks()
+        if (bks.isEmpty()) { Toast.makeText(this, "No bookmarks saved", Toast.LENGTH_SHORT).show(); return }
         AlertDialog.Builder(this, R.style.DarkDialog)
             .setTitle("Bookmarks")
-            .setItems(bookmarks.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w ->
-                webView.loadUrl(bookmarks[w].second)
+            .setItems(bks.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w ->
+                webView.loadUrl(bks[w].second)
             }
             .setNeutralButton("Clear All") { _, _ ->
                 getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
@@ -685,26 +626,22 @@ class MainActivity : AppCompatActivity() {
                 updateBookmarkIcon(webView.url ?: "")
                 Toast.makeText(this, "Bookmarks cleared", Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("Close", null)
-            .show()
+            .setNegativeButton("Close", null).show()
     }
 
     private fun showHistoryDialog() {
-        val history = prefsManager.getHistory()
-        if (history.isEmpty()) {
-            Toast.makeText(this, "No history", Toast.LENGTH_SHORT).show(); return
-        }
+        val hist = prefsManager.getHistory()
+        if (hist.isEmpty()) { Toast.makeText(this, "No history", Toast.LENGTH_SHORT).show(); return }
         AlertDialog.Builder(this, R.style.DarkDialog)
             .setTitle("History")
-            .setItems(history.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w ->
-                webView.loadUrl(history[w].second)
+            .setItems(hist.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w ->
+                webView.loadUrl(hist[w].second)
             }
             .setNeutralButton("Clear") { _, _ ->
                 prefsManager.clearHistory()
                 Toast.makeText(this, "History cleared", Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("Close", null)
-            .show()
+            .setNegativeButton("Close", null).show()
     }
 
     private fun clearData() {
@@ -718,20 +655,24 @@ class MainActivity : AppCompatActivity() {
 
     // ── User Agent ─────────────────────────────────────────────────────────
     /**
-     * Applies the current user-agent mode to webView.settings.
-     * Called once at startup and whenever the user toggles desktop mode.
-     * Note: shouldInterceptRequest() reads userAgentString fresh on every
-     * request, so toggling here + reload is sufficient for all sites.
+     * Must be called on the MAIN THREAD.
+     * Updates both webView.settings.userAgentString AND cachedUserAgent.
+     * cachedUserAgent is @Volatile so shouldInterceptRequest (background thread)
+     * can safely read it.
      */
     private fun applyUserAgent() {
         with(webView.settings) {
             if (prefsManager.desktopMode) {
-                userAgentString      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                val desktopUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
                     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                userAgentString      = desktopUA
+                cachedUserAgent      = desktopUA
                 useWideViewPort      = true
                 loadWithOverviewMode = true
             } else {
-                userAgentString      = WebSettings.getDefaultUserAgent(this@MainActivity)
+                val defaultUA = WebSettings.getDefaultUserAgent(this@MainActivity)
+                userAgentString      = defaultUA
+                cachedUserAgent      = defaultUA
                 useWideViewPort      = true
                 loadWithOverviewMode = false
             }
@@ -776,12 +717,9 @@ class MainActivity : AppCompatActivity() {
         customView = null
     }
 
-    // ── JS Bridge ─────────────────────────────────────────────────────────
     inner class SearchBridge {
         @JavascriptInterface
-        fun navigate(input: String) {
-            runOnUiThread { navigateTo(input) }
-        }
+        fun navigate(input: String) { runOnUiThread { navigateTo(input) } }
     }
 }
 
@@ -793,7 +731,6 @@ class TabAdapter(
 ) : RecyclerView.Adapter<TabAdapter.VH>() {
 
     private var activeId: Int = -1
-
     fun setActive(id: Int) { activeId = id }
 
     inner class VH(v: View) : RecyclerView.ViewHolder(v) {
@@ -808,11 +745,7 @@ class TabAdapter(
 
     override fun onBindViewHolder(h: VH, position: Int) {
         val tab = tabs[position]
-
-        // Title
         h.title.text = tab.title.ifEmpty { "New Tab" }
-
-        // Favicon
         if (tab.favicon != null) {
             h.favicon.setImageBitmap(tab.favicon)
             h.favicon.clearColorFilter()
@@ -820,22 +753,16 @@ class TabAdapter(
             h.favicon.setImageResource(R.drawable.home)
             h.favicon.setColorFilter(0xFF666666.toInt())
         }
-
-        // Thumbnail
         if (tab.thumbnail != null) {
             h.thumbnail.setImageBitmap(tab.thumbnail)
-            h.thumbnail.clearColorFilter()
         } else {
             h.thumbnail.setImageResource(android.R.color.transparent)
         }
-
-        // Active tab highlight
         h.itemView.background = h.itemView.context.getDrawable(
             if (tab.id == activeId) R.drawable.tab_card_active else R.drawable.tab_card_bg
         )
-
         h.itemView.setOnClickListener { onTabClick(tab) }
-        h.close.setOnClickListener { onTabClose(tab) }
+        h.close.setOnClickListener   { onTabClose(tab) }
     }
 
     override fun getItemCount() = tabs.size

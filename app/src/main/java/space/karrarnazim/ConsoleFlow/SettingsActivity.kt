@@ -101,6 +101,14 @@ class SettingsActivity : AppCompatActivity() {
                 .setNegativeButton("Cancel", null)
                 .show()
         }
+
+        // Website
+        findViewById<android.view.View>(R.id.settingWebsite).setOnClickListener {
+            startActivity(
+                Intent(Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://consoleflow.karrarnazim.space"))
+            )
+        }
     }
 
     override fun onBackPressed() {

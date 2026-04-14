@@ -222,8 +222,8 @@
             android:background="@drawable/bottom_btn_ripple">
             <ImageView
                 android:id="@+id/goBack"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:layout_gravity="center"
                 android:src="@drawable/arrow_left"
                 android:tint="#888888" />
@@ -238,8 +238,8 @@
             android:background="@drawable/bottom_btn_ripple">
             <ImageView
                 android:id="@+id/goForward"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:layout_gravity="center"
                 android:src="@drawable/arrow_right"
                 android:tint="#888888" />
@@ -254,11 +254,11 @@
             android:background="@drawable/bottom_btn_ripple">
             <ImageView
                 android:id="@+id/goHome"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:layout_gravity="center"
                 android:src="@drawable/home"
-                android:tint="#CCCCCC" />
+                android:tint="#888888" />
         </FrameLayout>
 
         <!-- Tabs Counter -->
@@ -270,12 +270,12 @@
             android:background="@drawable/bottom_btn_ripple">
             <FrameLayout
                 android:id="@+id/btnTabs"
-                android:layout_width="26dp"
-                android:layout_height="26dp"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:layout_gravity="center">
                 <ImageView
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
                     android:src="@drawable/ic_tab_bg" />
                 <TextView
                     android:id="@+id/tabCount"
@@ -298,8 +298,8 @@
             android:background="@drawable/bottom_btn_ripple">
             <ImageView
                 android:id="@+id/btnMenu"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:layout_gravity="center"
                 android:src="@drawable/menu"
                 android:tint="#888888" />
