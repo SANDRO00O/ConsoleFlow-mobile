@@ -17,6 +17,7 @@
         android:paddingHorizontal="8dp"
         app:layout_constraintTop_toTopOf="parent">
 
+        <!-- Search engine icon (acts as engine switcher) -->
         <ImageView
             android:id="@+id/imgSearchEngine"
             android:layout_width="26dp"
@@ -24,6 +25,7 @@
             android:scaleType="fitCenter"
             android:src="@drawable/ic_find" />
 
+        <!-- URL / Search bar -->
         <EditText
             android:id="@+id/textUrl"
             android:layout_width="0dp"
@@ -40,15 +42,16 @@
             android:textColor="#FFFFFF"
             android:textColorHint="#555555" />
 
+        <!-- Bookmark toggle (same icon as bottom bar) -->
         <ImageView
             android:id="@+id/btnBookmark"
             android:layout_width="34dp"
             android:layout_height="34dp"
-            android:padding="5dp"
-            android:src="@drawable/star_outline"
+            android:padding="6dp"
+            android:src="@drawable/ic_bookmarks"
             android:tint="#FFFFFF" />
 
-        <!-- QR Scanner button -->
+        <!-- QR Scanner (replaces old 3-dot menu) -->
         <ImageView
             android:id="@+id/btnQr"
             android:layout_width="34dp"
@@ -59,6 +62,7 @@
             android:tint="#AAAAAA" />
     </LinearLayout>
 
+    <!-- Page Load Progress Bar -->
     <ProgressBar
         android:id="@+id/progressBar"
         style="?android:attr/progressBarStyleHorizontal"
@@ -145,7 +149,7 @@
             android:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- Tabs Overlay (Chrome-style fullscreen tab view) -->
+    <!-- Tabs Overlay (Chrome-style full-screen tab manager) -->
     <FrameLayout
         android:id="@+id/tabsOverlay"
         android:layout_width="match_parent"
@@ -160,13 +164,13 @@
             android:layout_height="match_parent"
             android:orientation="vertical">
 
-            <!-- Tabs header -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
+                android:layout_height="52dp"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingHorizontal="16dp">
+                android:paddingHorizontal="16dp"
+                android:background="#000000">
 
                 <TextView
                     android:id="@+id/tabsTitle"
@@ -188,17 +192,18 @@
                     android:background="@drawable/bottom_btn_ripple" />
             </LinearLayout>
 
+            <!-- Tabs grid (2-column, Chrome style) -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/tabsRecycler"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
                 android:clipToPadding="false"
-                android:padding="12dp" />
+                android:padding="8dp" />
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Bottom Bar: Back | Forward | Tabs | Bookmarks | Menu -->
+    <!-- ══ Bottom Navigation Bar: Back │ Forward │ Home │ Tabs │ Menu ══ -->
     <LinearLayout
         android:id="@+id/bottomBar"
         android:layout_width="match_parent"
@@ -210,9 +215,11 @@
 
         <!-- Back -->
         <FrameLayout
+            android:id="@+id/btnBackArea"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:background="@drawable/bottom_btn_ripple">
             <ImageView
                 android:id="@+id/goBack"
                 android:layout_width="22dp"
@@ -224,9 +231,11 @@
 
         <!-- Forward -->
         <FrameLayout
+            android:id="@+id/btnForwardArea"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:background="@drawable/bottom_btn_ripple">
             <ImageView
                 android:id="@+id/goForward"
                 android:layout_width="22dp"
@@ -234,6 +243,22 @@
                 android:layout_gravity="center"
                 android:src="@drawable/arrow_right"
                 android:tint="#888888" />
+        </FrameLayout>
+
+        <!-- Home (center) -->
+        <FrameLayout
+            android:id="@+id/btnHomeArea"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bottom_btn_ripple">
+            <ImageView
+                android:id="@+id/goHome"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:src="@drawable/home"
+                android:tint="#CCCCCC" />
         </FrameLayout>
 
         <!-- Tabs Counter -->
@@ -245,12 +270,12 @@
             android:background="@drawable/bottom_btn_ripple">
             <FrameLayout
                 android:id="@+id/btnTabs"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
                 android:layout_gravity="center">
                 <ImageView
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
                     android:src="@drawable/ic_tab_bg" />
                 <TextView
                     android:id="@+id/tabCount"
@@ -259,28 +284,12 @@
                     android:layout_gravity="center"
                     android:text="1"
                     android:textColor="#BBBBBB"
-                    android:textSize="11sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
             </FrameLayout>
         </FrameLayout>
 
-        <!-- Bookmarks -->
-        <FrameLayout
-            android:id="@+id/btnBottomBookmarksArea"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bottom_btn_ripple">
-            <ImageView
-                android:id="@+id/btnBottomBookmarks"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:layout_gravity="center"
-                android:src="@drawable/ic_bookmarks"
-                android:tint="#888888" />
-        </FrameLayout>
-
-        <!-- Menu bottom sheet -->
+        <!-- Menu (bottom sheet) -->
         <FrameLayout
             android:id="@+id/btnMenuArea"
             android:layout_width="0dp"
