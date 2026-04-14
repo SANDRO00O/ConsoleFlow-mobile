@@ -1,6 +1,8 @@
 package space.karrarnazim.ConsoleFlow
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
@@ -103,10 +105,10 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // Website
+        // Website
         findViewById<android.view.View>(R.id.settingWebsite).setOnClickListener {
             startActivity(
-                Intent(Intent.ACTION_VIEW,
-                    android.net.Uri.parse("https://consoleflow.karrarnazim.space"))
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://consoleflow.karrarnazim.space"))
             )
         }
     }
