@@ -111,8 +111,12 @@ class MainActivity : AppCompatActivity() {
         tabAdapter.notifyItemInserted(0)
         updateTabCount()
 
+        val intentUrl = intent?.data?.toString()
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState)
+        } else if (!intentUrl.isNullOrEmpty()) {
+            tabs[0].url = intentUrl
+            webView.loadUrl(intentUrl)
         } else {
             webView.loadUrl(HOME_URL)
         }
@@ -134,6 +138,15 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         webView.saveState(outState)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        val url = intent?.data?.toString()
+        if (!url.isNullOrEmpty()) {
+            tabsOverlay.visibility = View.GONE
+            navigateTo(url)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -748,10 +761,11 @@ class TabAdapter(
         h.title.text = tab.title.ifEmpty { "New Tab" }
         if (tab.favicon != null) {
             h.favicon.setImageBitmap(tab.favicon)
+            h.favicon.imageTintList = null
             h.favicon.clearColorFilter()
         } else {
             h.favicon.setImageResource(R.drawable.home)
-            h.favicon.setColorFilter(0xFF666666.toInt())
+            h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(0xFF666666.toInt())
         }
         if (tab.thumbnail != null) {
             h.thumbnail.setImageBitmap(tab.thumbnail)

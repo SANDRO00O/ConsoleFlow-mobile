@@ -22,7 +22,6 @@
             android:layout_width="16dp"
             android:layout_height="16dp"
             android:src="@drawable/home"
-            android:tint="#666666"
             android:scaleType="fitCenter" />
 
         <TextView
