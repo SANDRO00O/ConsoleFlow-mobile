@@ -20,14 +20,41 @@
     </style>
 
     <!-- Dark styled alert dialog matching app theme -->
-    <style name="DarkDialog" parent="Theme.AppCompat.Dialog.Alert">
+    <style name="DarkDialog" parent="Theme.MaterialComponents.Dialog.Alert">
         <item name="android:colorBackground">#111111</item>
         <item name="android:textColorPrimary">#FFFFFF</item>
         <item name="android:textColorSecondary">#AAAAAA</item>
         <item name="colorAccent">#FFFFFF</item>
+        <item name="colorPrimary">#FFFFFF</item>
         <item name="android:windowBackground">@drawable/dark_dialog_bg</item>
         <item name="android:windowMinWidthMajor">80%</item>
         <item name="android:windowMinWidthMinor">80%</item>
+        <item name="buttonBarPositiveButtonStyle">@style/DarkDialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/DarkDialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/DarkDialogButton</item>
+    </style>
+
+    <style name="DarkDialogButton" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">#AAAAAA</item>
+    </style>
+
+    <!-- Bottom sheet menu style -->
+    <style name="AppBottomSheetDialogTheme" parent="Theme.MaterialComponents.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/AppBottomSheet</item>
+        <item name="android:windowIsFloating">false</item>
+    </style>
+
+    <style name="AppBottomSheet" parent="Widget.MaterialComponents.BottomSheet.Modal">
+        <item name="backgroundTint">#111111</item>
+        <item name="shapeAppearanceOverlay">@style/AppBottomSheetShape</item>
+    </style>
+
+    <style name="AppBottomSheetShape" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">20dp</item>
+        <item name="cornerSizeTopRight">20dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
     </style>
 
 </resources>
