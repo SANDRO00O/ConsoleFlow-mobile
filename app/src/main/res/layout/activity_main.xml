@@ -71,7 +71,7 @@
         android:progressDrawable="@drawable/progress_bar"
         app:layout_constraintTop_toBottomOf="@id/topBar" />
 
-    <!-- Web Content -->
+    <!-- Web Content (تم تحويله إلى Container ليحمل عدة تبويبات) -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipeRefresh"
         android:layout_width="match_parent"
@@ -79,10 +79,11 @@
         app:layout_constraintBottom_toTopOf="@id/bottomBar"
         app:layout_constraintTop_toBottomOf="@id/progressBar">
 
-        <WebView
-            android:id="@+id/webView"
+        <FrameLayout
+            android:id="@+id/webViewContainer"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
+            
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     <!-- Fullscreen Video Container -->
