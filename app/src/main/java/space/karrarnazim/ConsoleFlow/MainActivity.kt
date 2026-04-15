@@ -35,6 +35,8 @@ import com.journeyapps.barcodescanner.ScanIntentResult
 import com.journeyapps.barcodescanner.ScanOptions
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -48,7 +50,6 @@ data class TabState(
     var url: String = "",
     var hasThumbnail: Boolean = false
 ) : Serializable {
-    // لحفظ الصورة مؤقتاً وعرضها فوراً بدون انتظار الحفظ في الذاكرة (يمنع مشكلة اختفاء الصورة)
     @Transient var ramThumbnail: Bitmap? = null 
 }
 
@@ -56,7 +57,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webViewContainer: FrameLayout
     private val webViews = mutableMapOf<Int, WebView>()
-    
     private val currentWebView: WebView? get() = webViews[activeTabId]
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
@@ -80,7 +80,6 @@ class MainActivity : AppCompatActivity() {
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPermissionRequest: PermissionRequest? = null
 
-    // تخزين واجهة القائمة لمنع التأخير عند الضغط
     private var cachedMenuSheet: BottomSheetDialog? = null
     private var cachedMenuSheetView: View? = null
 
@@ -123,6 +122,7 @@ class MainActivity : AppCompatActivity() {
         val intentUrl = intent?.data?.toString()
 
         if (savedInstanceState != null) {
+            // استعادة التبويبات عند تدوير الشاشة
             val savedTabs = savedInstanceState.getSerializable("TABS_LIST") as? ArrayList<TabState>
             if (savedTabs != null && savedTabs.isNotEmpty()) {
                 tabs.clear()
@@ -134,9 +134,7 @@ class MainActivity : AppCompatActivity() {
                     val wv = createNewWebView(tab.id)
                     wv.restoreState(savedInstanceState)
                     webViews[tab.id] = wv
-                    if (tab.id == activeTabId) {
-                        webViewContainer.addView(wv)
-                    }
+                    if (tab.id == activeTabId) webViewContainer.addView(wv)
                 }
                 tabAdapter.setActive(activeTabId)
                 tabAdapter.notifyDataSetChanged()
@@ -145,8 +143,8 @@ class MainActivity : AppCompatActivity() {
                 openNewTab(HOME_URL)
             }
         } else {
-            val startUrl = if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL
-            openNewTab(startUrl)
+            // استعادة التبويبات من الذاكرة الدائمة (إذا أغلق المستخدم التطبيق وفتحه مجدداً)
+            loadPersistentTabs(intentUrl)
         }
 
         onBackPressedDispatcher.addCallback(this) {
@@ -161,6 +159,71 @@ class MainActivity : AppCompatActivity() {
                 else -> finish()
             }
         }
+    }
+
+    // ── نظام الحفظ الدائم للتبويبات ───────────────────────────────────────────
+    private fun savePersistentTabs() {
+        ioExecutor.execute {
+            try {
+                val jsonArray = JSONArray()
+                for (tab in tabs) {
+                    val obj = JSONObject()
+                    obj.put("id", tab.id)
+                    obj.put("title", tab.title)
+                    obj.put("url", tab.url)
+                    obj.put("hasThumb", tab.hasThumbnail)
+                    jsonArray.put(obj)
+                }
+                val prefs = getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putString("SAVED_TABS", jsonArray.toString())
+                    .putInt("ACTIVE_TAB", activeTabId)
+                    .putInt("NEXT_TAB_ID", nextTabId)
+                    .apply()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    private fun loadPersistentTabs(intentUrl: String?) {
+        val prefs = getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
+        val savedTabsJson = prefs.getString("SAVED_TABS", null)
+
+        if (savedTabsJson != null) {
+            try {
+                val jsonArray = JSONArray(savedTabsJson)
+                if (jsonArray.length() > 0) {
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        val t = TabState(
+                            id = obj.getInt("id"),
+                            title = obj.getString("title"),
+                            url = obj.getString("url"),
+                            hasThumbnail = obj.getBoolean("hasThumb")
+                        )
+                        tabs.add(t)
+                        val wv = createNewWebView(t.id)
+                        webViews[t.id] = wv
+                        wv.loadUrl(t.url)
+                    }
+                    activeTabId = prefs.getInt("ACTIVE_TAB", tabs.first().id)
+                    nextTabId = prefs.getInt("NEXT_TAB_ID", tabs.maxOf { it.id } + 1)
+                    
+                    val activeWv = webViews[activeTabId]
+                    if (activeWv != null) webViewContainer.addView(activeWv)
+                    
+                    tabAdapter.setActive(activeTabId)
+                    tabAdapter.notifyDataSetChanged()
+                    updateTabCount()
+
+                    // إذا تم فتح التطبيق عبر رابط خارجي، افتحه في تبويب جديد
+                    if (!intentUrl.isNullOrEmpty()) openNewTab(intentUrl)
+                    return
+                }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+        
+        // في حال كان التطبيق يفتح لأول مرة
+        openNewTab(if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -228,6 +291,7 @@ class MainActivity : AppCompatActivity() {
             
             switchToTab(newTab)
             tabAdapter.notifyItemInserted(tabs.size - 1)
+            savePersistentTabs() // تحديث الحفظ
         }
     }
 
@@ -243,6 +307,7 @@ class MainActivity : AppCompatActivity() {
                 updateUIForCurrentWebView(wv)
             }
             updateTabCount()
+            savePersistentTabs() // حفظ التبويب النشط
         }
 
         if (activeTabId != tab.id && currentWebView != null) {
@@ -274,8 +339,10 @@ class MainActivity : AppCompatActivity() {
         } else if (tab.id == activeTabId) {
             val fallbackTab = tabs.getOrNull(maxOf(0, idx - 1)) ?: tabs.first()
             switchToTab(fallbackTab)
+        } else {
+            updateTabCount()
+            savePersistentTabs()
         }
-        updateTabCount()
     }
 
     private fun updateTabCount() {
@@ -292,7 +359,7 @@ class MainActivity : AppCompatActivity() {
         progressBar.visibility = if (wv.progress < 100) View.VISIBLE else View.INVISIBLE
     }
 
-    // تم حل مشكلة ضغط الصورة والسرعة هنا
+    // ── نظام التقاط الصور المُعالج بالكامل ──────────────────────────────────
     private fun captureAndStoreThumbnail(onComplete: (() -> Unit)? = null) {
         val wv = currentWebView
         if (wv == null || wv.width <= 0 || wv.height <= 0) {
@@ -302,25 +369,28 @@ class MainActivity : AppCompatActivity() {
         
         val tabId = activeTabId
         try {
-            // تصغير أبعاد اللوحة برمجياً يحافظ على جودة وأبعاد الشاشة ويمنع مشكلة "الضغط"
-            // كما يمنع تجميد التطبيق لأنه يرسم صورة صغيرة جداً بدلاً من شاشة كاملة
             val scale = 0.3f
             val w = (wv.width * scale).toInt()
             val h = (wv.height * scale).toInt()
             
             val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
             val canvas = Canvas(bitmap)
+            
+            // 1. تصغير الصورة للحفاظ على الرام
             canvas.scale(scale, scale)
+            
+            // 2. إزاحة العدسة (Translate) لتتطابق مع مكان التمرير الحالي للمستخدم (لحل مشكلة القص)
+            canvas.translate(-wv.scrollX.toFloat(), -wv.scrollY.toFloat())
+            
             wv.draw(canvas)
 
             tabs.find { it.id == tabId }?.let {
                 it.hasThumbnail = true
-                it.ramThumbnail = bitmap // حفظ فوري في الرام ليظهر بدون انتظار الحفظ
+                it.ramThumbnail = bitmap
             }
             
-            onComplete?.invoke() // استدعاء الدالة فوراً لتحديث الواجهة بسرعة
+            onComplete?.invoke()
 
-            // حفظ النسخة الاحتياطية في الذاكرة بالخلفية بدون تأخير الواجهة
             ioExecutor.execute {
                 try {
                     val file = File(cacheDir, "thumb_$tabId.webp")
@@ -351,6 +421,7 @@ class MainActivity : AppCompatActivity() {
             displayZoomControls  = false
             mixedContentMode     = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             mediaPlaybackRequiresUserGesture = false
+            cacheMode = WebSettings.LOAD_DEFAULT // تفعيل الكاش التلقائي لزيادة سرعة التصفح
         }
         
         applyUserAgentToWebView(wv)
@@ -386,6 +457,7 @@ class MainActivity : AppCompatActivity() {
                         tab.title = view.title ?: "Tab"
                         tab.url   = it
                     }
+                    savePersistentTabs() // حفظ التغييرات مثل تغيير رابط التبويب
                 }
 
                 if (prefsManager.desktopMode) {
@@ -566,7 +638,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward()) it.goForward() } }
         findViewById<View>(R.id.btnHomeArea).setOnClickListener    { currentWebView?.loadUrl(HOME_URL) }
 
-        // تم تحسين استدعاء التبويبات ليظهر فوراً مع الصورة
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
             if (tabsOverlay.visibility == View.VISIBLE) {
                 tabsOverlay.visibility = View.GONE
@@ -618,7 +689,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // تم حل مشكلة التأخير عبر تجهيز الواجهة مرة واحدة فقط (Caching)
     private fun showMenuSheet() {
         if (cachedMenuSheet == null) {
             cachedMenuSheet = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
@@ -673,7 +743,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // تحديث النصوص المتغيرة قبل العرض
         val desktopLabel = cachedMenuSheetView?.findViewById<TextView>(R.id.menuDesktopModeLabel)
         if (prefsManager.desktopMode) {
             desktopLabel?.text = "Desktop On"
@@ -712,6 +781,10 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().removeAllCookies(null)
         webViews.values.forEach { it.clearCache(true); it.clearHistory() }
         prefsManager.clearHistory()
+        
+        // مسح التبويبات المحفوظة
+        getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE).edit().remove("SAVED_TABS").apply()
+        
         Toast.makeText(this, "Data Cleared", Toast.LENGTH_SHORT).show()
     }
 
@@ -812,14 +885,11 @@ class TabAdapter(
         val defaultColor = if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt()
         h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(defaultColor)
 
-        // حل مشكلة ضغط الصورة برمجياً:
         h.thumbnail.scaleType = ImageView.ScaleType.CENTER_CROP
 
-        // عرض الصورة فوراً من الرام إذا كانت متوفرة
         if (tab.ramThumbnail != null) {
             h.thumbnail.setImageBitmap(tab.ramThumbnail)
         } else if (tab.hasThumbnail) {
-            // جلبها من الذاكرة إذا أُغلق التطبيق وعاد
             ioExecutor.execute {
                 val file = File(context.cacheDir, "thumb_${tab.id}.webp")
                 if (file.exists()) {
