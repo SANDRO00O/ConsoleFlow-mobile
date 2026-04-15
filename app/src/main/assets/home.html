@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Search</title>
   <style>
+    :root {
+      --bg-color: #000000;
+      --surface: #121212;
+      --surface-active: #222222;
+      --border: #2a2a2a;
+      --border-focus: #555555;
+      --text-primary: #ffffff;
+      --text-secondary: #888888;
+      --text-tertiary: #555555;
+    }
+
     *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
@@ -13,9 +24,9 @@
 
     html, body {
       height: 100%;
-      background: #000;
-      color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       -webkit-tap-highlight-color: transparent;
       overflow: hidden;
     }
@@ -24,126 +35,155 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 32px 24px;
+      padding: 0 24px;
     }
 
-    .wrap {
+    .main-content {
       width: 100%;
       max-width: 500px;
-      flex-direction: column;
+      margin-top: 22vh;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      flex-direction: column;
     }
 
-    /* Search */
-    .search-box {
+    .search-container {
       position: relative;
       width: 100%;
+      margin-bottom: 48px;
+    }
+
+    .search-icon-left {
+      position: absolute;
+      left: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      fill: var(--text-secondary);
+      pointer-events: none;
     }
 
     .search-input {
       width: 100%;
-      background: #000000;
-      border: 1px solid #D7D7D7;
-      border-radius: 10px;
-      padding: 15px 52px 15px 18px;
+      background-color: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px 48px 16px 48px;
       font-size: 16px;
-      color: #D7D7D7;
+      color: var(--text-primary);
       outline: none;
-      caret-color: #fff;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, background-color 0.2s;
       -webkit-appearance: none;
-      appearance: none;
-    }
-
-    .search-input:focus {
-      border-color: #ffffff;
     }
 
     .search-input::placeholder {
-      color: #303030;
+      color: var(--text-tertiary);
     }
 
-    .search-btn {
+    .search-input:focus {
+      border-color: var(--border-focus);
+      background-color: #161616;
+    }
+
+    .search-action {
       position: absolute;
-      right: 14px;
+      right: 12px;
       top: 50%;
       transform: translateY(-50%);
-      background: none;
+      background: transparent;
       border: none;
-      padding: 6px;
-      cursor: pointer;
+      padding: 8px;
       display: flex;
       align-items: center;
-      opacity: 0.3;
-      transition: opacity 0.15s;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 50%;
     }
 
-    .search-btn:active { opacity: 0.7; }
-
-    .search-btn svg {
+    .search-action svg {
       width: 20px;
       height: 20px;
-      fill: #fff;
+      stroke: var(--text-secondary);
+      transition: stroke 0.2s;
     }
 
-    /* Quick links */
-    .links {
+    .search-action:active svg {
+      stroke: var(--text-primary);
+    }
+
+    .section-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      padding-left: 4px;
+    }
+
+    .links-container {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 18px;
+      gap: 10px;
     }
 
-    .link {
-      background: #000000;
-      border: 1px solid #D7D7D7;
-      border-radius: 8px;
-      padding: 9px 15px;
-      font-size: 13px;
-      color: #C8C8C8;
+    .link-chip {
+      background-color: transparent;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 16px;
+      color: #d0d0d0;
+      font-size: 14px;
+      text-decoration: none;
+      transition: background-color 0.15s, border-color 0.15s, color 0.15s;
       cursor: pointer;
-      transition: color 0.15s, border-color 0.15s;
-      letter-spacing: 0.01em;
       user-select: none;
     }
 
-    .link:active {
-      background: #121212;
+    .link-chip:active {
+      background-color: var(--surface-active);
+      border-color: var(--border-focus);
+      color: var(--text-primary);
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="search-box">
+  <div class="main-content">
+    
+    <div class="search-container">
+      <svg class="search-icon-left" viewBox="0 0 24 24">
+        <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+      </svg>
+      
       <input
         id="q"
         class="search-input"
         type="text"
-        placeholder="Search or enter URL..."
+        placeholder="Search or type URL"
         autocomplete="off"
         autocorrect="off"
         autocapitalize="off"
         spellcheck="false"
         enterkeyhint="go"
       >
-      <button class="search-btn" onclick="go()" aria-label="Go">
-        <svg viewBox="0 0 24 24">
-          <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+      
+      <button class="search-action" onclick="go()" aria-label="Go">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
       </button>
     </div>
 
-    <div class="links">
-      <span class="link" onclick="nav('https://github.com')">GitHub</span>
-      <span class="link" onclick="nav('https://google.com')">Google</span>
-      <span class="link" onclick="nav('https://developer.mozilla.org')">MDN</span>
-      <span class="link" onclick="nav('https://stackoverflow.com')">Stack Overflow</span>
-      <span class="link" onclick="nav('https://developer.android.com')">Android Dev</span>
-      <span class="link" onclick="nav('https://npmjs.com')">npm</span>
+    <div class="section-header">Bookmarks</div>
+    <div class="links-container">
+      <div class="link-chip" onclick="nav('https://github.com')">GitHub</div>
+      <div class="link-chip" onclick="nav('https://google.com')">Google</div>
+      <div class="link-chip" onclick="nav('https://developer.mozilla.org')">MDN</div>
+      <div class="link-chip" onclick="nav('https://stackoverflow.com')">Stack Overflow</div>
+      <div class="link-chip" onclick="nav('https://developer.android.com')">Android Dev</div>
+      <div class="link-chip" onclick="nav('https://npmjs.com')">npm</div>
     </div>
+
   </div>
 
   <script>
@@ -159,11 +199,9 @@
     }
 
     function nav(url) {
-      // Pass full URL directly — Android side handles https:// check
       Android.navigate(url);
     }
 
-    // Auto-focus with small delay to let keyboard settle
     setTimeout(function () { input.focus(); }, 150);
   </script>
 </body>
