@@ -9,13 +9,13 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.os.Parcelable
 import android.util.Patterns
 import android.view.*
 import android.view.inputmethod.InputMethodManager
@@ -33,26 +33,25 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanIntentResult
 import com.journeyapps.barcodescanner.ScanOptions
-import kotlinx.parcelize.Parcelize
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.Serializable
 import java.net.URLEncoder
 import java.util.concurrent.Executors
 
-@Parcelize
+// تم التعديل إلى Serializable لتجنب مشاكل Parcelize في الجرادل
 data class TabState(
     val id: Int,
     var title: String = "New Tab",
     var url: String = "",
-    var hasThumbnail: Boolean = false // لمعرفة هل له صورة محفوظة في الكاش أم لا
-) : Parcelable
+    var hasThumbnail: Boolean = false
+) : Serializable
 
 class MainActivity : AppCompatActivity() {
 
-    // حاوية المتصفحات بدلاً من متصفح واحد
     private lateinit var webViewContainer: FrameLayout
     private val webViews = mutableMapOf<Int, WebView>()
     
@@ -72,7 +71,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefsManager: PrefsManager
     private val okClient = OkHttpClient.Builder().followRedirects(true).build()
     
-    // Background thread for I/O operations (Saving thumbnails)
     private val ioExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -90,13 +88,11 @@ class MainActivity : AppCompatActivity() {
         "yahoo.com", "yandex.com"
     )
 
-    // ── Tabs ───────────────────────────────────────────────────────────────
     private var tabs = mutableListOf<TabState>()
     private var activeTabId = 0
     private var nextTabId   = 1
     private lateinit var tabAdapter: TabAdapter
 
-    // ── Launchers ──────────────────────────────────────────────────────────
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
@@ -108,7 +104,7 @@ class MainActivity : AppCompatActivity() {
         result.contents?.let { scanned -> navigateTo(scanned) }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
+    @Suppress("UNCHECKED_CAST")
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -121,18 +117,16 @@ class MainActivity : AppCompatActivity() {
         val intentUrl = intent?.data?.toString()
 
         if (savedInstanceState != null) {
-            // استعادة التبويبات من الذاكرة
-            val savedTabs = savedInstanceState.getParcelableArrayList<TabState>("TABS_LIST")
+            val savedTabs = savedInstanceState.getSerializable("TABS_LIST") as? ArrayList<TabState>
             if (savedTabs != null && savedTabs.isNotEmpty()) {
                 tabs.clear()
                 tabs.addAll(savedTabs)
                 activeTabId = savedInstanceState.getInt("ACTIVE_TAB_ID", tabs.first().id)
                 nextTabId = savedInstanceState.getInt("NEXT_TAB_ID", tabs.maxOf { it.id } + 1)
                 
-                // إعادة بناء المتصفحات
                 tabs.forEach { tab ->
                     val wv = createNewWebView(tab.id)
-                    wv.restoreState(savedInstanceState) // استعادة الهيستوري لكل تاب
+                    wv.restoreState(savedInstanceState)
                     webViews[tab.id] = wv
                     if (tab.id == activeTabId) {
                         webViewContainer.addView(wv)
@@ -145,7 +139,6 @@ class MainActivity : AppCompatActivity() {
                 openNewTab(HOME_URL)
             }
         } else {
-            // فتح التطبيق لأول مرة
             val startUrl = if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL
             openNewTab(startUrl)
         }
@@ -166,10 +159,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putParcelableArrayList("TABS_LIST", ArrayList(tabs))
+        outState.putSerializable("TABS_LIST", ArrayList(tabs))
         outState.putInt("ACTIVE_TAB_ID", activeTabId)
         outState.putInt("NEXT_TAB_ID", nextTabId)
-        // حفظ حالة كل متصفح
         webViews.values.forEach { it.saveState(outState) }
     }
 
@@ -183,7 +175,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // منع تسريب الذاكرة وتدمير كل المتصفحات
         webViews.values.forEach { wv ->
             webViewContainer.removeView(wv)
             wv.clearHistory()
@@ -218,11 +209,9 @@ class MainActivity : AppCompatActivity() {
 
         updateSearchEngineIcon()
     }
-
-    // ── Tab operations ─────────────────────────────────────────────────────
     
     private fun openNewTab(url: String = HOME_URL) {
-        captureAndStoreThumbnail() // التقاط للتاب القديم قبل إنشاء الجديد
+        captureAndStoreThumbnail()
         
         val id = nextTabId++
         val newTab = TabState(id = id, title = "New Tab", url = url)
@@ -245,7 +234,6 @@ class MainActivity : AppCompatActivity() {
         tabsOverlay.visibility = View.GONE
         tabAdapter.setActive(tab.id)
         
-        // إزالة كل المتصفحات من الحاوية وإضافة المتصفح المطلوب فقط
         webViewContainer.removeAllViews()
         currentWebView?.let { wv ->
             webViewContainer.addView(wv)
@@ -259,10 +247,8 @@ class MainActivity : AppCompatActivity() {
         val idx = tabs.indexOfFirst { it.id == tab.id }
         if (idx < 0) return
         
-        // مسح الصورة من الكاش
         ioExecutor.execute { File(cacheDir, "thumb_${tab.id}.webp").delete() }
         
-        // تدمير المتصفح لتوفير الذاكرة
         webViews[tab.id]?.let { wv ->
             webViewContainer.removeView(wv)
             wv.destroy()
@@ -295,7 +281,7 @@ class MainActivity : AppCompatActivity() {
         progressBar.visibility = if (wv.progress < 100) View.VISIBLE else View.INVISIBLE
     }
 
-    // ── Thumbnail System (Background & Safe) ──────────────────────────────
+    // تم إصلاح نظام التقاط الصور ليستخدم الطريقة الصحيحة للمتصفح
     private fun captureAndStoreThumbnail() {
         val wv = currentWebView ?: return
         val tabId = activeTabId
@@ -303,32 +289,29 @@ class MainActivity : AppCompatActivity() {
         if (wv.width <= 0 || wv.height <= 0) return
 
         try {
-            // إنشاء صورة مصغرة عبر PixelCopy للحصول على لقطة حقيقية
-            val bitmap = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.ARGB_8888)
-            PixelCopy.request(wv, bitmap, { result ->
-                if (result == PixelCopy.SUCCESS) {
-                    ioExecutor.execute {
-                        try {
-                            val scaled = Bitmap.createScaledBitmap(bitmap, 360, 225, true)
-                            val file = File(cacheDir, "thumb_$tabId.webp")
-                            FileOutputStream(file).use { out ->
-                                scaled.compress(Bitmap.CompressFormat.WEBP, 80, out)
-                            }
-                            bitmap.recycle()
-                            if (scaled !== bitmap) scaled.recycle()
-                            
-                            // تحديث حالة التبويب
-                            mainHandler.post {
-                                tabs.find { it.id == tabId }?.hasThumbnail = true
-                            }
-                        } catch (e: Exception) { e.printStackTrace() }
+            // استخدام Canvas لرسم المتصفح بأمان وبحجم صغير لتوفير الرام
+            val bitmap = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.RGB_565)
+            val canvas = Canvas(bitmap)
+            wv.draw(canvas)
+
+            ioExecutor.execute {
+                try {
+                    val scaled = Bitmap.createScaledBitmap(bitmap, 360, 225, true)
+                    val file = File(cacheDir, "thumb_$tabId.webp")
+                    FileOutputStream(file).use { out ->
+                        scaled.compress(Bitmap.CompressFormat.WEBP, 80, out)
                     }
-                }
-            }, mainHandler)
+                    bitmap.recycle()
+                    if (scaled !== bitmap) scaled.recycle()
+                    
+                    mainHandler.post {
+                        tabs.find { it.id == tabId }?.hasThumbnail = true
+                    }
+                } catch (e: Exception) { e.printStackTrace() }
+            }
         } catch (e: Exception) { e.printStackTrace() }
     }
 
-    // ── WebView Factory ────────────────────────────────────────────────────
     @SuppressLint("SetJavaScriptEnabled")
     private fun createNewWebView(tabId: Int): WebView {
         val wv = WebView(this)
@@ -382,7 +365,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // حقن كود الديسكتوب لإجبار المواقع الحديثة على الاستجابة
                 if (prefsManager.desktopMode) {
                     view.evaluateJavascript(
                         "(function() { " +
@@ -393,7 +375,6 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
 
-                // حقن Eruda
                 view.evaluateJavascript(
                     "(function(){" +
                     "if(window.__erudaInited)return;" +
@@ -535,7 +516,6 @@ class MainActivity : AppCompatActivity() {
         return wv
     }
 
-    // ── Listeners ──────────────────────────────────────────────────────────
     @SuppressLint("ClickableViewAccessibility")
     private fun setupListeners() {
         swipeRefresh.setOnChildScrollUpCallback { _, _ -> (currentWebView?.scrollY ?: 0) > 0 }
@@ -652,7 +632,7 @@ class MainActivity : AppCompatActivity() {
         v.findViewById<View>(R.id.menuDesktopMode).setOnClickListener {
             sheet.dismiss()
             prefsManager.desktopMode = !prefsManager.desktopMode
-            webViews.values.forEach { applyUserAgentToWebView(it) } // تحديث كل المتصفحات المفتوحة
+            webViews.values.forEach { applyUserAgentToWebView(it) } 
             val cur = currentWebView?.url
             if (!cur.isNullOrEmpty() && cur != HOME_URL) {
                 currentWebView?.clearCache(false)
@@ -704,12 +684,10 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Data Cleared", Toast.LENGTH_SHORT).show()
     }
 
-    // ── User Agent Generator ────────────────────────────────────────────────
     private fun getUserAgentString(): String {
         val defaultUA = WebSettings.getDefaultUserAgent(this)
         return if (prefsManager.desktopMode) {
             try {
-                // استخراج إصدار الكروم الفعلي من النظام لتجنب رسائل "المتصفح قديم"
                 val chromeVersion = Regex("Chrome/([0-9.]+)").find(defaultUA)?.value ?: "Chrome/124.0.0.0"
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) $chromeVersion Safari/537.36"
             } catch (e: Exception) {
@@ -729,7 +707,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
     private fun navigateTo(input: String) {
         val url = when {
             input.startsWith("http://") || input.startsWith("https://") -> input
@@ -772,7 +749,6 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-// ── Tab RecyclerView Adapter ────────────────────────────────────────────────
 class TabAdapter(
     private val context: Context,
     private val tabs: MutableList<TabState>,
@@ -805,14 +781,13 @@ class TabAdapter(
         val defaultColor = if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt()
         h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(defaultColor)
 
-        // تحميل الصورة من ملف الكاش بأمان (بدون تعليق الواجهة)
         if (tab.hasThumbnail) {
             ioExecutor.execute {
                 val file = File(context.cacheDir, "thumb_${tab.id}.webp")
                 if (file.exists()) {
                     val bitmap = BitmapFactory.decodeFile(file.absolutePath)
                     mainHandler.post {
-                        if (h.adapterPosition == position) { // التأكد من أن الـ View لم يتغير
+                        if (h.adapterPosition == position) { 
                             h.thumbnail.setImageBitmap(bitmap)
                         }
                     }
