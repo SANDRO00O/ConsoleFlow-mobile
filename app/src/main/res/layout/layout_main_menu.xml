@@ -218,7 +218,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:text="Clear Data"
-                android:textColor="#FF4444"
+                android:textColor="#CCCCCC"
                 android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
