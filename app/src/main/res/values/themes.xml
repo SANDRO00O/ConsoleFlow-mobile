@@ -1,5 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:fontFamily">@font/app_font_family</item>
+        <item name="fontFamily">@font/app_font_family</item>
+
         <item name="android:statusBarColor">@color/background</item>
         <item name="android:navigationBarColor">@color/background</item>
         <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
@@ -8,7 +11,6 @@
         <item name="colorOnPrimary">@color/white</item>
     </style>
 
-    <!-- Splash screen theme -->
     <style name="AppTheme.SplashScreen" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splashscreen</item>

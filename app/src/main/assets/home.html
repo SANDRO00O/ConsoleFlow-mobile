@@ -1,10 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Search</title>
   <style>
+    @font-face {
+      font-family: 'Ubuntu';
+      src: url('Ubuntu-Regular.ttf') format('TrueType');
+      font-weight: normal;
+      font-style: normal;
+    }
+    
     :root {
       --bg-color: #000000;
       --surface: #121212;
@@ -15,29 +23,32 @@
       --text-secondary: #888888;
       --text-tertiary: #555555;
     }
-
-    *, *::before, *::after {
+    
+    *,
+    *::before,
+    *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      font-family: 'Ubuntu';
     }
-
-    html, body {
+    
+    html,
+    body {
       height: 100%;
       background-color: var(--bg-color);
       color: var(--text-primary);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       -webkit-tap-highlight-color: transparent;
       overflow: hidden;
     }
-
+    
     body {
       display: flex;
       flex-direction: column;
       align-items: center;
       padding: 0 24px;
     }
-
+    
     .main-content {
       width: 100%;
       max-width: 500px;
@@ -45,13 +56,13 @@
       display: flex;
       flex-direction: column;
     }
-
+    
     .search-container {
       position: relative;
       width: 100%;
       margin-bottom: 48px;
     }
-
+    
     .search-icon-left {
       position: absolute;
       left: 18px;
@@ -62,7 +73,7 @@
       fill: var(--text-secondary);
       pointer-events: none;
     }
-
+    
     .search-input {
       width: 100%;
       background-color: var(--surface);
@@ -75,16 +86,16 @@
       transition: border-color 0.2s, background-color 0.2s;
       -webkit-appearance: none;
     }
-
+    
     .search-input::placeholder {
       color: var(--text-tertiary);
     }
-
+    
     .search-input:focus {
       border-color: var(--border-focus);
       background-color: #161616;
     }
-
+    
     .search-action {
       position: absolute;
       right: 12px;
@@ -99,18 +110,18 @@
       cursor: pointer;
       border-radius: 50%;
     }
-
+    
     .search-action svg {
       width: 20px;
       height: 20px;
       stroke: var(--text-secondary);
       transition: stroke 0.2s;
     }
-
+    
     .search-action:active svg {
       stroke: var(--text-primary);
     }
-
+    
     .section-header {
       font-size: 11px;
       font-weight: 600;
@@ -120,13 +131,13 @@
       margin-bottom: 16px;
       padding-left: 4px;
     }
-
+    
     .links-container {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
     }
-
+    
     .link-chip {
       background-color: transparent;
       border: 1px solid var(--border);
@@ -139,7 +150,7 @@
       cursor: pointer;
       user-select: none;
     }
-
+    
     .link-chip:active {
       background-color: var(--surface-active);
       border-color: var(--border-focus);
@@ -147,33 +158,24 @@
     }
   </style>
 </head>
+
 <body>
   <div class="main-content">
     
     <div class="search-container">
       <svg class="search-icon-left" viewBox="0 0 24 24">
-        <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
       </svg>
       
-      <input
-        id="q"
-        class="search-input"
-        type="text"
-        placeholder="Search or type URL"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="off"
-        spellcheck="false"
-        enterkeyhint="go"
-      >
+      <input id="q" class="search-input" type="text" placeholder="Search or type URL" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
       
       <button class="search-action" onclick="go()" aria-label="Go">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
+          <path d="M5 12h14M12 5l7 7-7 7" />
         </svg>
       </button>
     </div>
-
+    
     <div class="section-header">Bookmarks</div>
     <div class="links-container">
       <div class="link-chip" onclick="nav('https://github.com')">GitHub</div>
@@ -183,26 +185,27 @@
       <div class="link-chip" onclick="nav('https://developer.android.com')">Android Dev</div>
       <div class="link-chip" onclick="nav('https://npmjs.com')">npm</div>
     </div>
-
+    
   </div>
-
+  
   <script>
     var input = document.getElementById('q');
-
-    input.addEventListener('keydown', function (e) {
+    
+    input.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') go();
     });
-
+    
     function go() {
       var val = input.value.trim();
       if (val) Android.navigate(val);
     }
-
+    
     function nav(url) {
       Android.navigate(url);
     }
-
-    setTimeout(function () { input.focus(); }, 150);
+    
+    setTimeout(function() { input.focus(); }, 150);
   </script>
 </body>
+
 </html>
