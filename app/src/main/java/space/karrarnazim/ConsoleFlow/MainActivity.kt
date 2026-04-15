@@ -42,13 +42,15 @@ import java.io.Serializable
 import java.net.URLEncoder
 import java.util.concurrent.Executors
 
-// تم التعديل إلى Serializable لتجنب مشاكل Parcelize في الجرادل
 data class TabState(
     val id: Int,
     var title: String = "New Tab",
     var url: String = "",
     var hasThumbnail: Boolean = false
-) : Serializable
+) : Serializable {
+    // لحفظ الصورة مؤقتاً وعرضها فوراً بدون انتظار الحفظ في الذاكرة (يمنع مشكلة اختفاء الصورة)
+    @Transient var ramThumbnail: Bitmap? = null 
+}
 
 class MainActivity : AppCompatActivity() {
 
@@ -77,6 +79,10 @@ class MainActivity : AppCompatActivity() {
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPermissionRequest: PermissionRequest? = null
+
+    // تخزين واجهة القائمة لمنع التأخير عند الضغط
+    private var cachedMenuSheet: BottomSheetDialog? = null
+    private var cachedMenuSheetView: View? = null
 
     private val HOME_URL  = "file:///android_asset/home.html"
     private val ERROR_URL = "file:///android_asset/error.html"
@@ -211,42 +217,47 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun openNewTab(url: String = HOME_URL) {
-        captureAndStoreThumbnail()
-        
-        val id = nextTabId++
-        val newTab = TabState(id = id, title = "New Tab", url = url)
-        tabs.add(newTab)
-        
-        val wv = createNewWebView(id)
-        webViews[id] = wv
-        wv.loadUrl(url)
-        
-        switchToTab(newTab)
-        tabAdapter.notifyItemInserted(tabs.size - 1)
+        captureAndStoreThumbnail {
+            val id = nextTabId++
+            val newTab = TabState(id = id, title = "New Tab", url = url)
+            tabs.add(newTab)
+            
+            val wv = createNewWebView(id)
+            webViews[id] = wv
+            wv.loadUrl(url)
+            
+            switchToTab(newTab)
+            tabAdapter.notifyItemInserted(tabs.size - 1)
+        }
     }
 
     private fun switchToTab(tab: TabState) {
+        val executeSwitch = {
+            activeTabId = tab.id
+            tabsOverlay.visibility = View.GONE
+            tabAdapter.setActive(tab.id)
+            
+            webViewContainer.removeAllViews()
+            currentWebView?.let { wv ->
+                webViewContainer.addView(wv)
+                updateUIForCurrentWebView(wv)
+            }
+            updateTabCount()
+        }
+
         if (activeTabId != tab.id && currentWebView != null) {
-            captureAndStoreThumbnail()
+            captureAndStoreThumbnail { executeSwitch() }
+        } else {
+            executeSwitch()
         }
-        
-        activeTabId = tab.id
-        tabsOverlay.visibility = View.GONE
-        tabAdapter.setActive(tab.id)
-        
-        webViewContainer.removeAllViews()
-        currentWebView?.let { wv ->
-            webViewContainer.addView(wv)
-            updateUIForCurrentWebView(wv)
-        }
-        
-        updateTabCount()
     }
 
     private fun closeTab(tab: TabState) {
         val idx = tabs.indexOfFirst { it.id == tab.id }
         if (idx < 0) return
         
+        tab.ramThumbnail?.recycle()
+        tab.ramThumbnail = null
         ioExecutor.execute { File(cacheDir, "thumb_${tab.id}.webp").delete() }
         
         webViews[tab.id]?.let { wv ->
@@ -281,35 +292,47 @@ class MainActivity : AppCompatActivity() {
         progressBar.visibility = if (wv.progress < 100) View.VISIBLE else View.INVISIBLE
     }
 
-    // تم إصلاح نظام التقاط الصور ليستخدم الطريقة الصحيحة للمتصفح
-    private fun captureAndStoreThumbnail() {
-        val wv = currentWebView ?: return
-        val tabId = activeTabId
+    // تم حل مشكلة ضغط الصورة والسرعة هنا
+    private fun captureAndStoreThumbnail(onComplete: (() -> Unit)? = null) {
+        val wv = currentWebView
+        if (wv == null || wv.width <= 0 || wv.height <= 0) {
+            onComplete?.invoke()
+            return
+        }
         
-        if (wv.width <= 0 || wv.height <= 0) return
-
+        val tabId = activeTabId
         try {
-            // استخدام Canvas لرسم المتصفح بأمان وبحجم صغير لتوفير الرام
-            val bitmap = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.RGB_565)
+            // تصغير أبعاد اللوحة برمجياً يحافظ على جودة وأبعاد الشاشة ويمنع مشكلة "الضغط"
+            // كما يمنع تجميد التطبيق لأنه يرسم صورة صغيرة جداً بدلاً من شاشة كاملة
+            val scale = 0.3f
+            val w = (wv.width * scale).toInt()
+            val h = (wv.height * scale).toInt()
+            
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
             val canvas = Canvas(bitmap)
+            canvas.scale(scale, scale)
             wv.draw(canvas)
 
+            tabs.find { it.id == tabId }?.let {
+                it.hasThumbnail = true
+                it.ramThumbnail = bitmap // حفظ فوري في الرام ليظهر بدون انتظار الحفظ
+            }
+            
+            onComplete?.invoke() // استدعاء الدالة فوراً لتحديث الواجهة بسرعة
+
+            // حفظ النسخة الاحتياطية في الذاكرة بالخلفية بدون تأخير الواجهة
             ioExecutor.execute {
                 try {
-                    val scaled = Bitmap.createScaledBitmap(bitmap, 360, 225, true)
                     val file = File(cacheDir, "thumb_$tabId.webp")
                     FileOutputStream(file).use { out ->
-                        scaled.compress(Bitmap.CompressFormat.WEBP, 80, out)
-                    }
-                    bitmap.recycle()
-                    if (scaled !== bitmap) scaled.recycle()
-                    
-                    mainHandler.post {
-                        tabs.find { it.id == tabId }?.hasThumbnail = true
+                        bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out)
                     }
                 } catch (e: Exception) { e.printStackTrace() }
             }
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) { 
+            e.printStackTrace()
+            onComplete?.invoke()
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -543,17 +566,20 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward()) it.goForward() } }
         findViewById<View>(R.id.btnHomeArea).setOnClickListener    { currentWebView?.loadUrl(HOME_URL) }
 
+        // تم تحسين استدعاء التبويبات ليظهر فوراً مع الصورة
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
             if (tabsOverlay.visibility == View.VISIBLE) {
                 tabsOverlay.visibility = View.GONE
             } else {
-                captureAndStoreThumbnail()
-                tabAdapter.setActive(activeTabId)
-                tabAdapter.notifyDataSetChanged()
-                updateTabCount()
-                tabsOverlay.visibility = View.VISIBLE
+                captureAndStoreThumbnail {
+                    tabAdapter.setActive(activeTabId)
+                    tabAdapter.notifyDataSetChanged()
+                    updateTabCount()
+                    tabsOverlay.visibility = View.VISIBLE
+                }
             }
         }
+        
         findViewById<View>(R.id.btnNewTab).setOnClickListener  { openNewTab() }
         findViewById<View>(R.id.btnMenuArea).setOnClickListener { showMenuSheet() }
 
@@ -592,67 +618,72 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // تم حل مشكلة التأخير عبر تجهيز الواجهة مرة واحدة فقط (Caching)
     private fun showMenuSheet() {
-        val sheet = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
-        val v = layoutInflater.inflate(R.layout.layout_main_menu, null)
-        sheet.setContentView(v)
+        if (cachedMenuSheet == null) {
+            cachedMenuSheet = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
+            cachedMenuSheetView = layoutInflater.inflate(R.layout.layout_main_menu, null)
+            cachedMenuSheet?.setContentView(cachedMenuSheetView!!)
+            
+            cachedMenuSheetView?.findViewById<View>(R.id.menuNightMode)?.setOnClickListener {
+                cachedMenuSheet?.dismiss()
+                currentWebView?.evaluateJavascript(
+                    "(function(){var el=document.getElementById('__cf_night');if(el){el.remove();}else{var s=document.createElement('style');s.id='__cf_night';s.textContent='html{filter:invert(1) hue-rotate(180deg)!important}img,video,canvas{filter:invert(1) hue-rotate(180deg)!important}';document.head.appendChild(s);}})()", null
+                )
+            }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuBookmarks)?.setOnClickListener  { cachedMenuSheet?.dismiss(); showBookmarksDialog() }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuHistory)?.setOnClickListener    { cachedMenuSheet?.dismiss(); showHistoryDialog()   }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuShare)?.setOnClickListener {
+                cachedMenuSheet?.dismiss()
+                val url = currentWebView?.url ?: return@setOnClickListener
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, url)
+                    putExtra(Intent.EXTRA_SUBJECT, currentWebView?.title ?: "")
+                }, "Share"))
+            }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuFindInPage)?.setOnClickListener {
+                cachedMenuSheet?.dismiss(); findBar.visibility = View.VISIBLE
+                currentWebView?.setFindListener { ord, total, _ ->
+                    findViewById<TextView>(R.id.findMatches).text = if (total > 0) "${ord + 1}/$total" else "0/0"
+                }
+            }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuDesktopMode)?.setOnClickListener {
+                cachedMenuSheet?.dismiss()
+                prefsManager.desktopMode = !prefsManager.desktopMode
+                webViews.values.forEach { applyUserAgentToWebView(it) } 
+                val cur = currentWebView?.url
+                if (!cur.isNullOrEmpty() && cur != HOME_URL) {
+                    currentWebView?.clearCache(false)
+                    currentWebView?.reload()
+                }
+            }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuSettings)?.setOnClickListener {
+                cachedMenuSheet?.dismiss()
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuClearData)?.setOnClickListener {
+                cachedMenuSheet?.dismiss()
+                AlertDialog.Builder(this, R.style.DarkDialog)
+                    .setTitle("Clear Browsing Data")
+                    .setMessage("This will delete cache, cookies, and history.")
+                    .setPositiveButton("Clear") { _, _ -> clearData() }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
 
-        val desktopLabel = v.findViewById<TextView>(R.id.menuDesktopModeLabel)
+        // تحديث النصوص المتغيرة قبل العرض
+        val desktopLabel = cachedMenuSheetView?.findViewById<TextView>(R.id.menuDesktopModeLabel)
         if (prefsManager.desktopMode) {
-            desktopLabel.text = "Desktop On"
-            desktopLabel.setTextColor(0xFFFFFFFF.toInt())
+            desktopLabel?.text = "Desktop On"
+            desktopLabel?.setTextColor(0xFFFFFFFF.toInt())
         } else {
-            desktopLabel.text = "Desktop"
-            desktopLabel.setTextColor(0xFFCCCCCC.toInt())
+            desktopLabel?.text = "Desktop"
+            desktopLabel?.setTextColor(0xFFCCCCCC.toInt())
         }
 
-        v.findViewById<View>(R.id.menuNightMode).setOnClickListener {
-            sheet.dismiss()
-            currentWebView?.evaluateJavascript(
-                "(function(){var el=document.getElementById('__cf_night');if(el){el.remove();}else{var s=document.createElement('style');s.id='__cf_night';s.textContent='html{filter:invert(1) hue-rotate(180deg)!important}img,video,canvas{filter:invert(1) hue-rotate(180deg)!important}';document.head.appendChild(s);}})()", null
-            )
-        }
-        v.findViewById<View>(R.id.menuBookmarks).setOnClickListener  { sheet.dismiss(); showBookmarksDialog() }
-        v.findViewById<View>(R.id.menuHistory).setOnClickListener    { sheet.dismiss(); showHistoryDialog()   }
-        v.findViewById<View>(R.id.menuShare).setOnClickListener {
-            sheet.dismiss()
-            val url = currentWebView?.url ?: return@setOnClickListener
-            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, url)
-                putExtra(Intent.EXTRA_SUBJECT, currentWebView?.title ?: "")
-            }, "Share"))
-        }
-        v.findViewById<View>(R.id.menuFindInPage).setOnClickListener {
-            sheet.dismiss(); findBar.visibility = View.VISIBLE
-            currentWebView?.setFindListener { ord, total, _ ->
-                findViewById<TextView>(R.id.findMatches).text = if (total > 0) "${ord + 1}/$total" else "0/0"
-            }
-        }
-        v.findViewById<View>(R.id.menuDesktopMode).setOnClickListener {
-            sheet.dismiss()
-            prefsManager.desktopMode = !prefsManager.desktopMode
-            webViews.values.forEach { applyUserAgentToWebView(it) } 
-            val cur = currentWebView?.url
-            if (!cur.isNullOrEmpty() && cur != HOME_URL) {
-                currentWebView?.clearCache(false)
-                currentWebView?.reload()
-            }
-        }
-        v.findViewById<View>(R.id.menuSettings).setOnClickListener {
-            sheet.dismiss()
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-        v.findViewById<View>(R.id.menuClearData).setOnClickListener {
-            sheet.dismiss()
-            AlertDialog.Builder(this, R.style.DarkDialog)
-                .setTitle("Clear Browsing Data")
-                .setMessage("This will delete cache, cookies, and history.")
-                .setPositiveButton("Clear") { _, _ -> clearData() }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-        sheet.show()
+        cachedMenuSheet?.show()
     }
 
     private fun showBookmarksDialog() {
@@ -781,7 +812,14 @@ class TabAdapter(
         val defaultColor = if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt()
         h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(defaultColor)
 
-        if (tab.hasThumbnail) {
+        // حل مشكلة ضغط الصورة برمجياً:
+        h.thumbnail.scaleType = ImageView.ScaleType.CENTER_CROP
+
+        // عرض الصورة فوراً من الرام إذا كانت متوفرة
+        if (tab.ramThumbnail != null) {
+            h.thumbnail.setImageBitmap(tab.ramThumbnail)
+        } else if (tab.hasThumbnail) {
+            // جلبها من الذاكرة إذا أُغلق التطبيق وعاد
             ioExecutor.execute {
                 val file = File(context.cacheDir, "thumb_${tab.id}.webp")
                 if (file.exists()) {
