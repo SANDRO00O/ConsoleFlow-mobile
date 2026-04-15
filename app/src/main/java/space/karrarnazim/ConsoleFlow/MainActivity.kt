@@ -750,7 +750,7 @@ class TabAdapter(
         val title:     TextView  = v.findViewById(R.id.tabTitle)
         val favicon:   ImageView = v.findViewById(R.id.tabFavicon)
         val thumbnail: ImageView = v.findViewById(R.id.tabThumbnail)
-        val close:     View      = v.findViewById(R.id.tabClose)
+        val close:     ImageView = v.findViewById(R.id.tabClose)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
@@ -758,23 +758,39 @@ class TabAdapter(
 
     override fun onBindViewHolder(h: VH, position: Int) {
         val tab = tabs[position]
+        val isActive = tab.id == activeId
+
         h.title.text = tab.title.ifEmpty { "New Tab" }
+
+        // Favicon
         if (tab.favicon != null) {
             h.favicon.setImageBitmap(tab.favicon)
             h.favicon.imageTintList = null
             h.favicon.clearColorFilter()
         } else {
             h.favicon.setImageResource(R.drawable.home)
-            h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(0xFF666666.toInt())
+            val defaultColor = if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt()
+            h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(defaultColor)
         }
+
+        // Thumbnail
         if (tab.thumbnail != null) {
             h.thumbnail.setImageBitmap(tab.thumbnail)
         } else {
             h.thumbnail.setImageResource(android.R.color.transparent)
         }
+
+        // Background
         h.itemView.background = h.itemView.context.getDrawable(
-            if (tab.id == activeId) R.drawable.tab_card_active else R.drawable.tab_card_bg
+            if (isActive) R.drawable.tab_card_active else R.drawable.tab_card_bg
         )
+
+        // Text and close icon colors based on active state
+        val textColor  = if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt()
+        val closeColor = if (isActive) 0xFF003366.toInt() else 0xFFAAAAAA.toInt()
+        h.title.setTextColor(textColor)
+        h.close.setColorFilter(closeColor)
+
         h.itemView.setOnClickListener { onTabClick(tab) }
         h.close.setOnClickListener   { onTabClose(tab) }
     }
