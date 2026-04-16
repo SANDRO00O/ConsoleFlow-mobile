@@ -152,40 +152,19 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         prefsManager = PrefsManager(this)
-        ioExecutor = Executors.newCachedThreadPool()   // تحسين الأداء
+        ioExecutor = Executors.newCachedThreadPool()
 
         initViews()
         setupListeners()
 
-        val intentUrl = intent?.data?.toString()
-
-        if (savedInstanceState != null) {
-            // استعادة المجموعات والتبويبات عند تدوير الشاشة
-            val savedGroups = savedInstanceState.getSerializable("GROUPS_LIST") as? ArrayList<TabGroup>
-            if (savedGroups != null && savedGroups.isNotEmpty()) {
-                tabGroups.clear()
-                tabGroups.addAll(savedGroups)
-                activeGroupId = savedInstanceState.getInt("ACTIVE_GROUP_ID", tabGroups.first().id)
-                activeTabId = savedInstanceState.getInt("ACTIVE_TAB_ID", tabGroups.first().tabs.firstOrNull()?.id ?: 0)
-                nextTabId = savedInstanceState.getInt("NEXT_TAB_ID", 100)
-                nextGroupId = savedInstanceState.getInt("NEXT_GROUP_ID", 100)
-
-                tabGroups.forEach { group ->
-                    group.tabs.forEach { tab ->
-                        val wv = createNewWebView(tab.id)
-                        // استعادة حالة WebView من Bundle مخصص
-                        savedInstanceState.getBundle("webview_${tab.id}")?.let { wv.restoreState(it) }
-                        webViews[tab.id] = wv
-                        if (tab.id == activeTabId) webViewContainer.addView(wv)
-                    }
-                }
-                updateGroupsUI()
-                refreshTabsRecycler()
+        // ✅ تأجيل التحميل الحقيقي حتى يصبح العرض جاهزاً
+        window.decorView.post {
+            val intentUrl = intent?.data?.toString()
+            if (savedInstanceState != null) {
+                restoreState(savedInstanceState)
             } else {
-                createNewGroup("Default")
+                loadPersistentTabs(intentUrl)
             }
-        } else {
-            loadPersistentTabs(intentUrl)
         }
 
         onBackPressedDispatcher.addCallback(this) {
@@ -219,7 +198,6 @@ class MainActivity : AppCompatActivity() {
         outState.putInt("NEXT_TAB_ID", nextTabId)
         outState.putInt("NEXT_GROUP_ID", nextGroupId)
 
-        // حفظ حالة كل WebView في Bundle مستقل لتجنب التعارض
         webViews.forEach { (tabId, wv) ->
             val bundle = Bundle()
             wv.saveState(bundle)
@@ -234,12 +212,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // حفظ الحالة الدائمة عند الخروج المؤقت (حماية من قتل التطبيق)
         savePersistentTabs()
     }
 
     override fun onDestroy() {
-        // تنظيف جميع WebView وتحرير الموارد
         webViews.values.forEach { wv ->
             webViewContainer.removeView(wv)
             wv.clearHistory()
@@ -270,7 +246,6 @@ class MainActivity : AppCompatActivity() {
         tabsRecycler        = findViewById(R.id.tabsRecycler)
         tabCount            = findViewById(R.id.tabCount)
 
-        // عنصر عرض المجموعات موجود مسبقًا في XML
         tabGroupsContainer = findViewById<LinearLayout>(R.id.tabGroupsContainer)
 
         tabAdapter = TabAdapter(this, mutableListOf(),
@@ -281,6 +256,35 @@ class MainActivity : AppCompatActivity() {
         tabsRecycler.adapter       = tabAdapter
 
         updateSearchEngineIcon()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  استعادة الحالة عند تدوير الشاشة
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun restoreState(savedInstanceState: Bundle) {
+        val savedGroups = savedInstanceState.getSerializable("GROUPS_LIST") as? ArrayList<TabGroup>
+        if (savedGroups != null && savedGroups.isNotEmpty()) {
+            tabGroups.clear()
+            tabGroups.addAll(savedGroups)
+            activeGroupId = savedInstanceState.getInt("ACTIVE_GROUP_ID", tabGroups.first().id)
+            activeTabId = savedInstanceState.getInt("ACTIVE_TAB_ID", tabGroups.first().tabs.firstOrNull()?.id ?: 0)
+            nextTabId = savedInstanceState.getInt("NEXT_TAB_ID", 100)
+            nextGroupId = savedInstanceState.getInt("NEXT_GROUP_ID", 100)
+
+            tabGroups.forEach { group ->
+                group.tabs.forEach { tab ->
+                    val wv = createNewWebView(tab.id)
+                    savedInstanceState.getBundle("webview_${tab.id}")?.let { wv.restoreState(it) }
+                    webViews[tab.id] = wv
+                    if (tab.id == activeTabId) webViewContainer.addView(wv)
+                }
+            }
+            updateGroupsUI()
+            refreshTabsRecycler()
+        } else {
+            createNewGroup("Default")
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -324,8 +328,9 @@ class MainActivity : AppCompatActivity() {
     private fun loadPersistentTabs(intentUrl: String?) {
         val prefs = getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
         val savedJson = prefs.getString("SAVED_GROUPS", null)
+        var success = false
 
-        if (savedJson != null) {
+        if (!savedJson.isNullOrEmpty()) {
             try {
                 val groupsArray = JSONArray(savedJson)
                 if (groupsArray.length() > 0) {
@@ -340,7 +345,7 @@ class MainActivity : AppCompatActivity() {
                                 tObj.getInt("id"),
                                 tObj.getString("title"),
                                 tObj.getString("url"),
-                                tObj.getBoolean("hasThumb")
+                                tObj.optBoolean("hasThumb", false)
                             )
                             group.tabs.add(t)
                             val wv = createNewWebView(t.id)
@@ -353,7 +358,6 @@ class MainActivity : AppCompatActivity() {
                     nextTabId = prefs.getInt("NEXT_TAB_ID", 100)
                     nextGroupId = prefs.getInt("NEXT_GROUP_ID", 100)
 
-                    // الآن نحدد activeTabId من المجموعة النشطة
                     val activeGroupTabs = currentGroup?.tabs
                     activeTabId = prefs.getInt("ACTIVE_TAB", activeGroupTabs?.firstOrNull()?.id ?: 0)
 
@@ -362,15 +366,20 @@ class MainActivity : AppCompatActivity() {
 
                     updateGroupsUI()
                     refreshTabsRecycler()
-
-                    if (!intentUrl.isNullOrEmpty()) openNewTab(intentUrl)
-                    return
+                    success = true
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
-        createNewGroup("Default", if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL)
+
+        if (!success) {
+            createNewGroup("Default", if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL)
+        }
+
+        if (!intentUrl.isNullOrEmpty() && success) {
+            openNewTab(intentUrl)
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -421,7 +430,6 @@ class MainActivity : AppCompatActivity() {
                                     Toast.makeText(this@MainActivity, "Cannot delete the last group", Toast.LENGTH_SHORT).show()
                                     return@showModernPopup
                                 }
-                                // حذف ملفات الصور المصغرة وتدمير WebView للتبويبات
                                 group.tabs.forEach { t ->
                                     ioExecutor.execute { File(cacheDir, "thumb_${t.id}.webp").delete() }
                                     webViews[t.id]?.destroy()
@@ -479,7 +487,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun switchToTab(tab: TabState) {
-        // إخفاء لوحة المفاتيح عند التبديل
         hideKeyboard()
 
         val executeSwitch = {
@@ -508,7 +515,6 @@ class MainActivity : AppCompatActivity() {
         val idx = group.tabs.indexOfFirst { it.id == tab.id }
         if (idx < 0) return
 
-        // تدوير الصورة النقطية يدويًا لمنع تسريب الذاكرة
         tab.ramThumbnail?.recycle()
         tab.ramThumbnail = null
         ioExecutor.execute { File(cacheDir, "thumb_${tab.id}.webp").delete() }
@@ -617,7 +623,6 @@ class MainActivity : AppCompatActivity() {
         applyUserAgentToWebView(wv)
         wv.addJavascriptInterface(SearchBridge(), "Android")
 
-        // قائمة السياق الحديثة للروابط
         wv.setOnCreateContextMenuListener { _, _, _ ->
             val result = wv.hitTestResult
             if (result.type == WebView.HitTestResult.SRC_ANCHOR_TYPE ||
@@ -711,7 +716,6 @@ class MainActivity : AppCompatActivity() {
                         "})()", null
                     )
 
-                    // تعطيل SwipeRefresh عند سحب زر Eruda لمنع تعارض الـ touch events
                     view.evaluateJavascript(
                         "(function(){" +
                         "if(window.__erudaTouchHooked)return;" +
@@ -746,7 +750,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // تم إصلاح الخطأ: استخدام الدالة getBoolean من PrefsManager بدلاً من الوصول المباشر
                 if (prefsManager.getBoolean("disable_intercept", false)) return null
 
                 val host = request.url.host ?: ""
@@ -869,7 +872,6 @@ class MainActivity : AppCompatActivity() {
                     @Suppress("DEPRECATION")
                     setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimetype))
                 } else {
-                    // Android 10+ يستخدم Scoped Storage
                     setDestinationInExternalFilesDir(this@MainActivity, Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimetype))
                 }
             }
@@ -1028,7 +1030,6 @@ class MainActivity : AppCompatActivity() {
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            // fallback للموارد إذا لم تكن موجودة
             try {
                 setBackgroundResource(R.drawable.bg_bottom_sheet)
             } catch (e: Exception) {
@@ -1125,7 +1126,6 @@ class MainActivity : AppCompatActivity() {
                 cachedMenuSheet?.dismiss()
                 prefsManager.desktopMode = !prefsManager.desktopMode
                 webViews.values.forEach { applyUserAgentToWebView(it) }
-                // نعيد تحميل الصفحة الحالية مع مسح الكاش لتطبيق الـ UA الجديد
                 currentWebView?.apply {
                     clearCache(true)
                     reload()
@@ -1260,7 +1260,6 @@ class MainActivity : AppCompatActivity() {
             }
             row.addView(textView)
 
-            // Load favicon async from Google's service
             val domain = try { android.net.Uri.parse(url).host ?: "" } catch (_: Exception) { "" }
             if (domain.isNotEmpty()) {
                 ioExecutor.execute {
@@ -1378,7 +1377,6 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread { navigateTo(input) }
         }
 
-        // يُستدعى من JS عند لمس Eruda لتعطيل SwipeRefresh مؤقتاً
         @JavascriptInterface
         fun setSwipeRefresh(enabled: Boolean) {
             mainHandler.post { swipeRefresh.isEnabled = enabled }
@@ -1435,7 +1433,6 @@ class TabAdapter(
 
         h.title.text = tab.title.ifEmpty { "New Tab" }
 
-        // عرض الفيكون الحقيقي أو الـ fallback
         if (tab.faviconBitmap != null) {
             h.favicon.setImageBitmap(tab.faviconBitmap)
             h.favicon.imageTintList = null
