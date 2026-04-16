@@ -263,7 +263,7 @@ class MainActivity : AppCompatActivity() {
         tabsRecycler        = findViewById(R.id.tabsRecycler)
         tabCount            = findViewById(R.id.tabCount)
 
-        // قد لا يكون هذا العنصر موجودًا في التخطيط القديم، نتحقق منه
+        // عنصر عرض المجموعات موجود مسبقًا في XML
         tabGroupsContainer = findViewById<LinearLayout>(R.id.tabGroupsContainer)
 
         tabAdapter = TabAdapter(this, mutableListOf(),
@@ -715,7 +715,8 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                if (prefsManager.sharedPreferences.getBoolean("disable_intercept", false)) return null
+                // تم إصلاح الخطأ: استخدام الدالة getBoolean من PrefsManager بدلاً من الوصول المباشر
+                if (prefsManager.getBoolean("disable_intercept", false)) return null
 
                 val host = request.url.host ?: ""
                 if (NO_INTERCEPT_DOMAINS.any { host == it || host.endsWith(".$it") }) return null
