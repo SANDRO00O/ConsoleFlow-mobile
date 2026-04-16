@@ -30,7 +30,7 @@ class PrefsManager(context: Context) {
     }
 
     fun addHistory(title: String, url: String) {
-        if (url == "about:blank" || url == "error://page" || url == "file:///android_asset/home.html" || url.startsWith("file:///android_asset/error.html")) return
+        if (url == "about:blank" || url == "error://page" || url.startsWith("error://")) return
         val historyArray = getList("history")
         val newItem = "{\"title\":\"$title\", \"url\":\"$url\"}"
         for (i in 0 until historyArray.length()) {

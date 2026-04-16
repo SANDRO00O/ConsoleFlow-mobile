@@ -99,7 +99,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         findViewById<android.view.View>(R.id.settingPortfolio).setOnClickListener {
-            openUrl("https://karrarnazim.space")
+            openUrl("https://consoleflow.karrarnazim.space")
         }
 
         findViewById<android.view.View>(R.id.settingOpenSource).setOnClickListener {
