@@ -20,13 +20,17 @@ class PrefsManager(context: Context) {
         get() = prefs.getString("custom_js", "")!!
         set(value) = prefs.edit().putString("custom_js", value).apply()
 
+    var consoleEnabled: Boolean
+        get() = prefs.getBoolean("console_enabled", true)
+        set(value) = prefs.edit().putBoolean("console_enabled", value).apply()
+
     // ✅ الدالة المضافة حديثًا لحل خطأ "Unresolved reference: getBoolean"
     fun getBoolean(key: String, defaultValue: Boolean): Boolean {
         return prefs.getBoolean(key, defaultValue)
     }
 
     fun addHistory(title: String, url: String) {
-        if (url == "file:///android_asset/home.html" || url.startsWith("file:///android_asset/error.html")) return
+        if (url == "about:blank" || url == "error://page" || url == "file:///android_asset/home.html" || url.startsWith("file:///android_asset/error.html")) return
         val historyArray = getList("history")
         val newItem = "{\"title\":\"$title\", \"url\":\"$url\"}"
         for (i in 0 until historyArray.length()) {

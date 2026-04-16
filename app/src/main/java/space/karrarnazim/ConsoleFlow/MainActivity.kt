@@ -91,6 +91,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
+    private lateinit var nativeOverlayContainer: FrameLayout
+    private var nativeHomeOverlay: View? = null
+    private var nativeErrorOverlay: View? = null
+    private var lastErrorUrl: String? = null
     private var tabGroupsContainer: LinearLayout? = null
 
     // ── الإعدادات والمديرون ────────────────────────────────────────────────
@@ -109,8 +113,10 @@ class MainActivity : AppCompatActivity() {
     private var cachedMenuSheetView: View? = null
 
     // ── الثوابت ─────────────────────────────────────────────────────────────
-    private val HOME_URL  = "file:///android_asset/home.html"
-    private val ERROR_URL = "file:///android_asset/error.html"
+    private val HOME_URL  = "about:blank"
+    private val ERROR_URL = "error://page"
+    private val LEGACY_HOME_URL = "file:///android_asset/home.html"
+    private val LEGACY_ERROR_URL = "file:///android_asset/error.html"
 
     private val NO_INTERCEPT_DOMAINS = listOf(
         "google.com", "googleapis.com", "gstatic.com", "accounts.google.com",
@@ -190,6 +196,7 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this) {
             when {
                 tabsOverlay.visibility == View.VISIBLE -> tabsOverlay.visibility = View.GONE
+                nativeOverlayContainer.visibility == View.VISIBLE -> hideNativeOverlays()
                 customView != null -> hideCustomView()
                 findBar.visibility == View.VISIBLE -> {
                     findBar.visibility = View.GONE
@@ -268,9 +275,11 @@ class MainActivity : AppCompatActivity() {
         tabsOverlay         = findViewById(R.id.tabsOverlay)
         tabsRecycler        = findViewById(R.id.tabsRecycler)
         tabCount            = findViewById(R.id.tabCount)
+        nativeOverlayContainer = findViewById(R.id.nativeOverlayContainer)
 
         // عنصر عرض المجموعات موجود مسبقًا في XML
         tabGroupsContainer = findViewById<LinearLayout>(R.id.tabGroupsContainer)
+        buildNativeOverlays()
 
         tabAdapter = TabAdapter(this, mutableListOf(),
             onTabClick = { tab -> switchToTab(tab) },
@@ -280,6 +289,299 @@ class MainActivity : AppCompatActivity() {
         tabsRecycler.adapter       = tabAdapter
 
         updateSearchEngineIcon()
+    }
+
+    private fun isHomeStateUrl(url: String?): Boolean {
+        if (url.isNullOrEmpty()) return true
+        return url == HOME_URL || url == LEGACY_HOME_URL || url == LEGACY_ERROR_URL || url.startsWith(ERROR_URL)
+    }
+
+    private fun buildNativeOverlays() {
+        nativeOverlayContainer.removeAllViews()
+        nativeHomeOverlay = buildHomeOverlay()
+        nativeErrorOverlay = buildErrorOverlay()
+        nativeHomeOverlay?.let { nativeOverlayContainer.addView(it) }
+        nativeErrorOverlay?.let { nativeOverlayContainer.addView(it) }
+        hideNativeOverlays(immediate = true)
+    }
+
+    private fun buildHomeOverlay(): View {
+        val dp = resources.displayMetrics.density
+        val root = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.BLACK)
+            alpha = 0f
+            visibility = View.GONE
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            val w = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            w.marginStart = (24 * dp).toInt()
+            w.marginEnd = (24 * dp).toInt()
+            layoutParams = w
+            setPadding((4 * dp).toInt(), (24 * dp).toInt(), (4 * dp).toInt(), (24 * dp).toInt())
+        }
+        root.addView(content)
+
+        val searchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundResource(R.drawable.bg_search)
+            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (10 * dp).toInt(), (10 * dp).toInt())
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.bottomMargin = (28 * dp).toInt()
+            layoutParams = lp
+        }
+        content.addView(searchRow)
+
+        val searchIcon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_find)
+            setColorFilter(Color.parseColor("#888888"))
+            layoutParams = LinearLayout.LayoutParams((20 * dp).toInt(), (20 * dp).toInt())
+        }
+        searchRow.addView(searchIcon)
+
+        val searchInput = EditText(this).apply {
+            hint = "Search or type URL"
+            setHintTextColor(Color.parseColor("#555555"))
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.TRANSPARENT)
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
+            setPadding((14 * dp).toInt(), 0, (14 * dp).toInt(), 0)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setOnEditorActionListener { _, _, _ ->
+                val value = text.toString().trim()
+                if (value.isNotEmpty()) navigateTo(value)
+                true
+            }
+        }
+        searchRow.addView(searchInput)
+
+        val goButton = ImageView(this).apply {
+            setImageResource(R.drawable.arrow_right)
+            setColorFilter(Color.parseColor("#CCCCCC"))
+            layoutParams = LinearLayout.LayoutParams((26 * dp).toInt(), (26 * dp).toInt())
+            background = context.getDrawable(R.drawable.bottom_btn_ripple)
+            setPadding((5 * dp).toInt(), (5 * dp).toInt(), (5 * dp).toInt(), (5 * dp).toInt())
+            setOnClickListener {
+                val value = searchInput.text.toString().trim()
+                if (value.isNotEmpty()) navigateTo(value)
+            }
+        }
+        searchRow.addView(goButton)
+
+        val section = TextView(this).apply {
+            text = "Bookmarks"
+            setTextColor(Color.parseColor("#888888"))
+            textSize = 11f
+            letterSpacing = 0.08f
+            setPadding((4 * dp).toInt(), 0, 0, (14 * dp).toInt())
+        }
+        content.addView(section)
+
+        val grid = GridLayout(this).apply {
+            columnCount = 2
+            rowCount = 3
+            useDefaultMargins = true
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        content.addView(grid)
+
+        fun addChip(label: String, url: String) {
+            val chip = TextView(this).apply {
+                text = label
+                setTextColor(Color.parseColor("#E0E0E0"))
+                textSize = 14f
+                setPadding((16 * dp).toInt(), (12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
+                setBackgroundResource(R.drawable.bg_menu_item)
+                setOnClickListener { navigateTo(url) }
+            }
+            val lp = GridLayout.LayoutParams().apply {
+                width = 0
+                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                setMargins((4 * dp).toInt(), (4 * dp).toInt(), (4 * dp).toInt(), (4 * dp).toInt())
+            }
+            grid.addView(chip, lp)
+        }
+
+        addChip("GitHub", "https://github.com")
+        addChip("Google", "https://google.com")
+        addChip("MDN", "https://developer.mozilla.org")
+        addChip("Stack Overflow", "https://stackoverflow.com")
+        addChip("Android Dev", "https://developer.android.com")
+        addChip("npm", "https://npmjs.com")
+
+        root.post { searchInput.requestFocus() }
+        root.setOnClickListener { searchInput.requestFocus() }
+        return root
+    }
+
+    private fun buildErrorOverlay(): View {
+        val dp = resources.displayMetrics.density
+        val root = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.BLACK)
+            alpha = 0f
+            visibility = View.GONE
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            val lp = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+            lp.marginStart = (24 * dp).toInt()
+            lp.marginEnd = (24 * dp).toInt()
+            layoutParams = lp
+            setPadding((8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt())
+        }
+        root.addView(content)
+
+        val icon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_clear)
+            setColorFilter(Color.parseColor("#A6C8FF"))
+            layoutParams = LinearLayout.LayoutParams((80 * dp).toInt(), (80 * dp).toInt()).apply {
+                bottomMargin = (12 * dp).toInt()
+            }
+        }
+        content.addView(icon)
+
+        val title = TextView(this).apply {
+            text = "Webpage not available"
+            setTextColor(Color.WHITE)
+            textSize = 22f
+            gravity = Gravity.CENTER
+        }
+        content.addView(title)
+
+        val desc = TextView(this).apply {
+            text = "Could not load the requested page."
+            setTextColor(Color.parseColor("#BBBBBB"))
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setPadding(0, (8 * dp).toInt(), 0, (10 * dp).toInt())
+        }
+        content.addView(desc)
+
+        val urlText = TextView(this).apply {
+            text = ""
+            setTextColor(Color.parseColor("#777777"))
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setPadding((12 * dp).toInt(), 0, (12 * dp).toInt(), (20 * dp).toInt())
+            maxLines = 2
+        }
+        content.addView(urlText)
+
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        content.addView(buttonRow)
+
+        fun makeButton(label: String, onClick: () -> Unit): TextView {
+            return TextView(this).apply {
+                text = label
+                setTextColor(Color.WHITE)
+                textSize = 15f
+                setPadding((18 * dp).toInt(), (12 * dp).toInt(), (18 * dp).toInt(), (12 * dp).toInt())
+                setBackgroundResource(R.drawable.bg_menu_item)
+                setOnClickListener { onClick() }
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    marginStart = (6 * dp).toInt()
+                    marginEnd = (6 * dp).toInt()
+                }
+            }
+        }
+
+        buttonRow.addView(makeButton("Retry") {
+            hideNativeOverlays()
+            currentWebView?.reload()
+        })
+        buttonRow.addView(makeButton("Home") {
+            showHomeOverlay()
+        })
+        buttonRow.addView(makeButton("Close") {
+            hideNativeOverlays()
+        })
+        val updateUrlText = {
+            urlText.text = lastErrorUrl?.let { "Could not connect to:\n$it" } ?: "Could not connect to the requested page."
+        }
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateUrlText() }
+        root.post { updateUrlText() }
+        return root
+    }
+
+    private fun fadeOverlay(view: View, visible: Boolean, immediate: Boolean = false) {
+        if (immediate) {
+            view.alpha = if (visible) 1f else 0f
+            view.visibility = if (visible) View.VISIBLE else View.GONE
+            return
+        }
+        if (visible) {
+            view.visibility = View.VISIBLE
+            view.animate().alpha(1f).setDuration(140).start()
+        } else {
+            view.animate().alpha(0f).setDuration(120).withEndAction { view.visibility = View.GONE }.start()
+        }
+    }
+
+    private fun hideNativeOverlays(immediate: Boolean = false) {
+        nativeHomeOverlay?.let { fadeOverlay(it, false, immediate) }
+        nativeErrorOverlay?.let { fadeOverlay(it, false, immediate) }
+        nativeOverlayContainer.visibility = View.GONE
+        swipeRefresh.isRefreshing = false
+        swipeRefresh.isEnabled = true
+    }
+
+    private fun showHomeOverlay() {
+        lastErrorUrl = null
+        nativeErrorOverlay?.let { fadeOverlay(it, false) }
+        nativeHomeOverlay?.let {
+            nativeOverlayContainer.visibility = View.VISIBLE
+            fadeOverlay(it, true)
+            nativeOverlayContainer.bringToFront()
+            swipeRefresh.isRefreshing = false
+            swipeRefresh.isEnabled = false
+            progressBar.visibility = View.INVISIBLE
+            textUrl.setText("")
+            hideKeyboard()
+        }
+    }
+
+    private fun showErrorOverlay(url: String?) {
+        lastErrorUrl = url
+        nativeHomeOverlay?.let { fadeOverlay(it, false) }
+        nativeErrorOverlay?.let {
+            nativeOverlayContainer.visibility = View.VISIBLE
+            fadeOverlay(it, true)
+            nativeOverlayContainer.bringToFront()
+            swipeRefresh.isRefreshing = false
+            swipeRefresh.isEnabled = false
+            progressBar.visibility = View.INVISIBLE
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -335,10 +637,11 @@ class MainActivity : AppCompatActivity() {
                         val tabsArray = gObj.getJSONArray("tabs")
                         for (j in 0 until tabsArray.length()) {
                             val tObj = tabsArray.getJSONObject(j)
+                            val rawUrl = tObj.getString("url")
                             val t = TabState(
                                 tObj.getInt("id"),
                                 tObj.getString("title"),
-                                tObj.getString("url"),
+                                if (isHomeStateUrl(rawUrl)) HOME_URL else rawUrl,
                                 tObj.getBoolean("hasThumb")
                             )
                             group.tabs.add(t)
@@ -361,6 +664,9 @@ class MainActivity : AppCompatActivity() {
 
                     updateGroupsUI()
                     refreshTabsRecycler()
+
+                    val activeTabUrl = currentGroup?.tabs?.find { it.id == activeTabId }?.url
+                    if (isHomeStateUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay() else hideNativeOverlays(immediate = true)
 
                     if (!intentUrl.isNullOrEmpty()) openNewTab(intentUrl)
                     return
@@ -491,6 +797,7 @@ class MainActivity : AppCompatActivity() {
                 webViewContainer.addView(wv)
                 updateUIForCurrentWebView(wv)
             }
+            if (isHomeStateUrl(tab.url)) showHomeOverlay() else hideNativeOverlays()
             updateTabCount()
             savePersistentTabs()
         }
@@ -539,7 +846,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateUIForCurrentWebView(wv: WebView) {
         val url = wv.url ?: HOME_URL
-        textUrl.setText(if (url == HOME_URL || url.startsWith(ERROR_URL)) "" else url)
+        textUrl.setText(if (isHomeStateUrl(url)) "" else url)
         updateBookmarkIcon(url)
         progressBar.progress = wv.progress
         progressBar.visibility = if (wv.progress < 100) View.VISIBLE else View.INVISIBLE
@@ -660,7 +967,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 if (view == currentWebView) {
                     progressBar.visibility = View.VISIBLE
-                    textUrl.setText(if (url == HOME_URL || url?.startsWith(ERROR_URL) == true) "" else url)
+                    textUrl.setText(if (isHomeStateUrl(url)) "" else url)
                     updateBookmarkIcon(url ?: "")
                 }
             }
@@ -672,12 +979,12 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 url?.let {
-                    if (it != HOME_URL && !it.startsWith(ERROR_URL))
+                    if (!isHomeStateUrl(it))
                         prefsManager.addHistory(view.title ?: "Unknown", it)
 
                     currentGroup?.tabs?.find { t -> t.id == tabId }?.let { tab ->
                         tab.title = view.title ?: "Tab"
-                        tab.url = it
+                        tab.url = if (isHomeStateUrl(it)) HOME_URL else it
                     }
                     savePersistentTabs()
                 }
@@ -692,43 +999,7 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
 
-                view.evaluateJavascript(
-                    "(function(){" +
-                    "if(window.__erudaInited)return;" +
-                    "if(typeof eruda!=='undefined'){" +
-                        "try{eruda.init();window.__erudaInited=true;}catch(e){}" +
-                        "return;" +
-                    "}" +
-                    "var x=new XMLHttpRequest();" +
-                    "x.open('GET','https://eruda.local/eruda.js',true);" +
-                    "x.onload=function(){" +
-                        "if(window.__erudaInited)return;" +
-                        "try{eval(x.responseText);eruda.init();window.__erudaInited=true;}catch(e){}" +
-                    "};" +
-                    "x.send();" +
-                    "})()", null
-                )
-
-                // تعطيل SwipeRefresh عند سحب زر Eruda لمنع تعارض الـ touch events
-                view.evaluateJavascript(
-                    "(function(){" +
-                    "if(window.__erudaTouchHooked)return;" +
-                    "window.__erudaTouchHooked=true;" +
-                    "function getErudaEl(){return document.getElementById('eruda');}" +
-                    "document.addEventListener('touchstart',function(e){" +
-                        "var el=getErudaEl();" +
-                        "if(el&&el.contains(e.target)){" +
-                            "try{Android.setSwipeRefresh(false);}catch(ex){}" +
-                        "}" +
-                    "},{capture:true,passive:true});" +
-                    "document.addEventListener('touchend',function(){" +
-                        "try{Android.setSwipeRefresh(true);}catch(ex){}" +
-                    "},{capture:true,passive:true});" +
-                    "document.addEventListener('touchcancel',function(){" +
-                        "try{Android.setSwipeRefresh(true);}catch(ex){}" +
-                    "},{capture:true,passive:true});" +
-                    "})()", null
-                )
+                applyConsoleTools(view)
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -768,12 +1039,15 @@ class MainActivity : AppCompatActivity() {
 
                             html = html.replace(Regex("""<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>""", RegexOption.IGNORE_CASE), "")
 
-                            val erudaTag  = "<script src=\"https://eruda.local/eruda.js\"></script>"
-                            val erudaInit = "<script>(function(){if(window.__erudaInited)return;try{eruda.init();window.__erudaInited=true;}catch(e){}})()</script>"
+                                                        val erudaTags = if (prefsManager.consoleEnabled) {
+                                "<script src=\"https://eruda.local/eruda.js\"></script>" +
+                                "<script>(function(){if(window.__erudaInited){try{eruda.show();window.__cfConsoleEnabled=true;}catch(e){};return;}try{eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;}catch(e){}})()</script>"
+                            } else {
+                                ""
+                            }
                             val customJsTag = prefsManager.customJs.takeIf { it.isNotEmpty() }?.let { "<script>$it</script>" } ?: ""
 
-                            html = html.replaceFirst("<head>", "<head>$erudaTag$erudaInit$customJsTag", ignoreCase = true)
-
+                            html = html.replaceFirst("<head>", "<head>$erudaTags$customJsTag", ignoreCase = true)
                             val hdrs = response.headers.toMap().toMutableMap()
                             hdrs.remove("Content-Security-Policy")
                             hdrs.remove("content-security-policy")
@@ -791,8 +1065,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
-                if (req.isForMainFrame)
-                    view.loadUrl("$ERROR_URL?url=${URLEncoder.encode(req.url.toString(), "UTF-8")}")
+                if (req.isForMainFrame) {
+                    runOnUiThread {
+                        showErrorOverlay(req.url.toString())
+                    }
+                }
             }
 
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
@@ -932,7 +1209,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnBackArea).setOnClickListener    { currentWebView?.let { if (it.canGoBack()) it.goBack() } }
         findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward()) it.goForward() } }
-        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { loadUrlInstantly(HOME_URL) }
+        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { showHomeOverlay() }
 
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
             if (tabsOverlay.visibility == View.VISIBLE) {
@@ -960,7 +1237,7 @@ class MainActivity : AppCompatActivity() {
 
         btnBookmark.setOnClickListener {
             val url = currentWebView?.url ?: return@setOnClickListener
-            if (url == HOME_URL || url.startsWith(ERROR_URL)) return@setOnClickListener
+            if (isHomeStateUrl(url)) return@setOnClickListener
             val added = prefsManager.toggleBookmark(currentWebView?.title ?: "Bookmark", url)
             updateBookmarkIcon(url)
             Toast.makeText(this, if (added) "Bookmarked" else "Removed", Toast.LENGTH_SHORT).show()
@@ -1007,7 +1284,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadUrlInstantly(url: String) {
-        textUrl.setText(if (url == HOME_URL || url.startsWith(ERROR_URL)) "" else url)
+        if (isHomeStateUrl(url)) {
+            showHomeOverlay()
+            currentWebView?.loadUrl(HOME_URL)
+            textUrl.setText("")
+            return
+        }
+        hideNativeOverlays()
+        textUrl.setText(url)
         progressBar.progress = 5
         progressBar.visibility = View.VISIBLE
         currentWebView?.loadUrl(url)
@@ -1102,14 +1386,9 @@ class MainActivity : AppCompatActivity() {
                 cachedMenuSheet?.dismiss()
                 showHistoryDialog()
             }
-            cachedMenuSheetView?.findViewById<View>(R.id.menuShare)?.setOnClickListener {
+            cachedMenuSheetView?.findViewById<View>(R.id.menuConsoleToggle)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
-                val url = currentWebView?.url ?: return@setOnClickListener
-                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, url)
-                    putExtra(Intent.EXTRA_SUBJECT, currentWebView?.title ?: "")
-                }, "Share"))
+                toggleConsoleForCurrentPage()
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuFindInPage)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
@@ -1130,7 +1409,7 @@ class MainActivity : AppCompatActivity() {
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuSettings)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
-                startActivity(Intent(this, SettingsActivity::class.java))
+                startSettingsActivity()
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuClearData)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
@@ -1151,6 +1430,7 @@ class MainActivity : AppCompatActivity() {
             desktopLabel?.text = "Desktop"
             desktopLabel?.setTextColor(Color.parseColor("#CCCCCC"))
         }
+        updateMenuConsoleState()
 
         cachedMenuSheet?.show()
     }
@@ -1334,7 +1614,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateBookmarkIcon(url: String) {
-        btnBookmark.alpha = if (prefsManager.isBookmarked(url)) 1.0f else 0.4f
+        btnBookmark.alpha = if (!isHomeStateUrl(url) && prefsManager.isBookmarked(url)) 1.0f else 0.4f
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1352,6 +1632,94 @@ class MainActivity : AppCompatActivity() {
         webViewContainer.visibility = View.VISIBLE
         customView = null
         setFullscreen(false)
+    }
+
+    private fun startSettingsActivity() {
+        startActivity(Intent(this, SettingsActivity::class.java))
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+    }
+
+    private fun consoleInitScript(): String =
+        "(function(){" +
+        "window.__cfConsoleEnabled=true;" +
+        "var el=document.getElementById('eruda');" +
+        "if(window.__erudaInited){" +
+            "try{if(window.eruda&&eruda.show)eruda.show();}catch(e){}" +
+            "if(el)el.style.display='';" +
+            "return;" +
+        "}" +
+        "if(typeof eruda!=='undefined'){" +
+            "try{eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;if(el)el.style.display='';}catch(e){}" +
+            "return;" +
+        "}" +
+        "var x=new XMLHttpRequest();" +
+        "x.open('GET','https://eruda.local/eruda.js',true);" +
+        "x.onload=function(){" +
+            "if(window.__erudaInited)return;" +
+            "try{eval(x.responseText);eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;if(el)el.style.display='';}catch(e){}" +
+        "};" +
+        "x.send();" +
+        "})()"
+
+    private fun consoleDisableScript(): String =
+        "(function(){" +
+        "window.__cfConsoleEnabled=false;" +
+        "try{if(window.eruda&&eruda.hide)eruda.hide();}catch(e){}" +
+        "var el=document.getElementById('eruda');" +
+        "if(el){el.style.display='none';el.classList.add('__cf_console_hidden');}" +
+        "})()"
+
+    private fun touchHookScript(): String =
+        "(function(){" +
+        "if(window.__erudaTouchHooked)return;" +
+        "window.__erudaTouchHooked=true;" +
+        "function getErudaEl(){return document.getElementById('eruda');}" +
+        "function consoleEnabled(){return window.__cfConsoleEnabled!==false;}" +
+        "document.addEventListener('touchstart',function(e){" +
+            "if(!consoleEnabled())return;" +
+            "var el=getErudaEl();" +
+            "if(el&&el.contains(e.target)){try{Android.setSwipeRefresh(false);}catch(ex){}}" +
+        "},{capture:true,passive:true});" +
+        "document.addEventListener('touchend',function(){" +
+            "if(!consoleEnabled())return;" +
+            "try{Android.setSwipeRefresh(true);}catch(ex){}" +
+        "},{capture:true,passive:true});" +
+        "document.addEventListener('touchcancel',function(){" +
+            "if(!consoleEnabled())return;" +
+            "try{Android.setSwipeRefresh(true);}catch(ex){}" +
+        "},{capture:true,passive:true});" +
+        "})()"
+
+    private fun toggleConsoleForCurrentPage() {
+        val enable = !prefsManager.consoleEnabled
+        prefsManager.consoleEnabled = enable
+        currentWebView?.let { view ->
+            if (enable) {
+                view.evaluateJavascript(consoleInitScript(), null)
+                view.evaluateJavascript(touchHookScript(), null)
+            } else {
+                view.evaluateJavascript(consoleDisableScript(), null)
+            }
+        }
+        updateMenuConsoleState()
+        Toast.makeText(this, if (enable) "Console enabled" else "Console disabled", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updateMenuConsoleState() {
+        val enabled = prefsManager.consoleEnabled
+        cachedMenuSheetView?.findViewById<TextView>(R.id.menuConsoleLabel)?.apply {
+            text = if (enabled) "Console On" else "Console Off"
+            setTextColor(if (enabled) Color.WHITE else Color.parseColor("#CCCCCC"))
+        }
+    }
+
+    private fun applyConsoleTools(view: WebView) {
+        if (prefsManager.consoleEnabled) {
+            view.evaluateJavascript(consoleInitScript(), null)
+            view.evaluateJavascript(touchHookScript(), null)
+        } else {
+            view.evaluateJavascript(consoleDisableScript(), null)
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

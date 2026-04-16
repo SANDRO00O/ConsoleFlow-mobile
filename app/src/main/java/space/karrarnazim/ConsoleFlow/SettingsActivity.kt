@@ -18,16 +18,13 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
         prefsManager = PrefsManager(this)
 
-        // Back button
         findViewById<android.view.View>(R.id.btnBack).setOnClickListener { finish() }
 
-        // Version
         try {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
             findViewById<TextView>(R.id.settingVersion).text = "Version ${pInfo.versionName}"
         } catch (_: Exception) {}
 
-        // Search engine
         val engines = arrayOf("Google", "DuckDuckGo", "Bing", "Brave")
         val urls = arrayOf(
             "https://www.google.com/search?q=",
@@ -36,10 +33,10 @@ class SettingsActivity : AppCompatActivity() {
             "https://search.brave.com/search?q="
         )
         val currentLabel = when {
-            prefsManager.searchEngine.contains("google")     -> "Google"
+            prefsManager.searchEngine.contains("google") -> "Google"
             prefsManager.searchEngine.contains("duckduckgo") -> "DuckDuckGo"
-            prefsManager.searchEngine.contains("bing")       -> "Bing"
-            prefsManager.searchEngine.contains("brave")      -> "Brave"
+            prefsManager.searchEngine.contains("bing") -> "Bing"
+            prefsManager.searchEngine.contains("brave") -> "Brave"
             else -> "Google"
         }
         findViewById<TextView>(R.id.settingSearchEngineValue).text = currentLabel
@@ -54,7 +51,6 @@ class SettingsActivity : AppCompatActivity() {
                 .show()
         }
 
-        // Desktop mode
         val switchDesktop = findViewById<SwitchCompat>(R.id.switchDesktopMode)
         switchDesktop.isChecked = prefsManager.desktopMode
         switchDesktop.setOnCheckedChangeListener { _, isChecked ->
@@ -64,7 +60,6 @@ class SettingsActivity : AppCompatActivity() {
             switchDesktop.isChecked = !switchDesktop.isChecked
         }
 
-        // Custom JS
         findViewById<android.view.View>(R.id.settingCustomJs).setOnClickListener {
             val input = EditText(this).apply {
                 setText(prefsManager.customJs)
@@ -87,7 +82,6 @@ class SettingsActivity : AppCompatActivity() {
                 .show()
         }
 
-        // Clear data
         findViewById<android.view.View>(R.id.settingClearData).setOnClickListener {
             AlertDialog.Builder(this, R.style.DarkDialog)
                 .setTitle("Clear Browsing Data")
@@ -104,17 +98,21 @@ class SettingsActivity : AppCompatActivity() {
                 .show()
         }
 
-        // Website
-        // Website
-        findViewById<android.view.View>(R.id.settingWebsite).setOnClickListener {
-            startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://consoleflow.karrarnazim.space"))
-            )
+        findViewById<android.view.View>(R.id.settingPortfolio).setOnClickListener {
+            openUrl("https://karrarnazim.space")
+        }
+
+        findViewById<android.view.View>(R.id.settingOpenSource).setOnClickListener {
+            openUrl("https://github.com/SANDRO00O/ConsoleFlow-mobile")
         }
     }
 
-    override fun onBackPressed() {
-        super.onBackPressed()
-        finish()
+    private fun openUrl(url: String) {
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
+    override fun finish() {
+        super.finish()
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 }
