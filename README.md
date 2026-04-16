@@ -22,6 +22,8 @@
   <img src="screenshots/2.jpg" width="200" alt="Console View">
   &nbsp;&nbsp;&nbsp;&nbsp;
   <img src="screenshots/3.jpg" width="200" alt="Menu View">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="screenshots/4.jpg" width="200" alt="Menu View">
 </p>
 </div>
 
