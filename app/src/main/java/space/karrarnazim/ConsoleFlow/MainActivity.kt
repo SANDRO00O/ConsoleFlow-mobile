@@ -130,6 +130,9 @@ class MainActivity : AppCompatActivity() {
 
     private val currentGroup: TabGroup? get() = tabGroups.find { it.id == activeGroupId }
 
+    // متغير للتحقق مما إذا كان قد تم تحميل التبويبات مسبقاً
+    private var isTabsInitialized = false
+
     // ── عقود نتائج الأذونات ومسح QR ────────────────────────────────────────
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -157,16 +160,6 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupListeners()
 
-        // ✅ تأجيل التحميل الحقيقي حتى يصبح العرض جاهزاً
-        window.decorView.post {
-            val intentUrl = intent?.data?.toString()
-            if (savedInstanceState != null) {
-                restoreState(savedInstanceState)
-            } else {
-                loadPersistentTabs(intentUrl)
-            }
-        }
-
         onBackPressedDispatcher.addCallback(this) {
             when {
                 tabsOverlay.visibility == View.VISIBLE -> tabsOverlay.visibility = View.GONE
@@ -181,6 +174,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateSearchEngineIcon()
+        // تحميل التبويبات فقط في أول دورة onResume بعد اكتمال رسم الشاشة
+        if (!isTabsInitialized) {
+            // ننتظر حتى يتم رسم شجرة العرض بالكامل
+            window.decorView.post {
+                // تأخير إضافي بسيط لضمان استقرار WebView
+                Handler(Looper.getMainLooper()).postDelayed({
+                    if (!isTabsInitialized) {
+                        initializeTabsAndWebView()
+                        isTabsInitialized = true
+                    }
+                }, 50)
+            }
+        }
+    }
+
+    private fun initializeTabsAndWebView() {
+        try {
+            val intentUrl = intent?.data?.toString()
+            if (savedInstanceState != null) {
+                restoreState(savedInstanceState)
+            } else {
+                loadPersistentTabs(intentUrl)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // إذا حصل أي خطأ ننشئ مجموعة افتراضية مباشرة
+            createNewGroup("Default", HOME_URL)
+        }
+    }
+
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         val url = intent?.data?.toString()
@@ -192,22 +218,21 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putSerializable("GROUPS_LIST", ArrayList(tabGroups))
-        outState.putInt("ACTIVE_GROUP_ID", activeGroupId)
-        outState.putInt("ACTIVE_TAB_ID", activeTabId)
-        outState.putInt("NEXT_TAB_ID", nextTabId)
-        outState.putInt("NEXT_GROUP_ID", nextGroupId)
+        try {
+            outState.putSerializable("GROUPS_LIST", ArrayList(tabGroups))
+            outState.putInt("ACTIVE_GROUP_ID", activeGroupId)
+            outState.putInt("ACTIVE_TAB_ID", activeTabId)
+            outState.putInt("NEXT_TAB_ID", nextTabId)
+            outState.putInt("NEXT_GROUP_ID", nextGroupId)
 
-        webViews.forEach { (tabId, wv) ->
-            val bundle = Bundle()
-            wv.saveState(bundle)
-            outState.putBundle("webview_$tabId", bundle)
+            webViews.forEach { (tabId, wv) ->
+                val bundle = Bundle()
+                wv.saveState(bundle)
+                outState.putBundle("webview_$tabId", bundle)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        updateSearchEngineIcon()
     }
 
     override fun onPause() {
@@ -216,13 +241,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        webViews.values.forEach { wv ->
-            webViewContainer.removeView(wv)
-            wv.clearHistory()
-            wv.removeAllViews()
-            wv.destroy()
+        try {
+            webViews.values.forEach { wv ->
+                webViewContainer.removeView(wv)
+                wv.clearHistory()
+                wv.removeAllViews()
+                wv.destroy()
+            }
+            webViews.clear()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        webViews.clear()
         ioExecutor.shutdown()
         cachedMenuSheet?.dismiss()
         super.onDestroy()
@@ -263,26 +292,31 @@ class MainActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun restoreState(savedInstanceState: Bundle) {
-        val savedGroups = savedInstanceState.getSerializable("GROUPS_LIST") as? ArrayList<TabGroup>
-        if (savedGroups != null && savedGroups.isNotEmpty()) {
-            tabGroups.clear()
-            tabGroups.addAll(savedGroups)
-            activeGroupId = savedInstanceState.getInt("ACTIVE_GROUP_ID", tabGroups.first().id)
-            activeTabId = savedInstanceState.getInt("ACTIVE_TAB_ID", tabGroups.first().tabs.firstOrNull()?.id ?: 0)
-            nextTabId = savedInstanceState.getInt("NEXT_TAB_ID", 100)
-            nextGroupId = savedInstanceState.getInt("NEXT_GROUP_ID", 100)
+        try {
+            val savedGroups = savedInstanceState.getSerializable("GROUPS_LIST") as? ArrayList<TabGroup>
+            if (savedGroups != null && savedGroups.isNotEmpty()) {
+                tabGroups.clear()
+                tabGroups.addAll(savedGroups)
+                activeGroupId = savedInstanceState.getInt("ACTIVE_GROUP_ID", tabGroups.first().id)
+                activeTabId = savedInstanceState.getInt("ACTIVE_TAB_ID", tabGroups.first().tabs.firstOrNull()?.id ?: 0)
+                nextTabId = savedInstanceState.getInt("NEXT_TAB_ID", 100)
+                nextGroupId = savedInstanceState.getInt("NEXT_GROUP_ID", 100)
 
-            tabGroups.forEach { group ->
-                group.tabs.forEach { tab ->
-                    val wv = createNewWebView(tab.id)
-                    savedInstanceState.getBundle("webview_${tab.id}")?.let { wv.restoreState(it) }
-                    webViews[tab.id] = wv
-                    if (tab.id == activeTabId) webViewContainer.addView(wv)
+                tabGroups.forEach { group ->
+                    group.tabs.forEach { tab ->
+                        val wv = createNewWebView(tab.id)
+                        savedInstanceState.getBundle("webview_${tab.id}")?.let { wv.restoreState(it) }
+                        webViews[tab.id] = wv
+                        if (tab.id == activeTabId) webViewContainer.addView(wv)
+                    }
                 }
+                updateGroupsUI()
+                refreshTabsRecycler()
+            } else {
+                createNewGroup("Default")
             }
-            updateGroupsUI()
-            refreshTabsRecycler()
-        } else {
+        } catch (e: Exception) {
+            e.printStackTrace()
             createNewGroup("Default")
         }
     }
@@ -292,6 +326,7 @@ class MainActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun savePersistentTabs() {
+        if (tabGroups.isEmpty()) return
         ioExecutor.execute {
             try {
                 val groupsArray = JSONArray()
@@ -348,25 +383,34 @@ class MainActivity : AppCompatActivity() {
                                 tObj.optBoolean("hasThumb", false)
                             )
                             group.tabs.add(t)
-                            val wv = createNewWebView(t.id)
-                            webViews[t.id] = wv
-                            wv.loadUrl(t.url)
+                            try {
+                                val wv = createNewWebView(t.id)
+                                webViews[t.id] = wv
+                                wv.loadUrl(t.url)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                // إذا فشل إنشاء WebView، نتخطى هذا التبويب
+                            }
                         }
-                        tabGroups.add(group)
+                        if (group.tabs.isNotEmpty()) {
+                            tabGroups.add(group)
+                        }
                     }
-                    activeGroupId = prefs.getInt("ACTIVE_GROUP", tabGroups.first().id)
-                    nextTabId = prefs.getInt("NEXT_TAB_ID", 100)
-                    nextGroupId = prefs.getInt("NEXT_GROUP_ID", 100)
+                    if (tabGroups.isNotEmpty()) {
+                        activeGroupId = prefs.getInt("ACTIVE_GROUP", tabGroups.first().id)
+                        nextTabId = prefs.getInt("NEXT_TAB_ID", 100)
+                        nextGroupId = prefs.getInt("NEXT_GROUP_ID", 100)
 
-                    val activeGroupTabs = currentGroup?.tabs
-                    activeTabId = prefs.getInt("ACTIVE_TAB", activeGroupTabs?.firstOrNull()?.id ?: 0)
+                        val activeGroupTabs = currentGroup?.tabs
+                        activeTabId = prefs.getInt("ACTIVE_TAB", activeGroupTabs?.firstOrNull()?.id ?: 0)
 
-                    val activeWv = webViews[activeTabId]
-                    if (activeWv != null) webViewContainer.addView(activeWv)
+                        val activeWv = webViews[activeTabId]
+                        if (activeWv != null) webViewContainer.addView(activeWv)
 
-                    updateGroupsUI()
-                    refreshTabsRecycler()
-                    success = true
+                        updateGroupsUI()
+                        refreshTabsRecycler()
+                        success = true
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -375,9 +419,7 @@ class MainActivity : AppCompatActivity() {
 
         if (!success) {
             createNewGroup("Default", if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL)
-        }
-
-        if (!intentUrl.isNullOrEmpty() && success) {
+        } else if (!intentUrl.isNullOrEmpty()) {
             openNewTab(intentUrl)
         }
     }
@@ -472,17 +514,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun openNewTab(url: String = HOME_URL) {
         captureAndStoreThumbnail {
-            val id = nextTabId++
-            val newTab = TabState(id = id, title = "New Tab", url = url)
-            currentGroup?.tabs?.add(newTab)
+            try {
+                val id = nextTabId++
+                val newTab = TabState(id = id, title = "New Tab", url = url)
+                currentGroup?.tabs?.add(newTab)
 
-            val wv = createNewWebView(id)
-            webViews[id] = wv
-            wv.loadUrl(url)
+                val wv = createNewWebView(id)
+                webViews[id] = wv
+                wv.loadUrl(url)
 
-            switchToTab(newTab)
-            refreshTabsRecycler()
-            savePersistentTabs()
+                switchToTab(newTab)
+                refreshTabsRecycler()
+                savePersistentTabs()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(this, "Failed to open new tab", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
