@@ -372,14 +372,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Maker Portfolio"
+                            android:text="Developer"
                             android:textColor="#FFFFFF"
                             android:textSize="15sp" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="karrarnazim.space"
+                            android:text="consoleflow.karrarnazim.space"
                             android:textColor="#8A8A8A"
                             android:textSize="12sp" />
                     </LinearLayout>
