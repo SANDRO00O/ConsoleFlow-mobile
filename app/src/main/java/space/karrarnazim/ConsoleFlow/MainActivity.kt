@@ -79,117 +79,161 @@ private fun isHomeStateLikeUrl(url: String?): Boolean {
     return url == "about:blank" || url == "error://page" || url.startsWith("error://")
 }
 
+
 private fun generateHomePreviewBitmap(width: Int = 540, height: Int = 900): Bitmap {
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
 
     canvas.drawColor(Color.BLACK)
 
-    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2B2B2B") }
+    val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2A2D34") }
+    val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#3A3A3A") }
     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#DADADA")
-        textSize = 42f
+        color = Color.parseColor("#E5E5E5")
+        textSize = 40f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
-    val smallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#787878")
-        textSize = 24f
+    val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 22f
+        textAlign = Paint.Align.CENTER
     }
-    val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#FFFFFF") }
-    val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#3C3C3C") }
+    val mutedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#7A7A7A")
+        textSize = 22f
+    }
 
     fun roundRect(l: Float, t: Float, r: Float, b: Float, radius: Float, paint: Paint) {
         canvas.drawRoundRect(RectF(l, t, r, b), radius, radius, paint)
     }
 
-    val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    // Top settings button
+    val settingsStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         style = Paint.Style.STROKE
         strokeWidth = 8f
         strokeCap = Paint.Cap.ROUND
     }
-    canvas.drawLine(width - 112f, 44f, width - 72f, 44f, stroke)
-    canvas.drawLine(width - 112f, 44f, width - 112f, 70f, stroke)
-    canvas.drawLine(width - 72f, 44f, width - 72f, 18f, stroke)
-    canvas.drawLine(width - 56f, 70f, width - 16f, 70f, stroke)
-    canvas.drawLine(width - 56f, 70f, width - 56f, 44f, stroke)
-    canvas.drawLine(width - 16f, 70f, width - 16f, 96f, stroke)
+    canvas.drawRoundRect(RectF(width - 92f, 22f, width - 22f, 92f), 18f, 18f, accentPaint)
+    canvas.drawLine(width - 72f, 42f, width - 42f, 42f, settingsStroke)
+    canvas.drawLine(width - 72f, 62f, width - 52f, 62f, settingsStroke)
+    canvas.drawLine(width - 72f, 82f, width - 62f, 82f, settingsStroke)
+    canvas.drawLine(width - 50f, 28f, width - 50f, 34f, settingsStroke)
+    canvas.drawLine(width - 30f, 48f, width - 30f, 54f, settingsStroke)
+    canvas.drawLine(width - 50f, 68f, width - 50f, 74f, settingsStroke)
 
-    roundRect(40f, 190f, width - 40f, 360f, 86f, bgPaint)
+    // Search bar
+    roundRect(34f, 168f, width - 34f, 326f, 72f, cardPaint)
 
-    val cx = 116f
-    val cy = 276f
-    val r = 34f
-    val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val gPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 14f
+        strokeWidth = 12f
         strokeCap = Paint.Cap.ROUND
-        color = Color.WHITE
     }
-    canvas.drawArc(cx - r, cy - r, cx + r, cy + r, 18f, 78f, false, arcPaint)
-    arcPaint.color = Color.parseColor("#4C8BF5"); canvas.drawArc(cx - r, cy - r, cx + r, cy + r, 98f, 80f, false, arcPaint)
-    arcPaint.color = Color.parseColor("#34A853"); canvas.drawArc(cx - r, cy - r, cx + r, cy + r, 178f, 80f, false, arcPaint)
-    arcPaint.color = Color.parseColor("#FBBC05"); canvas.drawArc(cx - r, cy - r, cx + r, cy + r, 258f, 60f, false, arcPaint)
-    arcPaint.color = Color.parseColor("#EA4335"); canvas.drawArc(cx - r, cy - r, cx + r, cy + r, 318f, 38f, false, arcPaint)
+    val gx = 112f
+    val gy = 247f
+    val gr = 30f
+    gPaint.color = Color.parseColor("#EA4335"); canvas.drawArc(gx - gr, gy - gr, gx + gr, gy + gr, 20f, 82f, false, gPaint)
+    gPaint.color = Color.parseColor("#FBBC05"); canvas.drawArc(gx - gr, gy - gr, gx + gr, gy + gr, 102f, 78f, false, gPaint)
+    gPaint.color = Color.parseColor("#34A853"); canvas.drawArc(gx - gr, gy - gr, gx + gr, gy + gr, 180f, 80f, false, gPaint)
+    gPaint.color = Color.parseColor("#4285F4"); canvas.drawArc(gx - gr, gy - gr, gx + gr, gy + gr, 260f, 74f, false, gPaint)
 
-    canvas.drawText("Search", 204f, 290f, textPaint)
+    canvas.drawText("Search", 184f, 258f, textPaint)
 
-    fun roundedSquare(x: Float, y: Float, size: Float) { roundRect(x, y, x + size, y + size, 24f, accentPaint) }
-    roundedSquare(width - 246f, 236f, 72f)
-    roundedSquare(width - 128f, 236f, 72f)
+    fun iconTile(x: Float, y: Float) {
+        roundRect(x, y, x + 58f, y + 58f, 18f, accentPaint)
+    }
 
-    fun qrBlock(x: Float, y: Float, s: Float) { canvas.drawRect(x, y, x + s, y + s, iconPaint) }
-    val qx = width - 228f; val qy = 254f; val s = 12f
-    qrBlock(qx, qy, s); qrBlock(qx + 24f, qy, s); qrBlock(qx + 48f, qy, s)
-    qrBlock(qx, qy + 24f, s); qrBlock(qx + 24f, qy + 24f, s); qrBlock(qx + 48f, qy + 24f, s)
-    qrBlock(qx, qy + 48f, s); qrBlock(qx + 24f, qy + 48f, s); qrBlock(qx + 48f, qy + 48f, s)
+    iconTile(width - 222f, 221f)
+    iconTile(width - 144f, 221f)
 
-    val micCx = width - 93f
+    // QR icon
+    val qrX = width - 204f
+    val qrY = 237f
+    val qrPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    repeat(3) { row ->
+        repeat(3) { col ->
+            canvas.drawRect(qrX + col * 10f, qrY + row * 10f, qrX + col * 10f + 7f, qrY + row * 10f + 7f, qrPaint)
+        }
+    }
+    canvas.drawRect(qrX + 28f, qrY + 10f, qrX + 33f, qrY + 15f, qrPaint)
+    canvas.drawRect(qrX + 20f, qrY + 28f, qrX + 25f, qrY + 33f, qrPaint)
+
+    // Mic icon
+    val micX = width - 122f
     val micPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         style = Paint.Style.STROKE
-        strokeWidth = 8f
+        strokeWidth = 7f
         strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
     }
-    canvas.drawRoundRect(RectF(micCx - 10f, 250f, micCx + 10f, 286f), 10f, 10f, micPaint)
-    canvas.drawArc(micCx - 20f, 250f, micCx + 20f, 298f, 0f, 180f, false, micPaint)
-    canvas.drawLine(micCx, 298f, micCx, 314f, micPaint)
-    canvas.drawLine(micCx - 18f, 314f, micCx + 18f, 314f, micPaint)
+    canvas.drawRoundRect(RectF(micX + 16f, 234f, micX + 38f, 272f), 11f, 11f, micPaint)
+    canvas.drawArc(RectF(micX + 11f, 232f, micX + 43f, 270f), 0f, 180f, false, micPaint)
+    canvas.drawLine(micX + 27f, 272f, micX + 27f, 289f, micPaint)
+    canvas.drawLine(micX + 16f, 289f, micX + 38f, 289f, micPaint)
 
-    canvas.drawText("Bookmarks", 44f, 458f, smallPaint)
+    canvas.drawText("Bookmarks", 40f, 406f, mutedPaint)
 
     val sample = listOf(
-        Triple("Google", Color.parseColor("#FFFFFF"), "G"),
-        Triple("Instagram", Color.parseColor("#FFFFFF"), "IG"),
-        Triple("Wikipedia", Color.parseColor("#FFFFFF"), "W"),
-        Triple("Booking", Color.parseColor("#2C5EFF"), "B"),
-        Triple("Facebook", Color.parseColor("#2D5CC8"), "f"),
-        Triple("Ask AI", Color.parseColor("#FFFFFF"), "✦")
+        Triple("GitHub", Color.parseColor("#FFFFFF"), "GH"),
+        Triple("Stack Overflow", Color.parseColor("#FFFFFF"), "SO"),
+        Triple("MDN", Color.parseColor("#FFFFFF"), "MDN"),
+        Triple("npm", Color.parseColor("#C63636"), "npm"),
+        Triple("Docker", Color.parseColor("#2496ED"), "D"),
+        Triple("Dev.to", Color.parseColor("#FFFFFF"), "DEV")
     )
 
-    val lefts = floatArrayOf(44f, 220f, 396f)
-    val tops = floatArrayOf(500f, 720f)
+    val lefts = floatArrayOf(36f, 206f, 376f)
+    val tops = floatArrayOf(446f, 650f)
     var idx = 0
     for (row in tops) {
         for (col in lefts) {
             if (idx >= sample.size) break
             val (name, bg, txt) = sample[idx++]
-            val box = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bg }
-            roundRect(col, row, col + 132f, row + 132f, 34f, box)
+            val tilePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bg }
+            roundRect(col, row, col + 96f, row + 96f, 26f, tilePaint)
+
+            val textColor = if (name == "npm") Color.WHITE else Color.BLACK
             val letterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.BLACK
+                color = textColor
                 textAlign = Paint.Align.CENTER
-                textSize = 44f
+                textSize = if (txt.length > 2) 22f else 28f
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
-            canvas.drawText(txt, col + 66f, row + 84f, letterPaint)
-            canvas.drawText(name, col - 4f, row + 182f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            canvas.drawText(txt, col + 48f, row + 58f, letterPaint)
+
+            canvas.drawText(name, col + 48f, row + 126f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE
-                textSize = 24f
+                textAlign = Paint.Align.CENTER
+                textSize = 19f
             })
         }
     }
 
+    return bitmap
+}
+
+
+private fun createMicBitmap(sizePx: Int): Bitmap {
+    val size = maxOf(sizePx, 48)
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = maxOf(4.5f, size * 0.13f)
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
+    val w = size.toFloat()
+    val h = size.toFloat()
+    val body = RectF(w * 0.36f, h * 0.18f, w * 0.64f, h * 0.62f)
+    canvas.drawRoundRect(body, w * 0.12f, w * 0.12f, paint)
+    canvas.drawArc(RectF(w * 0.28f, h * 0.16f, w * 0.72f, h * 0.64f), 180f, 180f, false, paint)
+    canvas.drawLine(w * 0.5f, h * 0.62f, w * 0.5f, h * 0.78f, paint)
+    canvas.drawLine(w * 0.34f, h * 0.78f, w * 0.66f, h * 0.78f, paint)
     return bitmap
 }
 
@@ -537,8 +581,11 @@ class MainActivity : AppCompatActivity() {
         val topAction = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
             setColorFilter(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams((22 * dp).toInt(), (22 * dp).toInt()).apply { gravity = Gravity.END }
+            layoutParams = LinearLayout.LayoutParams((40 * dp).toInt(), (40 * dp).toInt()).apply { gravity = Gravity.END }
             alpha = 0.95f
+            setPadding((8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt())
+            setBackgroundResource(R.drawable.bottom_btn_ripple)
+            scaleType = ImageView.ScaleType.FIT_CENTER
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
@@ -581,19 +628,20 @@ class MainActivity : AppCompatActivity() {
         }
         searchBar.addView(searchLabel)
 
-        fun actionCircle(iconRes: Int, onClick: () -> Unit): ImageView {
+        fun actionCircle(iconRes: Int? = null, bitmap: Bitmap? = null, onClick: () -> Unit): ImageView {
             return ImageView(this).apply {
-                setImageResource(iconRes)
+                if (bitmap != null) setImageBitmap(bitmap) else if (iconRes != null) setImageResource(iconRes)
                 setColorFilter(Color.parseColor("#ECECEC"))
                 setBackgroundResource(R.drawable.bottom_btn_ripple)
-                layoutParams = LinearLayout.LayoutParams((36 * dp).toInt(), (36 * dp).toInt()).apply { marginStart = (6 * dp).toInt() }
-                setPadding((8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams((40 * dp).toInt(), (40 * dp).toInt()).apply { marginStart = (6 * dp).toInt() }
+                setPadding((7 * dp).toInt(), (7 * dp).toInt(), (7 * dp).toInt(), (7 * dp).toInt())
+                scaleType = ImageView.ScaleType.FIT_CENTER
                 setOnClickListener { onClick() }
             }
         }
 
-        searchBar.addView(actionCircle(R.drawable.ic_qr) { launchQrScanner() })
-        searchBar.addView(actionCircle(android.R.drawable.ic_btn_speak_now) { launchVoiceSearch() })
+        searchBar.addView(actionCircle(iconRes = R.drawable.ic_qr) { launchQrScanner() })
+        searchBar.addView(actionCircle(bitmap = createMicBitmap((26 * dp).toInt())) { launchVoiceSearch() })
 
         val section = TextView(this).apply {
             text = "Bookmarks"
@@ -615,12 +663,12 @@ class MainActivity : AppCompatActivity() {
 
         val bookmarks = prefsManager.getBookmarks().take(6)
         val fallbackSites = listOf(
-            "Google" to "https://www.google.com",
-            "Instagram" to "https://www.instagram.com",
-            "Wikipedia" to "https://www.wikipedia.org",
-            "Booking" to "https://www.booking.com",
-            "Facebook" to "https://www.facebook.com",
-            "Ask AI" to "https://chat.openai.com"
+            "GitHub" to "https://github.com",
+            "Stack Overflow" to "https://stackoverflow.com",
+            "MDN" to "https://developer.mozilla.org",
+            "npm" to "https://www.npmjs.com",
+            "Docker" to "https://www.docker.com",
+            "Dev.to" to "https://dev.to"
         )
         val items = if (bookmarks.isNotEmpty()) bookmarks else fallbackSites
 
@@ -631,7 +679,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val icon = ImageView(this).apply {
-                layoutParams = LinearLayout.LayoutParams((96 * dp).toInt(), (96 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams((58 * dp).toInt(), (58 * dp).toInt())
                 setBackgroundResource(R.drawable.tab_card_bg)
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setImageResource(R.drawable.ic_favicon_fallback)
@@ -639,11 +687,11 @@ class MainActivity : AppCompatActivity() {
             val label = TextView(this).apply {
                 text = title
                 setTextColor(Color.WHITE)
-                textSize = 14f
+                textSize = 11.5f
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding((2 * dp).toInt(), (10 * dp).toInt(), (2 * dp).toInt(), 0)
+                setPadding((2 * dp).toInt(), (8 * dp).toInt(), (2 * dp).toInt(), 0)
             }
 
             item.addView(icon)
