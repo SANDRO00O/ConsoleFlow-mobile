@@ -1,226 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:background="#111111"
-    android:paddingTop="12dp"
-    android:paddingBottom="16dp">
-
-    <!-- Drag handle -->
-    <View
-        android:layout_width="36dp"
-        android:layout_height="4dp"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="16dp"
-        android:background="#333333" />
-
-    <!-- Row 1 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingHorizontal="8dp">
-
-        <!-- Night Mode -->
-        <LinearLayout
-            android:id="@+id/menuNightMode"
-            android:layout_width="0dp"
-            android:layout_height="72dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/sheet_row_ripple"
-            android:layout_margin="4dp">
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:src="@drawable/ic_moon"
-                android:alpha="0.85" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Night Mode"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_bottom_sheet" android:orientation="vertical" android:padding="16dp">
+    
+    <!-- المقبض الدائري -->
+    <View android:layout_width="40dp" android:layout_height="5dp" android:layout_gravity="center" android:layout_marginBottom="24dp" android:background="@drawable/bg_menu_item" />
+    
+    <!-- أزرار القائمة بشكل شبكة (مربعات منحنية) -->
+    <GridLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:columnCount="3" android:rowCount="2" android:alignmentMode="alignMargins" android:useDefaultMargins="true">
+        
+        <LinearLayout android:id="@+id/menuNightMode" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_night" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Night Mode" android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-
-        <!-- Bookmarks -->
-        <LinearLayout
-            android:id="@+id/menuBookmarks"
-            android:layout_width="0dp"
-            android:layout_height="72dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/sheet_row_ripple"
-            android:layout_margin="4dp">
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:src="@drawable/ic_bookmarks"
-                android:alpha="0.85" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Bookmarks"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
+        
+        <LinearLayout android:id="@+id/menuBookmarks" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_bookmarks" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Bookmarks" android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-
-        <!-- History -->
-        <LinearLayout
-            android:id="@+id/menuHistory"
-            android:layout_width="0dp"
-            android:layout_height="72dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/sheet_row_ripple"
-            android:layout_margin="4dp">
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:src="@drawable/ic_history"
-                android:alpha="0.85" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="History"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
+        
+        <LinearLayout android:id="@+id/menuHistory" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_history" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="History" android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-
-        <!-- Share -->
-        <LinearLayout
-            android:id="@+id/menuShare"
-            android:layout_width="0dp"
-            android:layout_height="72dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/sheet_row_ripple"
-            android:layout_margin="4dp">
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:src="@drawable/ic_share_icon"
-                android:alpha="0.85" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Share"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
+        
+        <LinearLayout android:id="@+id/menuFindInPage" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_find" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Find in Page" android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-    </LinearLayout>
-
-    <!-- Row 2 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingHorizontal="8dp">
-
-        <!-- Find in Page -->
-        <LinearLayout
-            android:id="@+id/menuFindInPage"
-            android:layout_width="0dp"
-            android:layout_height="72dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/sheet_row_ripple"
-            android:layout_margin="4dp">
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:src="@drawable/ic_find"
-                android:alpha="0.85" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Find in Page"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
+        
+        <LinearLayout android:id="@+id/menuDesktopMode" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_desktop" android:tint="#FFFFFF" />
+            <TextView android:id="@+id/menuDesktopModeLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Desktop" android:textColor="#CCCCCC" android:textSize="12sp" />
         </LinearLayout>
-
-        <!-- Desktop Mode -->
-        <LinearLayout
-            android:id="@+id/menuDesktopMode"
-            android:layout_width="0dp"
-            android:layout_height="72dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/sheet_row_ripple"
-            android:layout_margin="4dp">
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:src="@drawable/ic_desktop"
-                android:alpha="0.85" />
-            <TextView
-                android:id="@+id/menuDesktopModeLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Desktop"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
+        
+        <LinearLayout android:id="@+id/menuSettings" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_settings" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Settings" android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-
-        <!-- Settings -->
-        <LinearLayout
-            android:id="@+id/menuSettings"
-            android:layout_width="0dp"
-            android:layout_height="72dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/sheet_row_ripple"
-            android:layout_margin="4dp">
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:src="@drawable/ic_settings"
-                android:alpha="0.85" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Settings"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <!-- Clear Data -->
-        <LinearLayout
-            android:id="@+id/menuClearData"
-            android:layout_width="0dp"
-            android:layout_height="72dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/sheet_row_ripple"
-            android:layout_margin="4dp">
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:src="@drawable/ic_clear" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Clear Data"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
-        </LinearLayout>
-    </LinearLayout>
-
+    </GridLayout>
 </LinearLayout>

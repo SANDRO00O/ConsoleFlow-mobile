@@ -10,6 +10,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
@@ -53,6 +54,12 @@ data class TabState(
     @Transient var ramThumbnail: Bitmap? = null 
 }
 
+data class TabGroup(
+    val id: Int,
+    var name: String,
+    val tabs: MutableList<TabState> = mutableListOf()
+) : Serializable
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webViewContainer: FrameLayout
@@ -69,6 +76,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
+    private lateinit var tabGroupsContainer: LinearLayout
 
     private lateinit var prefsManager: PrefsManager
     private val okClient = OkHttpClient.Builder().followRedirects(true).build()
@@ -79,7 +87,6 @@ class MainActivity : AppCompatActivity() {
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPermissionRequest: PermissionRequest? = null
-
     private var cachedMenuSheet: BottomSheetDialog? = null
     private var cachedMenuSheetView: View? = null
 
@@ -93,20 +100,23 @@ class MainActivity : AppCompatActivity() {
         "yahoo.com", "yandex.com"
     )
 
-    private var tabs = mutableListOf<TabState>()
+    // ── Tab Groups Architecture ──
+    private var tabGroups = mutableListOf<TabGroup>()
+    private var activeGroupId = 0
     private var activeTabId = 0
-    private var nextTabId   = 1
+    private var nextTabId = 1
+    private var nextGroupId = 1
     private lateinit var tabAdapter: TabAdapter
 
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { perms ->
+    private val currentGroup: TabGroup? get() = tabGroups.find { it.id == activeGroupId }
+
+    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
         if (perms.values.all { it }) webPermissionRequest?.grant(webPermissionRequest?.resources)
         else webPermissionRequest?.deny()
     }
 
     private val qrScanLauncher = registerForActivityResult(ScanContract()) { result: ScanIntentResult ->
-        result.contents?.let { scanned -> navigateTo(scanned) }
+        result.contents?.let { scanned -> loadUrlInstantly(scanned) }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -122,28 +132,29 @@ class MainActivity : AppCompatActivity() {
         val intentUrl = intent?.data?.toString()
 
         if (savedInstanceState != null) {
-            // استعادة التبويبات عند تدوير الشاشة
-            val savedTabs = savedInstanceState.getSerializable("TABS_LIST") as? ArrayList<TabState>
-            if (savedTabs != null && savedTabs.isNotEmpty()) {
-                tabs.clear()
-                tabs.addAll(savedTabs)
-                activeTabId = savedInstanceState.getInt("ACTIVE_TAB_ID", tabs.first().id)
-                nextTabId = savedInstanceState.getInt("NEXT_TAB_ID", tabs.maxOf { it.id } + 1)
+            val savedGroups = savedInstanceState.getSerializable("GROUPS_LIST") as? ArrayList<TabGroup>
+            if (savedGroups != null && savedGroups.isNotEmpty()) {
+                tabGroups.clear()
+                tabGroups.addAll(savedGroups)
+                activeGroupId = savedInstanceState.getInt("ACTIVE_GROUP_ID", tabGroups.first().id)
+                activeTabId = savedInstanceState.getInt("ACTIVE_TAB_ID", tabGroups.first().tabs.firstOrNull()?.id ?: 0)
+                nextTabId = savedInstanceState.getInt("NEXT_TAB_ID", 100)
+                nextGroupId = savedInstanceState.getInt("NEXT_GROUP_ID", 100)
                 
-                tabs.forEach { tab ->
-                    val wv = createNewWebView(tab.id)
-                    wv.restoreState(savedInstanceState)
-                    webViews[tab.id] = wv
-                    if (tab.id == activeTabId) webViewContainer.addView(wv)
+                tabGroups.forEach { group ->
+                    group.tabs.forEach { tab ->
+                        val wv = createNewWebView(tab.id)
+                        wv.restoreState(savedInstanceState)
+                        webViews[tab.id] = wv
+                        if (tab.id == activeTabId) webViewContainer.addView(wv)
+                    }
                 }
-                tabAdapter.setActive(activeTabId)
-                tabAdapter.notifyDataSetChanged()
-                updateTabCount()
+                updateGroupsUI()
+                refreshTabsRecycler()
             } else {
-                openNewTab(HOME_URL)
+                createNewGroup("Default")
             }
         } else {
-            // استعادة التبويبات من الذاكرة الدائمة (إذا أغلق المستخدم التطبيق وفتحه مجدداً)
             loadPersistentTabs(intentUrl)
         }
 
@@ -161,24 +172,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ── نظام الحفظ الدائم للتبويبات ───────────────────────────────────────────
+    // ── Instant Load Helper ──
+    private fun loadUrlInstantly(url: String) {
+        textUrl.setText(url)
+        progressBar.progress = 5
+        progressBar.visibility = View.VISIBLE
+        currentWebView?.loadUrl(url)
+    }
+
+    // ── Persistent Storage ──
     private fun savePersistentTabs() {
         ioExecutor.execute {
             try {
-                val jsonArray = JSONArray()
-                for (tab in tabs) {
-                    val obj = JSONObject()
-                    obj.put("id", tab.id)
-                    obj.put("title", tab.title)
-                    obj.put("url", tab.url)
-                    obj.put("hasThumb", tab.hasThumbnail)
-                    jsonArray.put(obj)
+                val groupsArray = JSONArray()
+                for (group in tabGroups) {
+                    val groupObj = JSONObject()
+                    groupObj.put("id", group.id)
+                    groupObj.put("name", group.name)
+                    
+                    val tabsArray = JSONArray()
+                    for (tab in group.tabs) {
+                        val tabObj = JSONObject()
+                        tabObj.put("id", tab.id)
+                        tabObj.put("title", tab.title)
+                        tabObj.put("url", tab.url)
+                        tabObj.put("hasThumb", tab.hasThumbnail)
+                        tabsArray.put(tabObj)
+                    }
+                    groupObj.put("tabs", tabsArray)
+                    groupsArray.put(groupObj)
                 }
-                val prefs = getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
-                prefs.edit()
-                    .putString("SAVED_TABS", jsonArray.toString())
+                getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE).edit()
+                    .putString("SAVED_GROUPS", groupsArray.toString())
+                    .putInt("ACTIVE_GROUP", activeGroupId)
                     .putInt("ACTIVE_TAB", activeTabId)
                     .putInt("NEXT_TAB_ID", nextTabId)
+                    .putInt("NEXT_GROUP_ID", nextGroupId)
                     .apply()
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -186,73 +215,54 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadPersistentTabs(intentUrl: String?) {
         val prefs = getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
-        val savedTabsJson = prefs.getString("SAVED_TABS", null)
+        val savedJson = prefs.getString("SAVED_GROUPS", null)
 
-        if (savedTabsJson != null) {
+        if (savedJson != null) {
             try {
-                val jsonArray = JSONArray(savedTabsJson)
-                if (jsonArray.length() > 0) {
-                    for (i in 0 until jsonArray.length()) {
-                        val obj = jsonArray.getJSONObject(i)
-                        val t = TabState(
-                            id = obj.getInt("id"),
-                            title = obj.getString("title"),
-                            url = obj.getString("url"),
-                            hasThumbnail = obj.getBoolean("hasThumb")
-                        )
-                        tabs.add(t)
-                        val wv = createNewWebView(t.id)
-                        webViews[t.id] = wv
-                        wv.loadUrl(t.url)
+                val groupsArray = JSONArray(savedJson)
+                if (groupsArray.length() > 0) {
+                    for (i in 0 until groupsArray.length()) {
+                        val gObj = groupsArray.getJSONObject(i)
+                        val group = TabGroup(gObj.getInt("id"), gObj.getString("name"))
+                        
+                        val tabsArray = gObj.getJSONArray("tabs")
+                        for (j in 0 until tabsArray.length()) {
+                            val tObj = tabsArray.getJSONObject(j)
+                            val t = TabState(tObj.getInt("id"), tObj.getString("title"), tObj.getString("url"), tObj.getBoolean("hasThumb"))
+                            group.tabs.add(t)
+                            val wv = createNewWebView(t.id)
+                            webViews[t.id] = wv
+                            wv.loadUrl(t.url)
+                        }
+                        tabGroups.add(group)
                     }
-                    activeTabId = prefs.getInt("ACTIVE_TAB", tabs.first().id)
-                    nextTabId = prefs.getInt("NEXT_TAB_ID", tabs.maxOf { it.id } + 1)
+                    activeGroupId = prefs.getInt("ACTIVE_GROUP", tabGroups.first().id)
+                    activeTabId = prefs.getInt("ACTIVE_TAB", currentGroup?.tabs?.firstOrNull()?.id ?: 0)
+                    nextTabId = prefs.getInt("NEXT_TAB_ID", 100)
+                    nextGroupId = prefs.getInt("NEXT_GROUP_ID", 100)
                     
                     val activeWv = webViews[activeTabId]
                     if (activeWv != null) webViewContainer.addView(activeWv)
                     
-                    tabAdapter.setActive(activeTabId)
-                    tabAdapter.notifyDataSetChanged()
-                    updateTabCount()
+                    updateGroupsUI()
+                    refreshTabsRecycler()
 
-                    // إذا تم فتح التطبيق عبر رابط خارجي، افتحه في تبويب جديد
                     if (!intentUrl.isNullOrEmpty()) openNewTab(intentUrl)
                     return
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
-        
-        // في حال كان التطبيق يفتح لأول مرة
-        openNewTab(if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL)
+        createNewGroup("Default", if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putSerializable("TABS_LIST", ArrayList(tabs))
+        outState.putSerializable("GROUPS_LIST", ArrayList(tabGroups))
+        outState.putInt("ACTIVE_GROUP_ID", activeGroupId)
         outState.putInt("ACTIVE_TAB_ID", activeTabId)
         outState.putInt("NEXT_TAB_ID", nextTabId)
+        outState.putInt("NEXT_GROUP_ID", nextGroupId)
         webViews.values.forEach { it.saveState(outState) }
-    }
-
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        val url = intent?.data?.toString()
-        if (!url.isNullOrEmpty()) {
-            tabsOverlay.visibility = View.GONE
-            openNewTab(url)
-        }
-    }
-
-    override fun onDestroy() {
-        webViews.values.forEach { wv ->
-            webViewContainer.removeView(wv)
-            wv.clearHistory()
-            wv.removeAllViews()
-            wv.destroy()
-        }
-        webViews.clear()
-        ioExecutor.shutdown()
-        super.onDestroy()
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -268,8 +278,9 @@ class MainActivity : AppCompatActivity() {
         tabsOverlay         = findViewById(R.id.tabsOverlay)
         tabsRecycler        = findViewById(R.id.tabsRecycler)
         tabCount            = findViewById(R.id.tabCount)
+        tabGroupsContainer  = findViewById(R.id.tabGroupsContainer)
 
-        tabAdapter = TabAdapter(this, tabs,
+        tabAdapter = TabAdapter(this, mutableListOf(),
             onTabClick = { tab -> switchToTab(tab) },
             onTabClose = { tab -> closeTab(tab) }
         )
@@ -278,20 +289,109 @@ class MainActivity : AppCompatActivity() {
 
         updateSearchEngineIcon()
     }
+
+    // ── Groups & Tabs Management ──
     
+    private fun updateGroupsUI() {
+        tabGroupsContainer.removeAllViews()
+        for (group in tabGroups) {
+            val tv = TextView(this).apply {
+                text = group.name
+                setPadding(32, 16, 32, 16)
+                textSize = 14f
+                if (group.id == activeGroupId) {
+                    setTextColor(Color.WHITE)
+                    setBackgroundResource(R.drawable.bg_menu_item) // Using the new rounded bg
+                } else {
+                    setTextColor(Color.GRAY)
+                    setBackgroundColor(Color.TRANSPARENT)
+                }
+                
+                setOnClickListener { 
+                    activeGroupId = group.id
+                    refreshTabsRecycler()
+                    updateGroupsUI()
+                }
+                
+                setOnLongClickListener {
+                    showGroupOptions(group)
+                    true
+                }
+            }
+            tabGroupsContainer.addView(tv)
+        }
+    }
+
+    private fun showGroupOptions(group: TabGroup) {
+        val options = arrayOf("Rename Group", "Delete Group")
+        AlertDialog.Builder(this, R.style.DarkDialog).setItems(options) { _, which ->
+            when (which) {
+                0 -> {
+                    val input = EditText(this).apply {
+                        setText(group.name)
+                        setTextColor(Color.WHITE)
+                    }
+                    AlertDialog.Builder(this, R.style.DarkDialog).setTitle("Rename Group").setView(input)
+                        .setPositiveButton("Save") { _, _ ->
+                            group.name = input.text.toString()
+                            updateGroupsUI()
+                            savePersistentTabs()
+                        }.show()
+                }
+                1 -> {
+                    if (tabGroups.size == 1) {
+                        Toast.makeText(this, "Cannot delete the last group", Toast.LENGTH_SHORT).show()
+                        return@setItems
+                    }
+                    // Delete all tabs in group
+                    group.tabs.forEach { t ->
+                        ioExecutor.execute { File(cacheDir, "thumb_${t.id}.webp").delete() }
+                        webViews[t.id]?.destroy()
+                        webViews.remove(t.id)
+                    }
+                    tabGroups.remove(group)
+                    if (activeGroupId == group.id) {
+                        activeGroupId = tabGroups.first().id
+                        activeTabId = currentGroup?.tabs?.firstOrNull()?.id ?: 0
+                    }
+                    updateGroupsUI()
+                    refreshTabsRecycler()
+                    savePersistentTabs()
+                }
+            }
+        }.show()
+    }
+
+    private fun createNewGroup(name: String, url: String = HOME_URL) {
+        val group = TabGroup(nextGroupId++, name)
+        tabGroups.add(group)
+        activeGroupId = group.id
+        openNewTab(url)
+        updateGroupsUI()
+    }
+
+    private fun refreshTabsRecycler() {
+        currentGroup?.let {
+            tabAdapter.updateTabs(it.tabs)
+            tabAdapter.setActive(activeTabId)
+            tabAdapter.notifyDataSetChanged()
+        }
+        updateTabCount()
+    }
+
     private fun openNewTab(url: String = HOME_URL) {
         captureAndStoreThumbnail {
             val id = nextTabId++
             val newTab = TabState(id = id, title = "New Tab", url = url)
-            tabs.add(newTab)
+            currentGroup?.tabs?.add(newTab)
             
             val wv = createNewWebView(id)
             webViews[id] = wv
             wv.loadUrl(url)
             
             switchToTab(newTab)
-            tabAdapter.notifyItemInserted(tabs.size - 1)
-            savePersistentTabs() // تحديث الحفظ
+            refreshTabsRecycler()
+            savePersistentTabs()
         }
     }
 
@@ -307,7 +407,7 @@ class MainActivity : AppCompatActivity() {
                 updateUIForCurrentWebView(wv)
             }
             updateTabCount()
-            savePersistentTabs() // حفظ التبويب النشط
+            savePersistentTabs()
         }
 
         if (activeTabId != tab.id && currentWebView != null) {
@@ -318,7 +418,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun closeTab(tab: TabState) {
-        val idx = tabs.indexOfFirst { it.id == tab.id }
+        val group = currentGroup ?: return
+        val idx = group.tabs.indexOfFirst { it.id == tab.id }
         if (idx < 0) return
         
         tab.ramThumbnail?.recycle()
@@ -331,13 +432,13 @@ class MainActivity : AppCompatActivity() {
             webViews.remove(tab.id)
         }
         
-        tabs.removeAt(idx)
+        group.tabs.removeAt(idx)
         tabAdapter.notifyItemRemoved(idx)
         
-        if (tabs.isEmpty()) {
+        if (group.tabs.isEmpty()) {
             openNewTab(HOME_URL)
         } else if (tab.id == activeTabId) {
-            val fallbackTab = tabs.getOrNull(maxOf(0, idx - 1)) ?: tabs.first()
+            val fallbackTab = group.tabs.getOrNull(maxOf(0, idx - 1)) ?: group.tabs.first()
             switchToTab(fallbackTab)
         } else {
             updateTabCount()
@@ -346,9 +447,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateTabCount() {
-        tabCount.text = tabs.size.toString()
-        val lbl = if (tabsOverlay.visibility == View.VISIBLE) "Tabs (${tabs.size})" else "Tabs"
-        findViewById<TextView?>(R.id.tabsTitle)?.text = lbl
+        val totalTabs = tabGroups.sumOf { it.tabs.size }
+        tabCount.text = totalTabs.toString()
     }
 
     private fun updateUIForCurrentWebView(wv: WebView) {
@@ -359,7 +459,6 @@ class MainActivity : AppCompatActivity() {
         progressBar.visibility = if (wv.progress < 100) View.VISIBLE else View.INVISIBLE
     }
 
-    // ── نظام التقاط الصور المُعالج بالكامل ──────────────────────────────────
     private fun captureAndStoreThumbnail(onComplete: (() -> Unit)? = null) {
         val wv = currentWebView
         if (wv == null || wv.width <= 0 || wv.height <= 0) {
@@ -375,32 +474,23 @@ class MainActivity : AppCompatActivity() {
             
             val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
             val canvas = Canvas(bitmap)
-            
-            // 1. تصغير الصورة للحفاظ على الرام
             canvas.scale(scale, scale)
-            
-            // 2. إزاحة العدسة (Translate) لتتطابق مع مكان التمرير الحالي للمستخدم (لحل مشكلة القص)
             canvas.translate(-wv.scrollX.toFloat(), -wv.scrollY.toFloat())
-            
             wv.draw(canvas)
 
-            tabs.find { it.id == tabId }?.let {
+            currentGroup?.tabs?.find { it.id == tabId }?.let {
                 it.hasThumbnail = true
                 it.ramThumbnail = bitmap
             }
-            
             onComplete?.invoke()
 
             ioExecutor.execute {
                 try {
                     val file = File(cacheDir, "thumb_$tabId.webp")
-                    FileOutputStream(file).use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out)
-                    }
+                    FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out) }
                 } catch (e: Exception) { e.printStackTrace() }
             }
         } catch (e: Exception) { 
-            e.printStackTrace()
             onComplete?.invoke()
         }
     }
@@ -408,9 +498,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun createNewWebView(tabId: Int): WebView {
         val wv = WebView(this)
-        wv.layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
-        )
+        wv.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         
         with(wv.settings) {
             javaScriptEnabled = true
@@ -420,19 +508,36 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls  = true
             displayZoomControls  = false
             mixedContentMode     = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            mediaPlaybackRequiresUserGesture = false
-            cacheMode = WebSettings.LOAD_DEFAULT // تفعيل الكاش التلقائي لزيادة سرعة التصفح
+            cacheMode = WebSettings.LOAD_DEFAULT 
         }
         
         applyUserAgentToWebView(wv)
         wv.addJavascriptInterface(SearchBridge(), "Android")
 
+        // ── Long Press Context Menu for Links ──
+        wv.setOnCreateContextMenuListener { _, _, _ ->
+            val result = wv.hitTestResult
+            if (result.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                val url = result.extra ?: return@setOnCreateContextMenuListener
+                val options = arrayOf("Open in New Tab", "Copy Link", "Bookmark Link", "Share")
+                AlertDialog.Builder(this@MainActivity, R.style.DarkDialog)
+                    .setTitle(url)
+                    .setItems(options) { _, which ->
+                        when(which) {
+                            0 -> { openNewTab(url); Toast.makeText(this@MainActivity, "Opened in new tab", Toast.LENGTH_SHORT).show() }
+                            1 -> { (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("URL", url)); Toast.makeText(this@MainActivity, "Copied", Toast.LENGTH_SHORT).show() }
+                            2 -> { prefsManager.toggleBookmark("Bookmark", url); Toast.makeText(this@MainActivity, "Bookmarked", Toast.LENGTH_SHORT).show() }
+                            3 -> { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, url) }, "Share")) }
+                        }
+                    }.show()
+            }
+        }
+
         wv.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                 val url = req.url.toString()
                 if (url.startsWith("http") || url.startsWith("file:")) return false
-                return try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); true }
-                catch (_: Exception) { true }
+                return try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); true } catch (_: Exception) { true }
             }
 
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
@@ -450,52 +555,24 @@ class MainActivity : AppCompatActivity() {
                 }
                 
                 url?.let {
-                    if (it != HOME_URL && !it.startsWith(ERROR_URL))
-                        prefsManager.addHistory(view.title ?: "Unknown", it)
-                    
-                    tabs.find { t -> t.id == tabId }?.let { tab ->
+                    if (it != HOME_URL && !it.startsWith(ERROR_URL)) prefsManager.addHistory(view.title ?: "Unknown", it)
+                    currentGroup?.tabs?.find { t -> t.id == tabId }?.let { tab ->
                         tab.title = view.title ?: "Tab"
                         tab.url   = it
                     }
-                    savePersistentTabs() // حفظ التغييرات مثل تغيير رابط التبويب
+                    savePersistentTabs()
                 }
 
                 if (prefsManager.desktopMode) {
-                    view.evaluateJavascript(
-                        "(function() { " +
-                        "var meta = document.querySelector('meta[name=\"viewport\"]');" +
-                        "if (meta) { meta.setAttribute('content', 'width=1024'); } " +
-                        "else { var nm = document.createElement('meta'); nm.name='viewport'; nm.content='width=1024'; document.head.appendChild(nm); }" +
-                        "})();", null
-                    )
+                    view.evaluateJavascript("(function() { var meta = document.querySelector('meta[name=\"viewport\"]'); if (meta) { meta.setAttribute('content', 'width=1024'); } else { var nm = document.createElement('meta'); nm.name='viewport'; nm.content='width=1024'; document.head.appendChild(nm); }})();", null)
                 }
 
-                view.evaluateJavascript(
-                    "(function(){" +
-                    "if(window.__erudaInited)return;" +
-                    "if(typeof eruda!=='undefined'){" +
-                        "try{eruda.init();window.__erudaInited=true;}catch(e){}" +
-                        "return;" +
-                    "}" +
-                    "var x=new XMLHttpRequest();" +
-                    "x.open('GET','https://eruda.local/eruda.js',true);" +
-                    "x.onload=function(){" +
-                        "if(window.__erudaInited)return;" +
-                        "try{eval(x.responseText);eruda.init();window.__erudaInited=true;}catch(e){}" +
-                    "};" +
-                    "x.send();" +
-                    "})()", null
-                )
+                view.evaluateJavascript("(function(){if(window.__erudaInited)return;if(typeof eruda!=='undefined'){try{eruda.init();window.__erudaInited=true;}catch(e){}return;}var x=new XMLHttpRequest();x.open('GET','https://eruda.local/eruda.js',true);x.onload=function(){if(window.__erudaInited)return;try{eval(x.responseText);eruda.init();window.__erudaInited=true;}catch(e){}};x.send();})()", null)
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
-
-                if (url == "https://eruda.local/eruda.js") {
-                    return try {
-                        WebResourceResponse("application/javascript", "utf-8", assets.open("eruda.js"))
-                    } catch (_: Exception) { null }
-                }
+                if (url == "https://eruda.local/eruda.js") return try { WebResourceResponse("application/javascript", "utf-8", assets.open("eruda.js")) } catch (_: Exception) { null }
 
                 val host = request.url.host ?: ""
                 if (NO_INTERCEPT_DOMAINS.any { host == it || host.endsWith(".$it") }) return null
@@ -504,11 +581,8 @@ class MainActivity : AppCompatActivity() {
                     try {
                         val ua = getUserAgentString() 
                         val reqBuilder = Request.Builder().url(url)
-                        request.requestHeaders.forEach { (k, v) ->
-                            if (k.lowercase() != "user-agent") reqBuilder.addHeader(k, v)
-                        }
+                        request.requestHeaders.forEach { (k, v) -> if (k.lowercase() != "user-agent") reqBuilder.addHeader(k, v) }
                         reqBuilder.header("User-Agent", ua)
-
                         val cookie = CookieManager.getInstance().getCookie(url)
                         if (!cookie.isNullOrEmpty()) reqBuilder.header("Cookie", cookie)
 
@@ -517,79 +591,24 @@ class MainActivity : AppCompatActivity() {
 
                         if (contentType.contains("text/html")) {
                             var html = response.body?.string() ?: ""
-
                             html = html.replace(Regex("""<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>""", RegexOption.IGNORE_CASE), "")
-
-                            val erudaTag  = "<script src=\"https://eruda.local/eruda.js\"></script>"
-                            val erudaInit = "<script>(function(){if(window.__erudaInited)return;try{eruda.init();window.__erudaInited=true;}catch(e){}})()</script>"
+                            val erudaTag  = "<script src=\"https://eruda.local/eruda.js\"></script><script>(function(){if(window.__erudaInited)return;try{eruda.init();window.__erudaInited=true;}catch(e){}})()</script>"
                             val customJsTag = prefsManager.customJs.takeIf { it.isNotEmpty() }?.let { "<script>$it</script>" } ?: ""
-
-                            html = html.replaceFirst("<head>", "<head>$erudaTag$erudaInit$customJsTag", ignoreCase = true)
-
+                            html = html.replaceFirst("<head>", "<head>$erudaTag$customJsTag", ignoreCase = true)
+                            
                             val hdrs = response.headers.toMap().toMutableMap()
                             hdrs.remove("Content-Security-Policy")
-                            hdrs.remove("content-security-policy")
-                            
-                            return WebResourceResponse(
-                                "text/html", "utf-8", response.code, "OK", hdrs,
-                                ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
-                            )
+                            return WebResourceResponse("text/html", "utf-8", response.code, "OK", hdrs, ByteArrayInputStream(html.toByteArray(Charsets.UTF_8)))
                         }
                     } catch (_: Exception) { return null }
                 }
                 return super.shouldInterceptRequest(view, request)
-            }
-
-            override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
-                if (req.isForMainFrame)
-                    view.loadUrl("$ERROR_URL?url=${URLEncoder.encode(req.url.toString(), "UTF-8")}")
-            }
-
-            override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
-                AlertDialog.Builder(this@MainActivity, R.style.DarkDialog)
-                    .setTitle("SSL Certificate Error")
-                    .setMessage("The site's security certificate is not trusted. Continue anyway?")
-                    .setPositiveButton("Continue") { _, _ -> handler.proceed() }
-                    .setNegativeButton("Go Back")   { _, _ -> handler.cancel()  }
-                    .show()
             }
         }
 
         wv.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView, newProgress: Int) {
                 if (view == currentWebView) progressBar.progress = newProgress
-            }
-
-            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
-                customView = view; customViewCallback = callback
-                fullscreenContainer.addView(view)
-                fullscreenContainer.visibility = View.VISIBLE
-                webViewContainer.visibility = View.GONE
-                @Suppress("DEPRECATION")
-                window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
-            }
-
-            override fun onHideCustomView() {
-                fullscreenContainer.removeView(customView)
-                fullscreenContainer.visibility = View.GONE
-                webViewContainer.visibility = View.VISIBLE
-                customView = null
-                customViewCallback?.onCustomViewHidden()
-                @Suppress("DEPRECATION")
-                window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-            }
-
-            override fun onPermissionRequest(request: PermissionRequest) {
-                webPermissionRequest = request
-                val androidPerms = mutableListOf<String>()
-                request.resources.forEach {
-                    when (it) {
-                        PermissionRequest.RESOURCE_AUDIO_CAPTURE -> androidPerms.add(Manifest.permission.RECORD_AUDIO)
-                        PermissionRequest.RESOURCE_VIDEO_CAPTURE -> androidPerms.add(Manifest.permission.CAMERA)
-                    }
-                }
-                if (androidPerms.isNotEmpty()) requestPermissionLauncher.launch(androidPerms.toTypedArray())
-                else request.grant(request.resources)
             }
         }
 
@@ -598,9 +617,7 @@ class MainActivity : AppCompatActivity() {
                 setMimeType(mimetype)
                 addRequestHeader("cookie", CookieManager.getInstance().getCookie(url))
                 addRequestHeader("User-Agent", userAgent)
-                setDescription("Downloading file...")
                 setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype))
-                @Suppress("DEPRECATION") allowScanningByMediaScanner()
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimetype))
             }
@@ -616,42 +633,27 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.setOnChildScrollUpCallback { _, _ -> (currentWebView?.scrollY ?: 0) > 0 }
         swipeRefresh.setOnRefreshListener { currentWebView?.reload() }
 
-        textUrl.setOnEditorActionListener { _, _, _ ->
-            navigateTo(textUrl.text.toString().trim()); hideKeyboard(); true
-        }
-        textUrl.setOnLongClickListener {
-            PopupMenu(this, textUrl).apply {
-                menu.add("Copy URL").setOnMenuItemClickListener {
-                    (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("URL", currentWebView?.url ?: ""))
-                    Toast.makeText(this@MainActivity, "Copied", Toast.LENGTH_SHORT).show(); true
-                }
-                menu.add("Share URL").setOnMenuItemClickListener {
-                    startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"; putExtra(Intent.EXTRA_TEXT, currentWebView?.url ?: "")
-                    }, "Share URL")); true
-                }
-                show()
-            }; true
-        }
+        textUrl.setOnEditorActionListener { _, _, _ -> loadUrlInstantly(textUrl.text.toString().trim()); hideKeyboard(); true }
 
-        findViewById<View>(R.id.btnBackArea).setOnClickListener    { currentWebView?.let { if (it.canGoBack()) it.goBack() } }
+        findViewById<View>(R.id.btnBackArea).setOnClickListener { currentWebView?.let { if (it.canGoBack()) it.goBack() } }
         findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward()) it.goForward() } }
-        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { currentWebView?.loadUrl(HOME_URL) }
+        findViewById<View>(R.id.btnHomeArea).setOnClickListener { loadUrlInstantly(HOME_URL) }
 
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
-            if (tabsOverlay.visibility == View.VISIBLE) {
-                tabsOverlay.visibility = View.GONE
-            } else {
-                captureAndStoreThumbnail {
-                    tabAdapter.setActive(activeTabId)
-                    tabAdapter.notifyDataSetChanged()
-                    updateTabCount()
-                    tabsOverlay.visibility = View.VISIBLE
-                }
+            if (tabsOverlay.visibility == View.VISIBLE) tabsOverlay.visibility = View.GONE
+            else captureAndStoreThumbnail {
+                refreshTabsRecycler()
+                tabsOverlay.visibility = View.VISIBLE
             }
         }
         
-        findViewById<View>(R.id.btnNewTab).setOnClickListener  { openNewTab() }
+        findViewById<View>(R.id.btnNewTab)?.setOnClickListener  { openNewTab() }
+        findViewById<View>(R.id.btnNewGroup)?.setOnClickListener {
+            val input = EditText(this).apply { setTextColor(Color.WHITE) }
+            AlertDialog.Builder(this, R.style.DarkDialog).setTitle("New Group Name").setView(input)
+                .setPositiveButton("Create") { _, _ -> createNewGroup(input.text.toString().ifEmpty { "Group" }) }.show()
+        }
+        
         findViewById<View>(R.id.btnMenuArea).setOnClickListener { showMenuSheet() }
 
         btnBookmark.setOnClickListener {
@@ -663,29 +665,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.btnQr).setOnClickListener {
-            qrScanLauncher.launch(ScanOptions().apply {
-                setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                setPrompt("Scan a QR code")
-                setCameraId(0)
-                setBeepEnabled(true)
-                setBarcodeImageEnabled(false)
-                setOrientationLocked(false)
-            })
-        }
-
-        val inputFind = findViewById<EditText>(R.id.findInput)
-        val tvMatches = findViewById<TextView>(R.id.findMatches)
-        inputFind.addTextChangedListener(object : android.text.TextWatcher {
-            override fun afterTextChanged(s: android.text.Editable?) { currentWebView?.findAllAsync(s.toString()) }
-            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
-            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
-        })
-        findViewById<View>(R.id.btnFindNext).setOnClickListener  { currentWebView?.findNext(true)  }
-        findViewById<View>(R.id.btnFindPrev).setOnClickListener  { currentWebView?.findNext(false) }
-        findViewById<View>(R.id.btnFindClose).setOnClickListener {
-            findBar.visibility = View.GONE
-            currentWebView?.clearMatches()
-            hideKeyboard()
+            qrScanLauncher.launch(ScanOptions().apply { setDesiredBarcodeFormats(ScanOptions.QR_CODE); setOrientationLocked(false) })
         }
     }
 
@@ -697,61 +677,23 @@ class MainActivity : AppCompatActivity() {
             
             cachedMenuSheetView?.findViewById<View>(R.id.menuNightMode)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
-                currentWebView?.evaluateJavascript(
-                    "(function(){var el=document.getElementById('__cf_night');if(el){el.remove();}else{var s=document.createElement('style');s.id='__cf_night';s.textContent='html{filter:invert(1) hue-rotate(180deg)!important}img,video,canvas{filter:invert(1) hue-rotate(180deg)!important}';document.head.appendChild(s);}})()", null
-                )
+                currentWebView?.evaluateJavascript("(function(){var el=document.getElementById('__cf_night');if(el){el.remove();}else{var s=document.createElement('style');s.id='__cf_night';s.textContent='html{filter:invert(1) hue-rotate(180deg)!important}img,video,canvas{filter:invert(1) hue-rotate(180deg)!important}';document.head.appendChild(s);}})()", null)
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuBookmarks)?.setOnClickListener  { cachedMenuSheet?.dismiss(); showBookmarksDialog() }
             cachedMenuSheetView?.findViewById<View>(R.id.menuHistory)?.setOnClickListener    { cachedMenuSheet?.dismiss(); showHistoryDialog()   }
-            cachedMenuSheetView?.findViewById<View>(R.id.menuShare)?.setOnClickListener {
-                cachedMenuSheet?.dismiss()
-                val url = currentWebView?.url ?: return@setOnClickListener
-                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, url)
-                    putExtra(Intent.EXTRA_SUBJECT, currentWebView?.title ?: "")
-                }, "Share"))
-            }
-            cachedMenuSheetView?.findViewById<View>(R.id.menuFindInPage)?.setOnClickListener {
-                cachedMenuSheet?.dismiss(); findBar.visibility = View.VISIBLE
-                currentWebView?.setFindListener { ord, total, _ ->
-                    findViewById<TextView>(R.id.findMatches).text = if (total > 0) "${ord + 1}/$total" else "0/0"
-                }
-            }
             cachedMenuSheetView?.findViewById<View>(R.id.menuDesktopMode)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 prefsManager.desktopMode = !prefsManager.desktopMode
                 webViews.values.forEach { applyUserAgentToWebView(it) } 
-                val cur = currentWebView?.url
-                if (!cur.isNullOrEmpty() && cur != HOME_URL) {
-                    currentWebView?.clearCache(false)
-                    currentWebView?.reload()
-                }
+                currentWebView?.reload()
             }
-            cachedMenuSheetView?.findViewById<View>(R.id.menuSettings)?.setOnClickListener {
-                cachedMenuSheet?.dismiss()
-                startActivity(Intent(this, SettingsActivity::class.java))
-            }
-            cachedMenuSheetView?.findViewById<View>(R.id.menuClearData)?.setOnClickListener {
-                cachedMenuSheet?.dismiss()
-                AlertDialog.Builder(this, R.style.DarkDialog)
-                    .setTitle("Clear Browsing Data")
-                    .setMessage("This will delete cache, cookies, and history.")
-                    .setPositiveButton("Clear") { _, _ -> clearData() }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-            }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuSettings)?.setOnClickListener { cachedMenuSheet?.dismiss(); startActivity(Intent(this, SettingsActivity::class.java)) }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuFindInPage)?.setOnClickListener { cachedMenuSheet?.dismiss(); findBar.visibility = View.VISIBLE }
         }
-
-        val desktopLabel = cachedMenuSheetView?.findViewById<TextView>(R.id.menuDesktopModeLabel)
-        if (prefsManager.desktopMode) {
-            desktopLabel?.text = "Desktop On"
-            desktopLabel?.setTextColor(0xFFFFFFFF.toInt())
-        } else {
-            desktopLabel?.text = "Desktop"
-            desktopLabel?.setTextColor(0xFFCCCCCC.toInt())
+        cachedMenuSheetView?.findViewById<TextView>(R.id.menuDesktopModeLabel)?.apply {
+            text = if (prefsManager.desktopMode) "Desktop On" else "Desktop"
+            setTextColor(if (prefsManager.desktopMode) Color.WHITE else Color.parseColor("#CCCCCC"))
         }
-
         cachedMenuSheet?.show()
     }
 
@@ -759,11 +701,7 @@ class MainActivity : AppCompatActivity() {
         val bks = prefsManager.getBookmarks()
         if (bks.isEmpty()) { Toast.makeText(this, "No bookmarks", Toast.LENGTH_SHORT).show(); return }
         AlertDialog.Builder(this, R.style.DarkDialog).setTitle("Bookmarks")
-            .setItems(bks.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w -> currentWebView?.loadUrl(bks[w].second) }
-            .setNeutralButton("Clear All") { _, _ ->
-                getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE).edit().remove("bookmarks").apply()
-                updateBookmarkIcon(currentWebView?.url ?: "")
-            }
+            .setItems(bks.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w -> loadUrlInstantly(bks[w].second) }
             .setNegativeButton("Close", null).show()
     }
 
@@ -771,35 +709,16 @@ class MainActivity : AppCompatActivity() {
         val hist = prefsManager.getHistory()
         if (hist.isEmpty()) { Toast.makeText(this, "No history", Toast.LENGTH_SHORT).show(); return }
         AlertDialog.Builder(this, R.style.DarkDialog).setTitle("History")
-            .setItems(hist.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w -> currentWebView?.loadUrl(hist[w].second) }
-            .setNeutralButton("Clear") { _, _ -> prefsManager.clearHistory() }
+            .setItems(hist.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w -> loadUrlInstantly(hist[w].second) }
             .setNegativeButton("Close", null).show()
-    }
-
-    private fun clearData() {
-        WebStorage.getInstance().deleteAllData()
-        CookieManager.getInstance().removeAllCookies(null)
-        webViews.values.forEach { it.clearCache(true); it.clearHistory() }
-        prefsManager.clearHistory()
-        
-        // مسح التبويبات المحفوظة
-        getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE).edit().remove("SAVED_TABS").apply()
-        
-        Toast.makeText(this, "Data Cleared", Toast.LENGTH_SHORT).show()
     }
 
     private fun getUserAgentString(): String {
         val defaultUA = WebSettings.getDefaultUserAgent(this)
         return if (prefsManager.desktopMode) {
-            try {
-                val chromeVersion = Regex("Chrome/([0-9.]+)").find(defaultUA)?.value ?: "Chrome/124.0.0.0"
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) $chromeVersion Safari/537.36"
-            } catch (e: Exception) {
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            }
-        } else {
-            defaultUA
-        }
+            val chromeVersion = Regex("Chrome/([0-9.]+)").find(defaultUA)?.value ?: "Chrome/124.0.0.0"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) $chromeVersion Safari/537.36"
+        } else defaultUA
     }
 
     private fun applyUserAgentToWebView(wv: WebView) {
@@ -811,25 +730,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun navigateTo(input: String) {
-        val url = when {
-            input.startsWith("http://") || input.startsWith("https://") -> input
-            Patterns.WEB_URL.matcher(input).matches() -> "https://$input"
-            else -> prefsManager.searchEngine + URLEncoder.encode(input, "utf-8")
-        }
-        currentWebView?.loadUrl(url)
-    }
-
     private fun updateSearchEngineIcon() {
         val res = when {
-            prefsManager.searchEngine.contains("google")     -> R.drawable.ic_engine_google
             prefsManager.searchEngine.contains("duckduckgo") -> R.drawable.ic_engine_duckduckgo
             prefsManager.searchEngine.contains("bing")       -> R.drawable.ic_engine_bing
             prefsManager.searchEngine.contains("brave")      -> R.drawable.ic_engine_brave
-            else                                              -> R.drawable.ic_engine_google
+            else -> R.drawable.ic_engine_google
         }
         imgSearchEngine.setImageResource(res)
-        imgSearchEngine.colorFilter = null
     }
 
     private fun updateBookmarkIcon(url: String) {
@@ -849,13 +757,13 @@ class MainActivity : AppCompatActivity() {
 
     inner class SearchBridge {
         @JavascriptInterface
-        fun navigate(input: String) { runOnUiThread { navigateTo(input) } }
+        fun navigate(input: String) { runOnUiThread { loadUrlInstantly(input) } }
     }
 }
 
 class TabAdapter(
     private val context: Context,
-    private val tabs: MutableList<TabState>,
+    private var tabs: MutableList<TabState>,
     private val onTabClick: (TabState) -> Unit,
     private val onTabClose: (TabState) -> Unit
 ) : RecyclerView.Adapter<TabAdapter.VH>() {
@@ -864,17 +772,17 @@ class TabAdapter(
     private val ioExecutor = Executors.newFixedThreadPool(2)
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    fun updateTabs(newTabs: MutableList<TabState>) { this.tabs = newTabs }
     fun setActive(id: Int) { activeId = id }
 
     inner class VH(v: View) : RecyclerView.ViewHolder(v) {
-        val title:     TextView  = v.findViewById(R.id.tabTitle)
-        val favicon:   ImageView = v.findViewById(R.id.tabFavicon)
+        val title: TextView = v.findViewById(R.id.tabTitle)
+        val favicon: ImageView = v.findViewById(R.id.tabFavicon)
         val thumbnail: ImageView = v.findViewById(R.id.tabThumbnail)
-        val close:     ImageView = v.findViewById(R.id.tabClose)
+        val close: ImageView = v.findViewById(R.id.tabClose)
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-        VH(LayoutInflater.from(parent.context).inflate(R.layout.item_tab, parent, false))
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = VH(LayoutInflater.from(parent.context).inflate(R.layout.item_tab, parent, false))
 
     override fun onBindViewHolder(h: VH, position: Int) {
         val tab = tabs[position]
@@ -882,9 +790,7 @@ class TabAdapter(
 
         h.title.text = tab.title.ifEmpty { "New Tab" }
         h.favicon.setImageResource(R.drawable.home)
-        val defaultColor = if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt()
-        h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(defaultColor)
-
+        h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt())
         h.thumbnail.scaleType = ImageView.ScaleType.CENTER_CROP
 
         if (tab.ramThumbnail != null) {
@@ -894,27 +800,17 @@ class TabAdapter(
                 val file = File(context.cacheDir, "thumb_${tab.id}.webp")
                 if (file.exists()) {
                     val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                    mainHandler.post {
-                        if (h.adapterPosition == position) { 
-                            h.thumbnail.setImageBitmap(bitmap)
-                        }
-                    }
-                } else {
-                    mainHandler.post { h.thumbnail.setImageResource(android.R.color.transparent) }
-                }
+                    mainHandler.post { if (h.adapterPosition == position) h.thumbnail.setImageBitmap(bitmap) }
+                } else mainHandler.post { h.thumbnail.setImageResource(android.R.color.transparent) }
             }
-        } else {
-            h.thumbnail.setImageResource(android.R.color.transparent)
-        }
+        } else h.thumbnail.setImageResource(android.R.color.transparent)
 
         h.itemView.background = context.getDrawable(if (isActive) R.drawable.tab_card_active else R.drawable.tab_card_bg)
-        val textColor  = if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt()
-        val closeColor = if (isActive) 0xFF003366.toInt() else 0xFFAAAAAA.toInt()
-        h.title.setTextColor(textColor)
-        h.close.setColorFilter(closeColor)
+        h.title.setTextColor(if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt())
+        h.close.setColorFilter(if (isActive) 0xFF003366.toInt() else 0xFFAAAAAA.toInt())
 
         h.itemView.setOnClickListener { onTabClick(tab) }
-        h.close.setOnClickListener   { onTabClose(tab) }
+        h.close.setOnClickListener { onTabClose(tab) }
     }
 
     override fun getItemCount() = tabs.size
