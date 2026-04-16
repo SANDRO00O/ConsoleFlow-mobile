@@ -18,6 +18,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Patterns
+import android.util.TypedValue
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.webkit.*
@@ -100,7 +101,6 @@ class MainActivity : AppCompatActivity() {
         "yahoo.com", "yandex.com"
     )
 
-    // ── Tab Groups Architecture ──
     private var tabGroups = mutableListOf<TabGroup>()
     private var activeGroupId = 0
     private var activeTabId = 0
@@ -116,7 +116,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val qrScanLauncher = registerForActivityResult(ScanContract()) { result: ScanIntentResult ->
-        result.contents?.let { scanned -> loadUrlInstantly(scanned) }
+        result.contents?.let { scanned -> navigateTo(scanned) }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -172,9 +172,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ── Instant Load Helper ──
+    // ── Navigation Logic (Fixed Search Engine Issue) ──
+    private fun navigateTo(input: String) {
+        val finalUrl = when {
+            input.startsWith("http://") || input.startsWith("https://") -> input
+            Patterns.WEB_URL.matcher(input).matches() -> "https://$input"
+            // إذا كان مجرد نص (مثل jha)، ضعه في محرك البحث
+            else -> prefsManager.searchEngine + URLEncoder.encode(input, "utf-8")
+        }
+        loadUrlInstantly(finalUrl)
+    }
+
     private fun loadUrlInstantly(url: String) {
-        textUrl.setText(url)
+        textUrl.setText(if (url == HOME_URL || url.startsWith(ERROR_URL)) "" else url)
         progressBar.progress = 5
         progressBar.visibility = View.VISIBLE
         currentWebView?.loadUrl(url)
@@ -291,7 +301,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── Groups & Tabs Management ──
-    
     private fun updateGroupsUI() {
         tabGroupsContainer.removeAllViews()
         for (group in tabGroups) {
@@ -301,7 +310,7 @@ class MainActivity : AppCompatActivity() {
                 textSize = 14f
                 if (group.id == activeGroupId) {
                     setTextColor(Color.WHITE)
-                    setBackgroundResource(R.drawable.bg_menu_item) // Using the new rounded bg
+                    setBackgroundResource(R.drawable.bg_menu_item)
                 } else {
                     setTextColor(Color.GRAY)
                     setBackgroundColor(Color.TRANSPARENT)
@@ -314,52 +323,43 @@ class MainActivity : AppCompatActivity() {
                 }
                 
                 setOnLongClickListener {
-                    showGroupOptions(group)
+                    showModernPopup(group.name, listOf("Rename Group", "Delete Group")) { index ->
+                        when(index) {
+                            0 -> {
+                                val input = EditText(this@MainActivity).apply { setText(group.name); setTextColor(Color.WHITE) }
+                                AlertDialog.Builder(this@MainActivity, R.style.DarkDialog).setTitle("Rename Group").setView(input)
+                                    .setPositiveButton("Save") { _, _ ->
+                                        group.name = input.text.toString()
+                                        updateGroupsUI()
+                                        savePersistentTabs()
+                                    }.show()
+                            }
+                            1 -> {
+                                if (tabGroups.size == 1) {
+                                    Toast.makeText(this@MainActivity, "Cannot delete the last group", Toast.LENGTH_SHORT).show()
+                                    return@showModernPopup
+                                }
+                                group.tabs.forEach { t ->
+                                    ioExecutor.execute { File(cacheDir, "thumb_${t.id}.webp").delete() }
+                                    webViews[t.id]?.destroy()
+                                    webViews.remove(t.id)
+                                }
+                                tabGroups.remove(group)
+                                if (activeGroupId == group.id) {
+                                    activeGroupId = tabGroups.first().id
+                                    activeTabId = currentGroup?.tabs?.firstOrNull()?.id ?: 0
+                                }
+                                updateGroupsUI()
+                                refreshTabsRecycler()
+                                savePersistentTabs()
+                            }
+                        }
+                    }
                     true
                 }
             }
             tabGroupsContainer.addView(tv)
         }
-    }
-
-    private fun showGroupOptions(group: TabGroup) {
-        val options = arrayOf("Rename Group", "Delete Group")
-        AlertDialog.Builder(this, R.style.DarkDialog).setItems(options) { _, which ->
-            when (which) {
-                0 -> {
-                    val input = EditText(this).apply {
-                        setText(group.name)
-                        setTextColor(Color.WHITE)
-                    }
-                    AlertDialog.Builder(this, R.style.DarkDialog).setTitle("Rename Group").setView(input)
-                        .setPositiveButton("Save") { _, _ ->
-                            group.name = input.text.toString()
-                            updateGroupsUI()
-                            savePersistentTabs()
-                        }.show()
-                }
-                1 -> {
-                    if (tabGroups.size == 1) {
-                        Toast.makeText(this, "Cannot delete the last group", Toast.LENGTH_SHORT).show()
-                        return@setItems
-                    }
-                    // Delete all tabs in group
-                    group.tabs.forEach { t ->
-                        ioExecutor.execute { File(cacheDir, "thumb_${t.id}.webp").delete() }
-                        webViews[t.id]?.destroy()
-                        webViews.remove(t.id)
-                    }
-                    tabGroups.remove(group)
-                    if (activeGroupId == group.id) {
-                        activeGroupId = tabGroups.first().id
-                        activeTabId = currentGroup?.tabs?.firstOrNull()?.id ?: 0
-                    }
-                    updateGroupsUI()
-                    refreshTabsRecycler()
-                    savePersistentTabs()
-                }
-            }
-        }.show()
     }
 
     private fun createNewGroup(name: String, url: String = HOME_URL) {
@@ -514,22 +514,20 @@ class MainActivity : AppCompatActivity() {
         applyUserAgentToWebView(wv)
         wv.addJavascriptInterface(SearchBridge(), "Android")
 
-        // ── Long Press Context Menu for Links ──
+        // ── Modern Context Menu for Links ──
         wv.setOnCreateContextMenuListener { _, _, _ ->
             val result = wv.hitTestResult
             if (result.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || result.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
                 val url = result.extra ?: return@setOnCreateContextMenuListener
-                val options = arrayOf("Open in New Tab", "Copy Link", "Bookmark Link", "Share")
-                AlertDialog.Builder(this@MainActivity, R.style.DarkDialog)
-                    .setTitle(url)
-                    .setItems(options) { _, which ->
-                        when(which) {
-                            0 -> { openNewTab(url); Toast.makeText(this@MainActivity, "Opened in new tab", Toast.LENGTH_SHORT).show() }
-                            1 -> { (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("URL", url)); Toast.makeText(this@MainActivity, "Copied", Toast.LENGTH_SHORT).show() }
-                            2 -> { prefsManager.toggleBookmark("Bookmark", url); Toast.makeText(this@MainActivity, "Bookmarked", Toast.LENGTH_SHORT).show() }
-                            3 -> { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, url) }, "Share")) }
-                        }
-                    }.show()
+                
+                showModernPopup(url, listOf("Open in New Tab", "Copy Link", "Bookmark Link", "Share")) { index ->
+                    when(index) {
+                        0 -> { openNewTab(url); Toast.makeText(this@MainActivity, "Opened in new tab", Toast.LENGTH_SHORT).show() }
+                        1 -> { (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("URL", url)); Toast.makeText(this@MainActivity, "Copied", Toast.LENGTH_SHORT).show() }
+                        2 -> { prefsManager.toggleBookmark("Bookmark", url); Toast.makeText(this@MainActivity, "Bookmarked", Toast.LENGTH_SHORT).show() }
+                        3 -> { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, url) }, "Share")) }
+                    }
+                }
             }
         }
 
@@ -633,7 +631,26 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.setOnChildScrollUpCallback { _, _ -> (currentWebView?.scrollY ?: 0) > 0 }
         swipeRefresh.setOnRefreshListener { currentWebView?.reload() }
 
-        textUrl.setOnEditorActionListener { _, _, _ -> loadUrlInstantly(textUrl.text.toString().trim()); hideKeyboard(); true }
+        // تم إصلاح ميزة البحث وكتابة الروابط هنا
+        textUrl.setOnEditorActionListener { _, _, _ -> navigateTo(textUrl.text.toString().trim()); hideKeyboard(); true }
+
+        // Modern Context Menu للرابط في الشريط العلوي
+        textUrl.setOnLongClickListener {
+            showModernPopup("URL Options", listOf("Copy URL", "Share URL")) { index ->
+                when(index) {
+                    0 -> {
+                        (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("URL", currentWebView?.url ?: ""))
+                        Toast.makeText(this@MainActivity, "Copied", Toast.LENGTH_SHORT).show()
+                    }
+                    1 -> {
+                        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"; putExtra(Intent.EXTRA_TEXT, currentWebView?.url ?: "")
+                        }, "Share URL"))
+                    }
+                }
+            }
+            true
+        }
 
         findViewById<View>(R.id.btnBackArea).setOnClickListener { currentWebView?.let { if (it.canGoBack()) it.goBack() } }
         findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward()) it.goForward() } }
@@ -649,7 +666,7 @@ class MainActivity : AppCompatActivity() {
         
         findViewById<View>(R.id.btnNewTab)?.setOnClickListener  { openNewTab() }
         findViewById<View>(R.id.btnNewGroup)?.setOnClickListener {
-            val input = EditText(this).apply { setTextColor(Color.WHITE) }
+            val input = EditText(this).apply { setTextColor(Color.WHITE); setPadding(32,32,32,32) }
             AlertDialog.Builder(this, R.style.DarkDialog).setTitle("New Group Name").setView(input)
                 .setPositiveButton("Create") { _, _ -> createNewGroup(input.text.toString().ifEmpty { "Group" }) }.show()
         }
@@ -667,6 +684,70 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnQr).setOnClickListener {
             qrScanLauncher.launch(ScanOptions().apply { setDesiredBarcodeFormats(ScanOptions.QR_CODE); setOrientationLocked(false) })
         }
+
+        // تم إصلاح ميزة البحث في الصفحة (Find in Page)
+        val inputFind = findViewById<EditText>(R.id.findInput)
+        val tvMatches = findViewById<TextView>(R.id.findMatches)
+        inputFind.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) { currentWebView?.findAllAsync(s.toString()) }
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+        })
+        findViewById<View>(R.id.btnFindNext).setOnClickListener  { currentWebView?.findNext(true)  }
+        findViewById<View>(R.id.btnFindPrev).setOnClickListener  { currentWebView?.findNext(false) }
+        findViewById<View>(R.id.btnFindClose).setOnClickListener {
+            findBar.visibility = View.GONE
+            currentWebView?.clearMatches()
+            hideKeyboard()
+        }
+    }
+
+    // ── Modern Popup Builder (يستبدل AlertDialog الافتراضي) ──
+    private fun showModernPopup(title: String, items: List<String>, onSelect: (Int) -> Unit) {
+        val sheet = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
+        
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_bottom_sheet)
+            setPadding(0, 32, 0, 32)
+        }
+
+        val handle = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(100, 12).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = 48
+            }
+            setBackgroundResource(R.drawable.bg_menu_item)
+        }
+        container.addView(handle)
+
+        val titleView = TextView(this).apply {
+            text = title
+            setTextColor(Color.parseColor("#AAAAAA"))
+            textSize = 12f
+            setPadding(48, 0, 48, 24)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        container.addView(titleView)
+
+        items.forEachIndexed { index, itemText ->
+            val itemView = TextView(this).apply {
+                text = itemText
+                setTextColor(Color.WHITE)
+                textSize = 16f
+                setPadding(48, 36, 48, 36)
+                setBackgroundResource(TypedValue.getResourceId(TypedValue().apply { context.theme.resolveAttribute(android.R.attr.selectableItemBackground, this, true) }, 0))
+                setOnClickListener {
+                    sheet.dismiss()
+                    onSelect(index)
+                }
+            }
+            container.addView(itemView)
+        }
+
+        sheet.setContentView(container)
+        sheet.show()
     }
 
     private fun showMenuSheet() {
@@ -700,17 +781,17 @@ class MainActivity : AppCompatActivity() {
     private fun showBookmarksDialog() {
         val bks = prefsManager.getBookmarks()
         if (bks.isEmpty()) { Toast.makeText(this, "No bookmarks", Toast.LENGTH_SHORT).show(); return }
-        AlertDialog.Builder(this, R.style.DarkDialog).setTitle("Bookmarks")
-            .setItems(bks.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w -> loadUrlInstantly(bks[w].second) }
-            .setNegativeButton("Close", null).show()
+        showModernPopup("Bookmarks", bks.map { it.first.ifEmpty { it.second } }) { index ->
+            loadUrlInstantly(bks[index].second)
+        }
     }
 
     private fun showHistoryDialog() {
         val hist = prefsManager.getHistory()
         if (hist.isEmpty()) { Toast.makeText(this, "No history", Toast.LENGTH_SHORT).show(); return }
-        AlertDialog.Builder(this, R.style.DarkDialog).setTitle("History")
-            .setItems(hist.map { it.first.ifEmpty { it.second } }.toTypedArray()) { _, w -> loadUrlInstantly(hist[w].second) }
-            .setNegativeButton("Close", null).show()
+        showModernPopup("History", hist.map { it.first.ifEmpty { it.second } }) { index ->
+            loadUrlInstantly(hist[index].second)
+        }
     }
 
     private fun getUserAgentString(): String {
