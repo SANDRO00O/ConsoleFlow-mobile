@@ -1,40 +1,245 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_bottom_sheet" android:orientation="vertical" android:padding="16dp">
-    
-    <!-- المقبض الدائري -->
-    <View android:layout_width="40dp" android:layout_height="5dp" android:layout_gravity="center" android:layout_marginBottom="24dp" android:background="@drawable/bg_menu_item" />
-    
-    <!-- أزرار القائمة بشكل شبكة (مربعات منحنية) -->
-    <GridLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:columnCount="3" android:rowCount="2" android:alignmentMode="alignMargins" android:useDefaultMargins="true">
-        
-        <LinearLayout android:id="@+id/menuNightMode" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_night" android:tint="#FFFFFF" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Night Mode" android:textColor="#FFFFFF" android:textSize="12sp" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_bottom_sheet"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- المقبض الدائري العلوي -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="5dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/bg_menu_item" />
+
+    <!-- شبكة الأزرار 4 × 2 لتشمل 8 عناصر -->
+    <GridLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:alignmentMode="alignMargins"
+        android:columnCount="4"
+        android:rowCount="2"
+        android:useDefaultMargins="true">
+
+        <!-- 1. Night Mode -->
+        <LinearLayout
+            android:id="@+id/menuNightMode"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_columnWeight="1"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_night"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Night Mode"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
         </LinearLayout>
-        
-        <LinearLayout android:id="@+id/menuBookmarks" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_bookmarks" android:tint="#FFFFFF" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Bookmarks" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+        <!-- 2. Bookmarks -->
+        <LinearLayout
+            android:id="@+id/menuBookmarks"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_columnWeight="1"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_bookmarks"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Bookmarks"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
         </LinearLayout>
-        
-        <LinearLayout android:id="@+id/menuHistory" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_history" android:tint="#FFFFFF" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="History" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+        <!-- 3. History -->
+        <LinearLayout
+            android:id="@+id/menuHistory"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_columnWeight="1"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_history"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="History"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
         </LinearLayout>
-        
-        <LinearLayout android:id="@+id/menuFindInPage" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_find" android:tint="#FFFFFF" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Find in Page" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+        <!-- 4. Share (جديد) -->
+        <LinearLayout
+            android:id="@+id/menuShare"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_columnWeight="1"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_share_icon"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Share"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
         </LinearLayout>
-        
-        <LinearLayout android:id="@+id/menuDesktopMode" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_desktop" android:tint="#FFFFFF" />
-            <TextView android:id="@+id/menuDesktopModeLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Desktop" android:textColor="#CCCCCC" android:textSize="12sp" />
+
+        <!-- 5. Find in Page -->
+        <LinearLayout
+            android:id="@+id/menuFindInPage"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_columnWeight="1"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_find"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Find in Page"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
         </LinearLayout>
-        
-        <LinearLayout android:id="@+id/menuSettings" android:layout_width="0dp" android:layout_height="80dp" android:layout_columnWeight="1" android:background="@drawable/bg_menu_item" android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true">
-            <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_settings" android:tint="#FFFFFF" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Settings" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+        <!-- 6. Desktop Mode -->
+        <LinearLayout
+            android:id="@+id/menuDesktopMode"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_columnWeight="1"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_desktop"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:id="@+id/menuDesktopModeLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Desktop"
+                android:textColor="#CCCCCC"
+                android:textSize="12sp" />
         </LinearLayout>
+
+        <!-- 7. Settings -->
+        <LinearLayout
+            android:id="@+id/menuSettings"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_columnWeight="1"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_settings"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Settings"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 8. Clear Data (جديد) -->
+        <LinearLayout
+            android:id="@+id/menuClearData"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_columnWeight="1"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_delete"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Clear Data"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+        </LinearLayout>
+
     </GridLayout>
+
 </LinearLayout>

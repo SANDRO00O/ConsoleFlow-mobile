@@ -30,6 +30,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -263,18 +264,7 @@ class MainActivity : AppCompatActivity() {
         tabCount            = findViewById(R.id.tabCount)
 
         // قد لا يكون هذا العنصر موجودًا في التخطيط القديم، نتحقق منه
-        tabGroupsContainer = findViewById<LinearLayout?>(R.id.tabGroupsContainer)?.apply {
-            // إذا كان موجودًا فسنستخدمه، وإلا ننشئه برمجيًا (fallback)
-        } ?: run {
-            // fallback: إنشاء LinearLayout أفقي لإظهار المجموعات
-            LinearLayout(this).also {
-                it.id = R.id.tabGroupsContainer
-                it.orientation = LinearLayout.HORIZONTAL
-                // سنضيفه إلى الواجهة المناسبة (على سبيل المثال أعلى tabsRecycler)
-                val parent = tabsOverlay.findViewById<LinearLayout>(R.id.tabsHeaderContainer)
-                parent?.addView(it, 0)  // نضعه قبل العناصر الأخرى
-            }
-        }
+        tabGroupsContainer = findViewById<LinearLayout>(R.id.tabGroupsContainer)
 
         tabAdapter = TabAdapter(this, mutableListOf(),
             onTabClick = { tab -> switchToTab(tab) },
@@ -725,8 +715,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // خيار تعطيل اعتراض الصفحات الرئيسية (يمكن ربطه بإعداد في المستقبل)
-                if (prefsManager.getBoolean("disable_intercept", false)) return null
+                if (prefsManager.sharedPreferences.getBoolean("disable_intercept", false)) return null
 
                 val host = request.url.host ?: ""
                 if (NO_INTERCEPT_DOMAINS.any { host == it || host.endsWith(".$it") }) return null
