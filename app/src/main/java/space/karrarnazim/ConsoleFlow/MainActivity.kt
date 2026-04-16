@@ -61,6 +61,7 @@ data class TabState(
     var hasThumbnail: Boolean = false
 ) : Serializable {
     @Transient var ramThumbnail: Bitmap? = null
+    @Transient var faviconBitmap: Bitmap? = null
 }
 
 data class TabGroup(
@@ -223,6 +224,11 @@ class MainActivity : AppCompatActivity() {
             wv.saveState(bundle)
             outState.putBundle("webview_$tabId", bundle)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateSearchEngineIcon()
     }
 
     override fun onPause() {
@@ -702,6 +708,27 @@ class MainActivity : AppCompatActivity() {
                     "x.send();" +
                     "})()", null
                 )
+
+                // تعطيل SwipeRefresh عند سحب زر Eruda لمنع تعارض الـ touch events
+                view.evaluateJavascript(
+                    "(function(){" +
+                    "if(window.__erudaTouchHooked)return;" +
+                    "window.__erudaTouchHooked=true;" +
+                    "function getErudaEl(){return document.getElementById('eruda');}" +
+                    "document.addEventListener('touchstart',function(e){" +
+                        "var el=getErudaEl();" +
+                        "if(el&&el.contains(e.target)){" +
+                            "try{Android.setSwipeRefresh(false);}catch(ex){}" +
+                        "}" +
+                    "},{capture:true,passive:true});" +
+                    "document.addEventListener('touchend',function(){" +
+                        "try{Android.setSwipeRefresh(true);}catch(ex){}" +
+                    "},{capture:true,passive:true});" +
+                    "document.addEventListener('touchcancel',function(){" +
+                        "try{Android.setSwipeRefresh(true);}catch(ex){}" +
+                    "},{capture:true,passive:true});" +
+                    "})()", null
+                )
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -781,6 +808,15 @@ class MainActivity : AppCompatActivity() {
         wv.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView, newProgress: Int) {
                 if (view == currentWebView) progressBar.progress = newProgress
+            }
+
+            override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
+                super.onReceivedIcon(view, icon)
+                icon ?: return
+                currentGroup?.tabs?.find { t -> t.id == tabId }?.let { tab ->
+                    tab.faviconBitmap = icon
+                    tabAdapter.updateFavicon(tabId, icon)
+                }
             }
 
             override fun onShowCustomView(view: View, callback: CustomViewCallback) {
@@ -937,7 +973,7 @@ class MainActivity : AppCompatActivity() {
                 setCameraId(0)
                 setBeepEnabled(true)
                 setBarcodeImageEnabled(false)
-                setOrientationLocked(false)
+                setOrientationLocked(true)
             })
         }
 
@@ -1125,7 +1161,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "No bookmarks", Toast.LENGTH_SHORT).show()
             return
         }
-        showModernPopup("Bookmarks", bks.map { it.first.ifEmpty { it.second } }) { index ->
+        showListWithFavicons("Bookmarks", bks) { index ->
             loadUrlInstantly(bks[index].second)
         }
     }
@@ -1136,9 +1172,111 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "No history", Toast.LENGTH_SHORT).show()
             return
         }
-        showModernPopup("History", hist.map { it.first.ifEmpty { it.second } }) { index ->
+        showListWithFavicons("History", hist) { index ->
             loadUrlInstantly(hist[index].second)
         }
+    }
+
+    private fun showListWithFavicons(
+        title: String,
+        items: List<Pair<String, String>>,
+        onSelect: (Int) -> Unit
+    ) {
+        val sheet = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
+        val dp = resources.displayMetrics.density
+
+        val scrollView = android.widget.ScrollView(this)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            try { setBackgroundResource(R.drawable.bg_bottom_sheet) }
+            catch (_: Exception) { setBackgroundColor(Color.parseColor("#2C2C2C")) }
+            setPadding(0, 32, 0, 32)
+        }
+        scrollView.addView(container)
+
+        val handle = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                (100 * dp).toInt(), (12 * dp).toInt()
+            ).apply {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                bottomMargin = (16 * dp).toInt()
+            }
+            try { setBackgroundResource(R.drawable.bg_menu_item) }
+            catch (_: Exception) { setBackgroundColor(Color.WHITE) }
+        }
+        container.addView(handle)
+
+        val titleView = TextView(this).apply {
+            text = title
+            setTextColor(Color.parseColor("#AAAAAA"))
+            textSize = 12f
+            setPadding((48 * dp).toInt(), 0, (48 * dp).toInt(), (24 * dp).toInt())
+        }
+        container.addView(titleView)
+
+        items.forEachIndexed { index, (itemTitle, url) ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding((48 * dp).toInt(), (20 * dp).toInt(), (48 * dp).toInt(), (20 * dp).toInt())
+                val tv = TypedValue()
+                context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
+                setBackgroundResource(tv.resourceId)
+            }
+
+            val iconSize = (28 * dp).toInt()
+            val faviconView = android.widget.ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply {
+                    marginEnd = (16 * dp).toInt()
+                }
+                setImageResource(R.drawable.ic_favicon_fallback)
+                imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            }
+            row.addView(faviconView)
+
+            val textView = TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                text = itemTitle.ifEmpty { url }
+                setTextColor(Color.WHITE)
+                textSize = 15f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }
+            row.addView(textView)
+
+            // Load favicon async from Google's service
+            val domain = try { android.net.Uri.parse(url).host ?: "" } catch (_: Exception) { "" }
+            if (domain.isNotEmpty()) {
+                ioExecutor.execute {
+                    try {
+                        val faviconUrl = "https://www.google.com/s2/favicons?domain=$domain&sz=64"
+                        val req = okhttp3.Request.Builder().url(faviconUrl).build()
+                        val resp = okClient.newCall(req).execute()
+                        val bytes = resp.body?.bytes()
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            mainHandler.post {
+                                if (bmp != null) {
+                                    faviconView.setImageBitmap(bmp)
+                                    faviconView.imageTintList = null
+                                }
+                            }
+                        }
+                    } catch (_: Exception) { }
+                }
+            }
+
+            row.setOnClickListener {
+                sheet.dismiss()
+                onSelect(index)
+            }
+            container.addView(row)
+        }
+
+        sheet.setContentView(scrollView)
+        sheet.show()
     }
 
     private fun clearData() {
@@ -1225,6 +1363,12 @@ class MainActivity : AppCompatActivity() {
         fun navigate(input: String) {
             runOnUiThread { navigateTo(input) }
         }
+
+        // يُستدعى من JS عند لمس Eruda لتعطيل SwipeRefresh مؤقتاً
+        @JavascriptInterface
+        fun setSwipeRefresh(enabled: Boolean) {
+            mainHandler.post { swipeRefresh.isEnabled = enabled }
+        }
     }
 }
 
@@ -1251,6 +1395,14 @@ class TabAdapter(
         activeId = id
     }
 
+    fun updateFavicon(tabId: Int, favicon: Bitmap) {
+        val position = tabs.indexOfFirst { it.id == tabId }
+        if (position >= 0) {
+            tabs[position].faviconBitmap = favicon
+            mainHandler.post { notifyItemChanged(position) }
+        }
+    }
+
     inner class VH(v: View) : RecyclerView.ViewHolder(v) {
         val title: TextView = v.findViewById(R.id.tabTitle)
         val favicon: ImageView = v.findViewById(R.id.tabFavicon)
@@ -1268,10 +1420,18 @@ class TabAdapter(
         val isActive = tab.id == activeId
 
         h.title.text = tab.title.ifEmpty { "New Tab" }
-        h.favicon.setImageResource(R.drawable.home)
-        h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(
-            if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt()
-        )
+
+        // عرض الفيكون الحقيقي أو الـ fallback
+        if (tab.faviconBitmap != null) {
+            h.favicon.setImageBitmap(tab.faviconBitmap)
+            h.favicon.imageTintList = null
+        } else {
+            h.favicon.setImageResource(R.drawable.ic_favicon_fallback)
+            h.favicon.imageTintList = android.content.res.ColorStateList.valueOf(
+                if (isActive) 0xFF003366.toInt() else 0xFFFFFFFF.toInt()
+            )
+        }
+
         h.thumbnail.scaleType = ImageView.ScaleType.CENTER_CROP
 
         if (tab.ramThumbnail != null) {
