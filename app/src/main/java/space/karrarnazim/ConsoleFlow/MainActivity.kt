@@ -731,13 +731,19 @@ class MainActivity : AppCompatActivity() {
         }
         container.addView(titleView)
 
-        items.forEachIndexed { index, itemText ->
+                items.forEachIndexed { index, itemText ->
             val itemView = TextView(this).apply {
                 text = itemText
                 setTextColor(Color.WHITE)
                 textSize = 16f
                 setPadding(48, 36, 48, 36)
-                setBackgroundResource(TypedValue.getResourceId(TypedValue().apply { context.theme.resolveAttribute(android.R.attr.selectableItemBackground, this, true) }, 0))
+                
+                // --- الجزء الذي تم إصلاحه هنا ---
+                val outValue = TypedValue()
+                context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                setBackgroundResource(outValue.resourceId)
+                // --------------------------------
+                
                 setOnClickListener {
                     sheet.dismiss()
                     onSelect(index)
