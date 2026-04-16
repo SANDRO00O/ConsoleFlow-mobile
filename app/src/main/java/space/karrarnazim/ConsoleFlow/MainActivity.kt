@@ -130,6 +130,9 @@ class MainActivity : AppCompatActivity() {
 
     private val currentGroup: TabGroup? get() = tabGroups.find { it.id == activeGroupId }
 
+    // متغير لحفظ حالة النشاط لاستخدامها لاحقاً
+    private var savedStateBundle: Bundle? = null
+
     // متغير للتحقق مما إذا كان قد تم تحميل التبويبات مسبقاً
     private var isTabsInitialized = false
 
@@ -156,6 +159,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         prefsManager = PrefsManager(this)
         ioExecutor = Executors.newCachedThreadPool()
+
+        // حفظ حالة النشاط لاستخدامها لاحقاً
+        savedStateBundle = savedInstanceState
 
         initViews()
         setupListeners()
@@ -195,8 +201,8 @@ class MainActivity : AppCompatActivity() {
     private fun initializeTabsAndWebView() {
         try {
             val intentUrl = intent?.data?.toString()
-            if (savedInstanceState != null) {
-                restoreState(savedInstanceState)
+            if (savedStateBundle != null) {
+                restoreState(savedStateBundle!!)
             } else {
                 loadPersistentTabs(intentUrl)
             }
