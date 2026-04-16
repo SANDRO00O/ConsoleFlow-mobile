@@ -6,15 +6,13 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <!-- المقبض الدائري العلوي -->
     <View
         android:layout_width="40dp"
         android:layout_height="5dp"
         android:layout_gravity="center"
-        android:layout_marginBottom="24dp"
+        android:layout_marginBottom="22dp"
         android:background="@drawable/bg_menu_item" />
 
-    <!-- شبكة الأزرار 4 × 2 لتشمل 8 عناصر -->
     <GridLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -23,7 +21,6 @@
         android:rowCount="2"
         android:useDefaultMargins="true">
 
-        <!-- 1. Night Mode -->
         <LinearLayout
             android:id="@+id/menuNightMode"
             android:layout_width="0dp"
@@ -50,7 +47,6 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 2. Bookmarks -->
         <LinearLayout
             android:id="@+id/menuBookmarks"
             android:layout_width="0dp"
@@ -77,7 +73,6 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 3. History -->
         <LinearLayout
             android:id="@+id/menuHistory"
             android:layout_width="0dp"
@@ -104,9 +99,8 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 4. Share (جديد) -->
         <LinearLayout
-            android:id="@+id/menuShare"
+            android:id="@+id/menuConsoleToggle"
             android:layout_width="0dp"
             android:layout_height="80dp"
             android:layout_columnWeight="1"
@@ -119,19 +113,19 @@
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_share_icon"
+                android:src="@drawable/ic_code"
                 android:tint="#FFFFFF" />
 
             <TextView
+                android:id="@+id/menuConsoleLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Share"
+                android:text="Console On"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 5. Find in Page -->
         <LinearLayout
             android:id="@+id/menuFindInPage"
             android:layout_width="0dp"
@@ -158,7 +152,6 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 6. Desktop Mode -->
         <LinearLayout
             android:id="@+id/menuDesktopMode"
             android:layout_width="0dp"
@@ -186,7 +179,6 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 7. Settings -->
         <LinearLayout
             android:id="@+id/menuSettings"
             android:layout_width="0dp"
@@ -213,7 +205,6 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 8. Clear Data (جديد) -->
         <LinearLayout
             android:id="@+id/menuClearData"
             android:layout_width="0dp"

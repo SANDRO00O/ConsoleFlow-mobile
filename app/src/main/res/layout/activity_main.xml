@@ -23,7 +23,13 @@
     <!-- Web Content (تم تحويله إلى Container ليحمل عدة تبويبات) -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout android:id="@+id/swipeRefresh" android:layout_width="match_parent" android:layout_height="0dp" app:layout_constraintBottom_toTopOf="@id/bottomBar" app:layout_constraintTop_toBottomOf="@id/progressBar">
         
-        <FrameLayout android:id="@+id/webViewContainer" android:layout_width="match_parent" android:layout_height="match_parent" />
+        <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent">
+            
+            <FrameLayout android:id="@+id/webViewContainer" android:layout_width="match_parent" android:layout_height="match_parent" />
+            
+            <FrameLayout android:id="@+id/nativeOverlayContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:visibility="gone" />
+            
+        </FrameLayout>
         
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
     
