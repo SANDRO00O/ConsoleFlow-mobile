@@ -51,10 +51,6 @@ import java.net.URLEncoder
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  بيانات التبويب والمجموعة
-// ─────────────────────────────────────────────────────────────────────────────
-
 data class TabState(
     val id: Int,
     var title: String = "New Tab",
@@ -71,13 +67,8 @@ data class TabGroup(
     val tabs: MutableList<TabState> = mutableListOf()
 ) : Serializable
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  النشاط الرئيسي
-// ─────────────────────────────────────────────────────────────────────────────
-
 class MainActivity : AppCompatActivity() {
 
-    // ── واجهة المستخدم ──────────────────────────────────────────────────────
     private lateinit var webViewContainer: FrameLayout
     private val webViews = mutableMapOf<Int, WebView>()
     private val currentWebView: WebView? get() = webViews[activeTabId]
@@ -94,22 +85,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabCount: TextView
     private var tabGroupsContainer: LinearLayout? = null
 
-    // ── الإعدادات والمديرون ────────────────────────────────────────────────
     private lateinit var prefsManager: PrefsManager
     private val okClient = OkHttpClient.Builder().followRedirects(true).build()
     private lateinit var ioExecutor: ExecutorService
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // ── الفيديو بملء الشاشة والأذونات ───────────────────────────────────────
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPermissionRequest: PermissionRequest? = null
 
-    // ── القائمة السفلية المخزنة مؤقتاً ─────────────────────────────────────
     private var cachedMenuSheet: BottomSheetDialog? = null
     private var cachedMenuSheetView: View? = null
 
-    // ── الثوابت ─────────────────────────────────────────────────────────────
     private val HOME_URL  = "file:///android_asset/home.html"
     private val ERROR_URL = "file:///android_asset/error.html"
 
@@ -120,7 +107,6 @@ class MainActivity : AppCompatActivity() {
         "yahoo.com", "yandex.com"
     )
 
-    // ── مجموعات التبويبات والتبويب النشط ───────────────────────────────────
     private var tabGroups = mutableListOf<TabGroup>()
     private var activeGroupId = 0
     private var activeTabId = 0
@@ -130,13 +116,9 @@ class MainActivity : AppCompatActivity() {
 
     private val currentGroup: TabGroup? get() = tabGroups.find { it.id == activeGroupId }
 
-    // متغير لحفظ حالة النشاط لاستخدامها لاحقاً
-    private var savedStateBundle: Bundle? = null
-
-    // متغير للتحقق مما إذا كان قد تم تحميل التبويبات مسبقاً
+    // متغير لتأخير التهيئة
     private var isTabsInitialized = false
 
-    // ── عقود نتائج الأذونات ومسح QR ────────────────────────────────────────
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
@@ -148,10 +130,6 @@ class MainActivity : AppCompatActivity() {
         result.contents?.let { scanned -> navigateTo(scanned) }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  دورة حياة النشاط
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Suppress("UNCHECKED_CAST")
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -160,11 +138,24 @@ class MainActivity : AppCompatActivity() {
         prefsManager = PrefsManager(this)
         ioExecutor = Executors.newCachedThreadPool()
 
-        // حفظ حالة النشاط لاستخدامها لاحقاً
-        savedStateBundle = savedInstanceState
-
         initViews()
         setupListeners()
+
+        // نؤجل التحميل الحقيقي إلى ما بعد رسم الواجهة بالكامل
+        window.decorView.post {
+            // تأخير بسيط لضمان استقرار WebView
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (!isTabsInitialized) {
+                    val intentUrl = intent?.data?.toString()
+                    if (savedInstanceState != null) {
+                        restoreState(savedInstanceState)
+                    } else {
+                        loadPersistentTabs(intentUrl)
+                    }
+                    isTabsInitialized = true
+                }
+            }, 100)
+        }
 
         onBackPressedDispatcher.addCallback(this) {
             when {
@@ -177,39 +168,6 @@ class MainActivity : AppCompatActivity() {
                 currentWebView?.canGoBack() == true -> currentWebView?.goBack()
                 else -> finish()
             }
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        updateSearchEngineIcon()
-        // تحميل التبويبات فقط في أول دورة onResume بعد اكتمال رسم الشاشة
-        if (!isTabsInitialized) {
-            // ننتظر حتى يتم رسم شجرة العرض بالكامل
-            window.decorView.post {
-                // تأخير إضافي بسيط لضمان استقرار WebView
-                Handler(Looper.getMainLooper()).postDelayed({
-                    if (!isTabsInitialized) {
-                        initializeTabsAndWebView()
-                        isTabsInitialized = true
-                    }
-                }, 50)
-            }
-        }
-    }
-
-    private fun initializeTabsAndWebView() {
-        try {
-            val intentUrl = intent?.data?.toString()
-            if (savedStateBundle != null) {
-                restoreState(savedStateBundle!!)
-            } else {
-                loadPersistentTabs(intentUrl)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            // إذا حصل أي خطأ ننشئ مجموعة افتراضية مباشرة
-            createNewGroup("Default", HOME_URL)
         }
     }
 
@@ -241,6 +199,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateSearchEngineIcon()
+    }
+
     override fun onPause() {
         super.onPause()
         savePersistentTabs()
@@ -263,10 +226,6 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  التهيئة الأولية للواجهة
-    // ─────────────────────────────────────────────────────────────────────────
-
     @SuppressLint("ClickableViewAccessibility")
     private fun initViews() {
         webViewContainer    = findViewById(R.id.webViewContainer)
@@ -281,7 +240,7 @@ class MainActivity : AppCompatActivity() {
         tabsRecycler        = findViewById(R.id.tabsRecycler)
         tabCount            = findViewById(R.id.tabCount)
 
-        tabGroupsContainer = findViewById<LinearLayout>(R.id.tabGroupsContainer)
+        tabGroupsContainer = findViewById(R.id.tabGroupsContainer)
 
         tabAdapter = TabAdapter(this, mutableListOf(),
             onTabClick = { tab -> switchToTab(tab) },
@@ -292,10 +251,6 @@ class MainActivity : AppCompatActivity() {
 
         updateSearchEngineIcon()
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  استعادة الحالة عند تدوير الشاشة
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun restoreState(savedInstanceState: Bundle) {
         try {
@@ -326,10 +281,6 @@ class MainActivity : AppCompatActivity() {
             createNewGroup("Default")
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  الحفظ الدائم (SharedPreferences)
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun savePersistentTabs() {
         if (tabGroups.isEmpty()) return
@@ -395,7 +346,6 @@ class MainActivity : AppCompatActivity() {
                                 wv.loadUrl(t.url)
                             } catch (e: Exception) {
                                 e.printStackTrace()
-                                // إذا فشل إنشاء WebView، نتخطى هذا التبويب
                             }
                         }
                         if (group.tabs.isNotEmpty()) {
@@ -429,10 +379,6 @@ class MainActivity : AppCompatActivity() {
             openNewTab(intentUrl)
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  إدارة المجموعات والتبويبات
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun updateGroupsUI() {
         tabGroupsContainer?.removeAllViews()
@@ -520,22 +466,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun openNewTab(url: String = HOME_URL) {
         captureAndStoreThumbnail {
-            try {
-                val id = nextTabId++
-                val newTab = TabState(id = id, title = "New Tab", url = url)
-                currentGroup?.tabs?.add(newTab)
+            val id = nextTabId++
+            val newTab = TabState(id = id, title = "New Tab", url = url)
+            currentGroup?.tabs?.add(newTab)
 
-                val wv = createNewWebView(id)
-                webViews[id] = wv
-                wv.loadUrl(url)
+            val wv = createNewWebView(id)
+            webViews[id] = wv
+            wv.loadUrl(url)
 
-                switchToTab(newTab)
-                refreshTabsRecycler()
-                savePersistentTabs()
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Toast.makeText(this, "Failed to open new tab", Toast.LENGTH_SHORT).show()
-            }
+            switchToTab(newTab)
+            refreshTabsRecycler()
+            savePersistentTabs()
         }
     }
 
@@ -605,10 +546,6 @@ class MainActivity : AppCompatActivity() {
         progressBar.visibility = if (wv.progress < 100) View.VISIBLE else View.INVISIBLE
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  التقاط صور مصغرة للتبويبات
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun captureAndStoreThumbnail(onComplete: (() -> Unit)? = null) {
         val wv = currentWebView
         if (wv == null || wv.width <= 0 || wv.height <= 0) {
@@ -648,10 +585,6 @@ class MainActivity : AppCompatActivity() {
             onComplete?.invoke()
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  إنشاء WebView جديد مع جميع الإعدادات والمستمعين
-    // ─────────────────────────────────────────────────────────────────────────
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun createNewWebView(tabId: Int): WebView {
@@ -956,10 +889,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  مستمعات الأزرار
-    // ─────────────────────────────────────────────────────────────────────────
-
     @SuppressLint("ClickableViewAccessibility")
     private fun setupListeners() {
         swipeRefresh.setOnChildScrollUpCallback { _, _ -> (currentWebView?.scrollY ?: 0) > 0 }
@@ -994,7 +923,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnHomeArea).setOnClickListener    { loadUrlInstantly(HOME_URL) }
 
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
-            TransitionManager.beginDelayedTransition(findViewById(android.R.id.content))
             if (tabsOverlay.visibility == View.VISIBLE) {
                 tabsOverlay.visibility = View.GONE
             } else {
@@ -1038,7 +966,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         val inputFind = findViewById<EditText>(R.id.findInput)
-        val tvMatches = findViewById<TextView>(R.id.findMatches)
         inputFind.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) { currentWebView?.findAllAsync(s.toString()) }
             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
@@ -1047,16 +974,11 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnFindNext).setOnClickListener  { currentWebView?.findNext(true)  }
         findViewById<View>(R.id.btnFindPrev).setOnClickListener  { currentWebView?.findNext(false) }
         findViewById<View>(R.id.btnFindClose).setOnClickListener {
-            TransitionManager.beginDelayedTransition(findViewById(android.R.id.content))
             findBar.visibility = View.GONE
             currentWebView?.clearMatches()
             hideKeyboard()
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  التنقل والبحث
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun navigateTo(input: String) {
         val finalUrl = when {
@@ -1073,10 +995,6 @@ class MainActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         currentWebView?.loadUrl(url)
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  قائمة منبثقة حديثة
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun showModernPopup(title: String, items: List<String>, onSelect: (Int) -> Unit) {
         val sheet = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
@@ -1137,10 +1055,6 @@ class MainActivity : AppCompatActivity() {
         sheet.show()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  القائمة الرئيسية (القائمة السفلية)
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun showMenuSheet() {
         if (cachedMenuSheet == null) {
             cachedMenuSheet = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
@@ -1169,7 +1083,6 @@ class MainActivity : AppCompatActivity() {
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuFindInPage)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
-                TransitionManager.beginDelayedTransition(findViewById(android.R.id.content))
                 findBar.visibility = View.VISIBLE
                 currentWebView?.setFindListener { ord, total, _ ->
                     findViewById<TextView>(R.id.findMatches).text = if (total > 0) "${ord + 1}/$total" else "0/0"
@@ -1187,7 +1100,6 @@ class MainActivity : AppCompatActivity() {
             cachedMenuSheetView?.findViewById<View>(R.id.menuSettings)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 startActivity(Intent(this, SettingsActivity::class.java))
-                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuClearData)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
@@ -1252,7 +1164,7 @@ class MainActivity : AppCompatActivity() {
         val sheet = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
         val dp = resources.displayMetrics.density
 
-        val scrollView = android.widget.ScrollView(this)
+        val scrollView = ScrollView(this)
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1266,7 +1178,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 (100 * dp).toInt(), (12 * dp).toInt()
             ).apply {
-                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                gravity = Gravity.CENTER_HORIZONTAL
                 bottomMargin = (16 * dp).toInt()
             }
             try { setBackgroundResource(R.drawable.bg_menu_item) }
@@ -1285,7 +1197,7 @@ class MainActivity : AppCompatActivity() {
         items.forEachIndexed { index, (itemTitle, url) ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
                 setPadding((48 * dp).toInt(), (20 * dp).toInt(), (48 * dp).toInt(), (20 * dp).toInt())
                 val tv = TypedValue()
                 context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
@@ -1293,13 +1205,13 @@ class MainActivity : AppCompatActivity() {
             }
 
             val iconSize = (28 * dp).toInt()
-            val faviconView = android.widget.ImageView(this).apply {
+            val faviconView = ImageView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply {
                     marginEnd = (16 * dp).toInt()
                 }
                 setImageResource(R.drawable.ic_favicon_fallback)
                 imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                scaleType = ImageView.ScaleType.FIT_CENTER
             }
             row.addView(faviconView)
 
@@ -1313,16 +1225,16 @@ class MainActivity : AppCompatActivity() {
             }
             row.addView(textView)
 
-            val domain = try { android.net.Uri.parse(url).host ?: "" } catch (_: Exception) { "" }
+            val domain = try { Uri.parse(url).host ?: "" } catch (_: Exception) { "" }
             if (domain.isNotEmpty()) {
                 ioExecutor.execute {
                     try {
                         val faviconUrl = "https://www.google.com/s2/favicons?domain=$domain&sz=64"
-                        val req = okhttp3.Request.Builder().url(faviconUrl).build()
+                        val req = Request.Builder().url(faviconUrl).build()
                         val resp = okClient.newCall(req).execute()
                         val bytes = resp.body?.bytes()
                         if (bytes != null && bytes.isNotEmpty()) {
-                            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             mainHandler.post {
                                 if (bmp != null) {
                                     faviconView.setImageBitmap(bmp)
@@ -1356,10 +1268,6 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Data Cleared", Toast.LENGTH_SHORT).show()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  إعدادات User‑Agent ووضع سطح المكتب
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun getUserAgentString(): String {
         val defaultUA = WebSettings.getDefaultUserAgent(this)
         return if (prefsManager.desktopMode) {
@@ -1383,10 +1291,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  تحديث أيقونة محرك البحث والعلامة المرجعية
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun updateSearchEngineIcon() {
         val res = when {
             prefsManager.searchEngine.contains("google")     -> R.drawable.ic_engine_google
@@ -1403,10 +1307,6 @@ class MainActivity : AppCompatActivity() {
         btnBookmark.alpha = if (prefsManager.isBookmarked(url)) 1.0f else 0.4f
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  أدوات مساعدة
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun hideKeyboard() {
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(textUrl.windowToken, 0)
@@ -1420,10 +1320,6 @@ class MainActivity : AppCompatActivity() {
         setFullscreen(false)
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  جسر JavaScript
-    // ─────────────────────────────────────────────────────────────────────────
-
     inner class SearchBridge {
         @JavascriptInterface
         fun navigate(input: String) {
@@ -1436,10 +1332,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  محول عرض التبويبات (RecyclerView Adapter)
-// ─────────────────────────────────────────────────────────────────────────────
 
 class TabAdapter(
     private val context: Context,
