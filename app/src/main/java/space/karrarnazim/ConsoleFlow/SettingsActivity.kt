@@ -19,10 +19,7 @@ class SettingsActivity : AppCompatActivity() {
         prefsManager = PrefsManager(this)
 
         // Back button
-        findViewById<android.view.View>(R.id.btnBack).setOnClickListener {
-            finish()
-            overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
-        }
+        findViewById<android.view.View>(R.id.btnBack).setOnClickListener { finish() }
 
         // Version
         try {
@@ -114,25 +111,10 @@ class SettingsActivity : AppCompatActivity() {
                 Intent(Intent.ACTION_VIEW, Uri.parse("https://consoleflow.karrarnazim.space"))
             )
         }
-
-        // Portfolio
-        findViewById<android.view.View>(R.id.settingPortfolio).setOnClickListener {
-            startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://karrarnazim.space"))
-            )
-        }
-
-        // Github
-        findViewById<android.view.View>(R.id.settingGithub).setOnClickListener {
-            startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SANDRO00O/ConsoleFlow-mobile"))
-            )
-        }
     }
 
     override fun onBackPressed() {
         super.onBackPressed()
         finish()
-        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
     }
 }
