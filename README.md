@@ -1,7 +1,7 @@
 <div align="center">
 
 <p align="center">
-<img src="screenshots/banner.png" width="400">
+<img src="screenshots/banner.svg" width="400">
 </p>
  
 <br>
@@ -29,7 +29,7 @@
 
 ## About The Project
 
-**ConsoleFlow** is not just another web browser. It is built specifically for web developers who need to debug websites on mobile devices. By intercepting web requests using `OkHttp`, ConsoleFlow automatically injects [Eruda](https://github.com/liriliri/eruda) (a mobile web console) into web pages, allowing you to view console logs, inspect DOM elements, check network requests, and execute JavaScript right from your Android phone.
+[ConsoleFlow](https://consoleflow.karrarnazim.space) is not just another web browser. It is built specifically for web developers who need to debug websites on mobile devices. By intercepting web requests using `OkHttp`, ConsoleFlow automatically injects [Eruda](https://github.com/liriliri/eruda) (a mobile web console) into web pages, allowing you to view console logs, inspect DOM elements, check network requests, and execute JavaScript right from your Android phone.
 
 ## Features
 
@@ -86,5 +86,5 @@ Project Link: [https://github.com/SANDRO00O/ConsoleFlow-mobile](https://github.c
 
 ---
 <div align="center">
-  <i>Built by Karrar Nazim</i>
+  <i>Karrar Nazim</i>
 </div>
