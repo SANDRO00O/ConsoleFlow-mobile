@@ -222,18 +222,21 @@ private fun createMicBitmap(sizePx: Int): Bitmap {
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         style = Paint.Style.STROKE
-        strokeWidth = maxOf(4.5f, size * 0.13f)
+        strokeWidth = maxOf(4.2f, size * 0.11f)
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
 
     val w = size.toFloat()
     val h = size.toFloat()
-    val body = RectF(w * 0.36f, h * 0.18f, w * 0.64f, h * 0.62f)
-    canvas.drawRoundRect(body, w * 0.12f, w * 0.12f, paint)
-    canvas.drawArc(RectF(w * 0.28f, h * 0.16f, w * 0.72f, h * 0.64f), 180f, 180f, false, paint)
-    canvas.drawLine(w * 0.5f, h * 0.62f, w * 0.5f, h * 0.78f, paint)
-    canvas.drawLine(w * 0.34f, h * 0.78f, w * 0.66f, h * 0.78f, paint)
+    val left = w * 0.34f
+    val top = h * 0.12f
+    val right = w * 0.66f
+    val bottom = h * 0.64f
+    canvas.drawRoundRect(RectF(left, top, right, bottom), w * 0.16f, w * 0.16f, paint)
+    canvas.drawLine(w * 0.5f, bottom, w * 0.5f, h * 0.78f, paint)
+    canvas.drawLine(w * 0.35f, h * 0.78f, w * 0.65f, h * 0.78f, paint)
+    canvas.drawArc(RectF(w * 0.28f, h * 0.10f, w * 0.72f, h * 0.66f), 200f, 140f, false, paint)
     return bitmap
 }
 
@@ -262,6 +265,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var nativeOverlayContainer: FrameLayout
     private var nativeHomeOverlay: View? = null
     private var nativeErrorOverlay: View? = null
+    private var homeSearchEngineIcon: ImageView? = null
     private var lastErrorUrl: String? = null
     private var tabGroupsContainer: LinearLayout? = null
 
@@ -480,6 +484,65 @@ class MainActivity : AppCompatActivity() {
         hideNativeOverlays(immediate = true)
     }
 
+    fun getHomePreviewBitmap(force: Boolean = false): Bitmap {
+        val width = resources.displayMetrics.widthPixels.coerceAtLeast(360)
+        val height = resources.displayMetrics.heightPixels.coerceAtLeast(640)
+        val key = homePreviewCacheKey(width, height)
+        val cacheFile = File(cacheDir, "home_preview_${width}x${height}.webp")
+        val sigFile = File(cacheDir, "home_preview_${width}x${height}.sig")
+
+        if (!force && cacheFile.exists() && sigFile.exists()) {
+            runCatching { sigFile.readText() }.getOrNull()?.let { stored ->
+                if (stored == key) {
+                    BitmapFactory.decodeFile(cacheFile.absolutePath)?.let { cached -> return cached }
+                }
+            }
+        }
+
+        val rendered = renderHomePreviewBitmap(width, height)
+        ioExecutor.execute {
+            try {
+                FileOutputStream(cacheFile).use { out ->
+                    rendered.compress(Bitmap.CompressFormat.WEBP, 80, out)
+                }
+                sigFile.writeText(key)
+            } catch (_: Exception) { }
+        }
+        return rendered
+    }
+
+    private fun homePreviewCacheKey(width: Int, height: Int): String {
+        val bookmarks = prefsManager.getBookmarks().joinToString("|") { (t, u) -> "$t>$u" }
+        return buildString {
+            append("v4|")
+            append(width).append('x').append(height).append('|')
+            append(prefsManager.searchEngine).append('|')
+            append(bookmarks)
+        }
+    }
+
+    private fun renderHomePreviewBitmap(width: Int, height: Int): Bitmap {
+        val view = buildHomeOverlay(loadFavicons = false)
+        val wSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)
+        val hSpec = View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+        view.measure(wSpec, hSpec)
+        view.layout(0, 0, width, height)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        view.draw(canvas)
+        return bitmap
+    }
+
+    private fun currentSearchEngineIconRes(): Int {
+        return when {
+            prefsManager.searchEngine.contains("google") -> R.drawable.ic_engine_google
+            prefsManager.searchEngine.contains("duckduckgo") -> R.drawable.ic_engine_duckduckgo
+            prefsManager.searchEngine.contains("bing") -> R.drawable.ic_engine_bing
+            prefsManager.searchEngine.contains("brave") -> R.drawable.ic_engine_brave
+            else -> R.drawable.ic_engine_google
+        }
+    }
+
     private fun setTopBarVisible(visible: Boolean, immediate: Boolean = false) {
         if (immediate) {
             topBar.alpha = if (visible) 1f else 0f
@@ -551,7 +614,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildHomeOverlay(): View {
+    
+private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
         val dp = resources.displayMetrics.density
         val root = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -564,26 +628,45 @@ class MainActivity : AppCompatActivity() {
             isClickable = true
         }
 
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+        root.addView(scroll)
+
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            val w = LinearLayout.LayoutParams(
+            val w = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+            w.marginStart = (18 * dp).toInt()
+            w.marginEnd = (18 * dp).toInt()
+            layoutParams = w
+            setPadding(0, (18 * dp).toInt(), 0, (24 * dp).toInt())
+        }
+        scroll.addView(content)
+
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            w.marginStart = (20 * dp).toInt()
-            w.marginEnd = (20 * dp).toInt()
-            layoutParams = w
-            setPadding(0, (20 * dp).toInt(), 0, (24 * dp).toInt())
+            ).apply { bottomMargin = (18 * dp).toInt() }
         }
-        root.addView(content)
+        content.addView(topRow)
 
         val topAction = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
             setColorFilter(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams((40 * dp).toInt(), (40 * dp).toInt()).apply { gravity = Gravity.END }
+            layoutParams = LinearLayout.LayoutParams((40 * dp).toInt(), (40 * dp).toInt())
             alpha = 0.95f
-            setPadding((8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt())
+            setPadding((9 * dp).toInt(), (9 * dp).toInt(), (9 * dp).toInt(), (9 * dp).toInt())
             setBackgroundResource(R.drawable.bottom_btn_ripple)
             scaleType = ImageView.ScaleType.FIT_CENTER
             setOnClickListener {
@@ -591,121 +674,143 @@ class MainActivity : AppCompatActivity() {
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
         }
-        val topRow = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = (34 * dp).toInt() }
-        }
-        topRow.addView(topAction, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.END))
-        content.addView(topRow)
+        topRow.addView(topAction)
+        topRow.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
 
         val searchBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundResource(R.drawable.bg_search)
-            setPadding((16 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
-            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            lp.bottomMargin = (30 * dp).toInt()
-            layoutParams = lp
-            setOnClickListener { showSearchTopBar() }
+            setPadding((14 * dp).toInt(), (8 * dp).toInt(), (10 * dp).toInt(), (8 * dp).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = (26 * dp).toInt() }
         }
         content.addView(searchBar)
 
         val searchIcon = ImageView(this).apply {
-            setImageResource(R.drawable.ic_find)
+            setImageResource(currentSearchEngineIconRes())
             setColorFilter(Color.parseColor("#7E7E7E"))
             layoutParams = LinearLayout.LayoutParams((20 * dp).toInt(), (20 * dp).toInt())
         }
+        homeSearchEngineIcon = searchIcon
         searchBar.addView(searchIcon)
 
-        val searchLabel = TextView(this).apply {
-            text = "Search"
-            setTextColor(Color.parseColor("#D7D7D7"))
-            textSize = 16f
-            setPadding((14 * dp).toInt(), 0, 0, 0)
+        val searchInput = EditText(this).apply {
+            hint = "Search or type URL"
+            setSingleLine(true)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#7C7C7C"))
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding((12 * dp).toInt(), 0, (8 * dp).toInt(), 0)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    val query = text.toString().trim()
+                    if (query.isNotEmpty()) navigateTo(query)
+                    hideKeyboard()
+                    true
+                } else false
+            }
         }
-        searchBar.addView(searchLabel)
+        searchBar.addView(searchInput)
 
-        fun actionCircle(iconRes: Int? = null, bitmap: Bitmap? = null, onClick: () -> Unit): ImageView {
+        fun searchActionButton(iconRes: Int? = null, bitmap: Bitmap? = null, sizeDp: Int = 40, onClick: () -> Unit): ImageView {
             return ImageView(this).apply {
                 if (bitmap != null) setImageBitmap(bitmap) else if (iconRes != null) setImageResource(iconRes)
                 setColorFilter(Color.parseColor("#ECECEC"))
                 setBackgroundResource(R.drawable.bottom_btn_ripple)
-                layoutParams = LinearLayout.LayoutParams((40 * dp).toInt(), (40 * dp).toInt()).apply { marginStart = (6 * dp).toInt() }
-                setPadding((7 * dp).toInt(), (7 * dp).toInt(), (7 * dp).toInt(), (7 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams((sizeDp * dp).toInt(), (sizeDp * dp).toInt()).apply { marginStart = (6 * dp).toInt() }
+                setPadding((8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt())
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 setOnClickListener { onClick() }
             }
         }
 
-        searchBar.addView(actionCircle(iconRes = R.drawable.ic_qr) { launchQrScanner() })
-        searchBar.addView(actionCircle(bitmap = createMicBitmap((26 * dp).toInt())) { launchVoiceSearch() })
+        searchBar.addView(searchActionButton(iconRes = R.drawable.ic_qr, sizeDp = 40) { launchQrScanner() })
+        searchBar.addView(searchActionButton(iconRes = R.drawable.ic_mic, sizeDp = 40) { launchVoiceSearch() })
 
-        val section = TextView(this).apply {
-            text = "Bookmarks"
+        val fixedHeader = TextView(this).apply {
+            text = "DEV BOOKMARKS"
             setTextColor(Color.parseColor("#7B7B7B"))
             textSize = 11f
             letterSpacing = 0.08f
-            setPadding((4 * dp).toInt(), 0, 0, (14 * dp).toInt())
+            setPadding((4 * dp).toInt(), 0, 0, (10 * dp).toInt())
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        content.addView(section)
+        content.addView(fixedHeader)
 
-        val grid = GridLayout(this).apply {
-            columnCount = 3
-            rowCount = 3
-            useDefaultMargins = true
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        fun bookmarkGrid(items: List<Pair<String, String>>, loadRemoteIcons: Boolean) {
+            if (items.isEmpty()) return
+            val grid = GridLayout(this).apply {
+                columnCount = 4
+                useDefaultMargins = true
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
+            items.forEach { (title, url) ->
+                val item = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    layoutParams = GridLayout.LayoutParams().apply {
+                        width = 0
+                        columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                        setMargins((3 * dp).toInt(), (3 * dp).toInt(), (3 * dp).toInt(), (10 * dp).toInt())
+                    }
+                }
+
+                val icon = ImageView(this).apply {
+                    layoutParams = LinearLayout.LayoutParams((44 * dp).toInt(), (44 * dp).toInt())
+                    setBackgroundResource(R.drawable.tab_card_bg)
+                    scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    setPadding((8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt(), (8 * dp).toInt())
+                    setImageResource(R.drawable.ic_favicon_fallback)
+                }
+
+                val label = TextView(this).apply {
+                    text = title
+                    setTextColor(Color.WHITE)
+                    textSize = 10.5f
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    setPadding((2 * dp).toInt(), (6 * dp).toInt(), (2 * dp).toInt(), 0)
+                    layoutParams = LinearLayout.LayoutParams((54 * dp).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT)
+                }
+
+                item.addView(icon)
+                item.addView(label)
+                item.setOnClickListener { navigateTo(url) }
+                icon.setOnClickListener { navigateTo(url) }
+                grid.addView(item)
+
+                if (loadRemoteIcons) loadBookmarkFavicon(url, icon)
+            }
+            content.addView(grid)
         }
-        content.addView(grid)
 
-        val bookmarks = prefsManager.getBookmarks().take(6)
-        val fallbackSites = listOf(
+        val fixedSites = listOf(
             "GitHub" to "https://github.com",
             "Stack Overflow" to "https://stackoverflow.com",
             "MDN" to "https://developer.mozilla.org",
-            "npm" to "https://www.npmjs.com",
-            "Docker" to "https://www.docker.com",
-            "Dev.to" to "https://dev.to"
+            "Kotlin" to "https://kotlinlang.org"
         )
-        val items = if (bookmarks.isNotEmpty()) bookmarks else fallbackSites
+        bookmarkGrid(fixedSites, loadFavicons)
 
-        items.forEach { (title, url) ->
-            val item = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
+        val userBookmarks = prefsManager.getBookmarks().take(12)
+        if (userBookmarks.isNotEmpty()) {
+            val userHeader = TextView(this).apply {
+                text = "MY BOOKMARKS"
+                setTextColor(Color.parseColor("#7B7B7B"))
+                textSize = 11f
+                letterSpacing = 0.08f
+                setPadding((4 * dp).toInt(), (10 * dp).toInt(), 0, (10 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             }
-
-            val icon = ImageView(this).apply {
-                layoutParams = LinearLayout.LayoutParams((58 * dp).toInt(), (58 * dp).toInt())
-                setBackgroundResource(R.drawable.tab_card_bg)
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                setImageResource(R.drawable.ic_favicon_fallback)
-            }
-            val label = TextView(this).apply {
-                text = title
-                setTextColor(Color.WHITE)
-                textSize = 11.5f
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                gravity = Gravity.CENTER_HORIZONTAL
-                setPadding((2 * dp).toInt(), (8 * dp).toInt(), (2 * dp).toInt(), 0)
-            }
-
-            item.addView(icon)
-            item.addView(label)
-            item.setOnClickListener { navigateTo(url) }
-            icon.setOnClickListener { navigateTo(url) }
-
-            grid.addView(item, GridLayout.LayoutParams().apply {
-                width = 0
-                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-                setMargins((4 * dp).toInt(), (4 * dp).toInt(), (4 * dp).toInt(), (10 * dp).toInt())
-            })
-
-            loadBookmarkFavicon(url, icon)
+            content.addView(userHeader)
+            bookmarkGrid(userBookmarks, loadFavicons)
         }
 
         root.setOnClickListener { }
@@ -1055,7 +1160,7 @@ class MainActivity : AppCompatActivity() {
             val newTab = TabState(id = id, title = "New Tab", url = url)
             if (isHomeStateUrl(url)) {
                 newTab.hasThumbnail = true
-                newTab.ramThumbnail = generateHomePreviewBitmap()
+                newTab.ramThumbnail = getHomePreviewBitmap()
             }
             currentGroup?.tabs?.add(newTab)
 
@@ -1148,7 +1253,7 @@ class MainActivity : AppCompatActivity() {
             currentGroup?.tabs?.find { it.id == activeTabId }?.let {
                 if (isHomeStateUrl(it.url)) {
                     it.hasThumbnail = true
-                    it.ramThumbnail = generateHomePreviewBitmap()
+                    it.ramThumbnail = getHomePreviewBitmap()
                 }
             }
             onComplete?.invoke()
@@ -1159,7 +1264,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val homeLike = isHomeStateUrl(wv.url)
             val bitmap = if (homeLike) {
-                generateHomePreviewBitmap()
+                getHomePreviewBitmap()
             } else {
                 val scale = 0.3f
                 val w = (wv.width * scale).toInt()
@@ -1284,7 +1389,7 @@ class MainActivity : AppCompatActivity() {
                         tab.title = view.title ?: "Tab"
                         tab.url = if (isHomeStateUrl(it)) HOME_URL else it
                         if (isHomeStateUrl(it) && tab.ramThumbnail == null) {
-                            tab.ramThumbnail = generateHomePreviewBitmap()
+                            tab.ramThumbnail = getHomePreviewBitmap()
                             tab.hasThumbnail = true
                         }
                     }
@@ -1542,6 +1647,7 @@ class MainActivity : AppCompatActivity() {
             if (isHomeStateUrl(url)) return@setOnClickListener
             val added = prefsManager.toggleBookmark(currentWebView?.title ?: "Bookmark", url)
             updateBookmarkIcon(url)
+            buildNativeOverlays()
             Toast.makeText(this, if (added) "Bookmarked" else "Removed", Toast.LENGTH_SHORT).show()
         }
 
@@ -1896,15 +2002,11 @@ class MainActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun updateSearchEngineIcon() {
-        val res = when {
-            prefsManager.searchEngine.contains("google")     -> R.drawable.ic_engine_google
-            prefsManager.searchEngine.contains("duckduckgo") -> R.drawable.ic_engine_duckduckgo
-            prefsManager.searchEngine.contains("bing")       -> R.drawable.ic_engine_bing
-            prefsManager.searchEngine.contains("brave")      -> R.drawable.ic_engine_brave
-            else                                              -> R.drawable.ic_engine_google
-        }
+        val res = currentSearchEngineIconRes()
         imgSearchEngine.setImageResource(res)
         imgSearchEngine.colorFilter = null
+        homeSearchEngineIcon?.setImageResource(res)
+        homeSearchEngineIcon?.colorFilter = null
     }
 
     private fun updateBookmarkIcon(url: String) {
@@ -1916,8 +2018,11 @@ class MainActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun hideKeyboard() {
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-            .hideSoftInputFromWindow(textUrl.windowToken, 0)
+        val token = currentFocus?.windowToken ?: textUrl.windowToken
+        if (token != null) {
+            (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .hideSoftInputFromWindow(token, 0)
+        }
     }
 
     private fun hideCustomView() {
@@ -2099,7 +2204,8 @@ class TabAdapter(
         if (tab.ramThumbnail != null) {
             h.thumbnail.setImageBitmap(tab.ramThumbnail)
         } else if (isHomeStateLikeUrl(tab.url)) {
-            h.thumbnail.setImageBitmap(generateHomePreviewBitmap())
+            val homePreview = (context as? MainActivity)?.getHomePreviewBitmap() ?: generateHomePreviewBitmap()
+            h.thumbnail.setImageBitmap(homePreview)
         } else if (tab.hasThumbnail) {
             ioExecutor.execute {
                 val file = File(context.cacheDir, "thumb_${tab.id}.webp")
