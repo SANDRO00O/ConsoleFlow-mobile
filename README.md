@@ -59,9 +59,10 @@ ConsoleFlow is ready to use right out of the box.
 - **Architecture:** Universal. The application is built entirely on Android framework APIs and Java/Kotlin bytecode, meaning it supports all device architectures (armeabi-v7a, arm64-v8a, x86, x86_64) without compatibility issues.
 
 ### Download & Install
-1. Go to the [Releases page](https://github.com/SANDRO00O/ConsoleFlow-mobile/releases).
-2. Download the latest `ConsoleFlow.apk` file.
-3. Open the downloaded file to install it on your Android device.
+1. Go to [ConsoleFlow](https://consoleflow.karrarnazim.space).
+2. or go to the [Releases page](https://github.com/SANDRO00O/ConsoleFlow-mobile/releases).
+3. Download the latest `ConsoleFlow.apk` file.
+4. Open the downloaded file to install it on your Android device.
    *(Note: You may need to enable "Install unknown apps" in your device settings).*
 
 ## Contributing
