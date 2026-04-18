@@ -710,9 +710,9 @@ class MainActivity : AppCompatActivity() {
 
     fun listWebExtensions() = geckoRuntime.webExtensionController.list()
 
-    fun enableWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.enable(extension, WebExtension.Flags.NONE)
+    fun enableWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.enable(extension, 0)
 
-    fun disableWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.disable(extension, WebExtension.Flags.NONE)
+    fun disableWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.disable(extension, 0)
 
     fun uninstallWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.uninstall(extension)
 
