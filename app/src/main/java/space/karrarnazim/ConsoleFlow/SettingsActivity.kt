@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.widget.*
+import android.widget.EditText
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -23,7 +25,8 @@ class SettingsActivity : AppCompatActivity() {
         try {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
             findViewById<TextView>(R.id.settingVersion).text = "Version ${pInfo.versionName}"
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
 
         val engines = arrayOf("Google", "DuckDuckGo", "Bing", "Brave")
         val urls = arrayOf(
@@ -33,10 +36,10 @@ class SettingsActivity : AppCompatActivity() {
             "https://search.brave.com/search?q="
         )
         val currentLabel = when {
-            prefsManager.searchEngine.contains("google") -> "Google"
-            prefsManager.searchEngine.contains("duckduckgo") -> "DuckDuckGo"
-            prefsManager.searchEngine.contains("bing") -> "Bing"
-            prefsManager.searchEngine.contains("brave") -> "Brave"
+            prefsManager.searchEngine.contains("google", ignoreCase = true) -> "Google"
+            prefsManager.searchEngine.contains("duckduckgo", ignoreCase = true) -> "DuckDuckGo"
+            prefsManager.searchEngine.contains("bing", ignoreCase = true) -> "Bing"
+            prefsManager.searchEngine.contains("brave", ignoreCase = true) -> "Brave"
             else -> "Google"
         }
         findViewById<TextView>(R.id.settingSearchEngineValue).text = currentLabel
@@ -85,13 +88,10 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<android.view.View>(R.id.settingClearData).setOnClickListener {
             AlertDialog.Builder(this, R.style.DarkDialog)
                 .setTitle("Clear Browsing Data")
-                .setMessage("This will delete cache, cookies, and history.")
+                .setMessage("This will delete Gecko data, cache, cookies, and saved history/bookmarks.")
                 .setPositiveButton("Clear") { _, _ ->
-                    android.webkit.WebStorage.getInstance().deleteAllData()
-                    android.webkit.CookieManager.getInstance().removeAllCookies(null)
+                    BrowserRuntimeStore.clearBrowserData(this)
                     prefsManager.clearHistory()
-                    getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
-                        .edit().apply()
                     Toast.makeText(this, "Data cleared", Toast.LENGTH_SHORT).show()
                 }
                 .setNegativeButton("Cancel", null)
