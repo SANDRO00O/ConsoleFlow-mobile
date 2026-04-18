@@ -25,12 +25,7 @@
         
         <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent">
             
-            <org.mozilla.geckoview.GeckoView
-                android:id="@+id/webViewContainer"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="#000000"
-                android:overScrollMode="never" />
+            <FrameLayout android:id="@+id/webViewContainer" android:layout_width="match_parent" android:layout_height="match_parent" />
             
             <FrameLayout android:id="@+id/nativeOverlayContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:visibility="gone" />
             
