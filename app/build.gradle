@@ -9,7 +9,7 @@ compileSdk 36
 
 defaultConfig {
 applicationId "space.karrarnazim.ConsoleFlow"
-minSdk 24
+minSdk 26
 targetSdk 36
 versionCode 4
 versionName "2.0.0"
