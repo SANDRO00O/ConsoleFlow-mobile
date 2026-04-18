@@ -68,6 +68,8 @@ class MainActivity : AppCompatActivity() {
     private val tabStates = linkedMapOf<Int, TabState>()
     private val tabSessions = linkedMapOf<Int, GeckoSession>()
     private val tabGroups = linkedMapOf<Int, TabGroup>()
+    private val tabCanGoBack = mutableMapOf<Int, Boolean>()
+    private val tabCanGoForward = mutableMapOf<Int, Boolean>()
     private var activeTabId = -1
     private var selectedGroupId = 1
     private var nextTabId = 1
@@ -289,8 +291,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         session.contentDelegate = object : GeckoSession.ContentDelegate {
-            override fun onTitleChange(session: GeckoSession, title: String) {
-                updateTabTitle(tabId, title)
+            override fun onTitleChange(session: GeckoSession, title: String?) {
+                updateTabTitle(tabId, title ?: "")
+            }
+        }
+
+        session.navigationDelegate = object : GeckoSession.NavigationDelegate {
+            override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+                tabCanGoBack[tabId] = canGoBack
+                if (tabId == activeTabId) refreshNavButtons()
+            }
+            override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
+                tabCanGoForward[tabId] = canGoForward
+                if (tabId == activeTabId) refreshNavButtons()
             }
         }
 
@@ -365,6 +378,13 @@ class MainActivity : AppCompatActivity() {
         updateTabCount()
     }
 
+    private fun refreshNavButtons() {
+        goBack.isEnabled = tabCanGoBack[activeTabId] == true
+        goForward.isEnabled = tabCanGoForward[activeTabId] == true
+        goBack.alpha = if (goBack.isEnabled) 1f else 0.45f
+        goForward.alpha = if (goForward.isEnabled) 1f else 0.45f
+    }
+
     private fun refreshToolbarForActiveTab() {
         val state = tabStates[activeTabId]
         val session = currentSession()
@@ -373,8 +393,8 @@ class MainActivity : AppCompatActivity() {
         textUrl.setSelection(textUrl.text?.length ?: 0)
         btnBookmark.isSelected = state?.let { prefs.isBookmarked(it.url) } == true
         btnBookmark.alpha = if (btnBookmark.isSelected) 1f else 0.72f
-        goBack.isEnabled = session?.canGoBack() == true
-        goForward.isEnabled = session?.canGoForward() == true
+        goBack.isEnabled = tabCanGoBack[activeTabId] == true
+        goForward.isEnabled = tabCanGoForward[activeTabId] == true
         goBack.alpha = if (goBack.isEnabled) 1f else 0.45f
         goForward.alpha = if (goForward.isEnabled) 1f else 0.45f
         findMatches.text = searchMatchesText
@@ -609,7 +629,7 @@ class MainActivity : AppCompatActivity() {
         when {
             tabsOverlay.visibility == View.VISIBLE -> hideTabsOverlay()
             findBar.visibility == View.VISIBLE -> hideFindBar()
-            currentSession()?.canGoBack() == true -> currentSession()?.goBack()
+            tabCanGoBack[activeTabId] == true -> currentSession()?.goBack()
             else -> finish()
         }
     }
@@ -686,13 +706,13 @@ class MainActivity : AppCompatActivity() {
         restartBrowserEngine(preserveTabs = true)
     }
 
-    fun installWebExtension(uri: Uri) = geckoRuntime.webExtensionController.install(uri)
+    fun installWebExtension(uri: Uri) = geckoRuntime.webExtensionController.install(uri.toString())
 
     fun listWebExtensions() = geckoRuntime.webExtensionController.list()
 
-    fun enableWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.enable(extension)
+    fun enableWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.enable(extension, WebExtension.Flags.NONE)
 
-    fun disableWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.disable(extension)
+    fun disableWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.disable(extension, WebExtension.Flags.NONE)
 
     fun uninstallWebExtension(extension: WebExtension) = geckoRuntime.webExtensionController.uninstall(extension)
 
