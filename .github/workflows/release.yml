@@ -48,10 +48,9 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ConsoleFlow ${{ github.ref_name }}
+          tag_name: build-${{ github.run_number }}
+          name: ConsoleFlow Build ${{ github.run_number }}
           files: app/build/outputs/apk/debug/*.apk
           generate_release_notes: true
