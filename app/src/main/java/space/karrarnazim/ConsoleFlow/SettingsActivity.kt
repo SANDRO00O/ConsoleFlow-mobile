@@ -89,6 +89,7 @@ class SettingsActivity : AppCompatActivity() {
                 .setPositiveButton("Clear") { _, _ ->
                     android.webkit.WebStorage.getInstance().deleteAllData()
                     android.webkit.CookieManager.getInstance().removeAllCookies(null)
+                    prefsManager.clearHistory()
                     getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
                         .edit().apply()
                     Toast.makeText(this, "Data cleared", Toast.LENGTH_SHORT).show()

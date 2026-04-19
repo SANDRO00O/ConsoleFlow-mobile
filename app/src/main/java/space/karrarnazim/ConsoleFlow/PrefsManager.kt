@@ -24,14 +24,27 @@ class PrefsManager(context: Context) {
         get() = prefs.getBoolean("console_enabled", true)
         set(value) = prefs.edit().putBoolean("console_enabled", value).apply()
 
-    var adBlockEnabled: Boolean
-        get() = prefs.getBoolean("ad_block_enabled", true)
-        set(value) = prefs.edit().putBoolean("ad_block_enabled", value).apply()
-
     // ✅ الدالة المضافة حديثًا لحل خطأ "Unresolved reference: getBoolean"
     fun getBoolean(key: String, defaultValue: Boolean): Boolean {
         return prefs.getBoolean(key, defaultValue)
     }
+
+    fun addHistory(title: String, url: String) {
+        if (url == "about:blank" || url == "error://page" || url.startsWith("error://")) return
+        val historyArray = getList("history")
+        val newItem = "{\"title\":\"$title\", \"url\":\"$url\"}"
+        for (i in 0 until historyArray.length()) {
+            if (historyArray.getString(i).contains(url)) {
+                historyArray.remove(i)
+                break
+            }
+        }
+        historyArray.put(newItem)
+        if (historyArray.length() > 100) historyArray.remove(0)
+        prefs.edit().putString("history", historyArray.toString()).apply()
+    }
+
+    fun clearHistory() = prefs.edit().remove("history").apply()
 
     fun toggleBookmark(title: String, url: String): Boolean {
         val bookmarks = getList("bookmarks")
@@ -69,6 +82,18 @@ class PrefsManager(context: Context) {
         for (i in 0 until bookmarks.length()) {
             try {
                 val obj = JSONObject(bookmarks.getString(i))
+                list.add(Pair(obj.getString("title"), obj.getString("url")))
+            } catch (e: Exception) { }
+        }
+        return list
+    }
+
+    fun getHistory(): List<Pair<String, String>> {
+        val history = getList("history")
+        val list = mutableListOf<Pair<String, String>>()
+        for (i in history.length() - 1 downTo 0) {
+            try {
+                val obj = JSONObject(history.getString(i))
                 list.add(Pair(obj.getString("title"), obj.getString("url")))
             } catch (e: Exception) { }
         }

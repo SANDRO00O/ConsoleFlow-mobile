@@ -74,7 +74,7 @@
         </LinearLayout>
 
         <LinearLayout
-            android:id="@+id/menuAdBlock"
+            android:id="@+id/menuHistory"
             android:layout_width="0dp"
             android:layout_height="80dp"
             android:layout_columnWeight="1"
@@ -87,15 +87,14 @@
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_shield"
+                android:src="@drawable/ic_history"
                 android:tint="#FFFFFF" />
 
             <TextView
-                android:id="@+id/menuAdBlockLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="AdBlock On"
+                android:text="History"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp" />
         </LinearLayout>
