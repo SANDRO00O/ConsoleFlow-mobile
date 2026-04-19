@@ -55,6 +55,55 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  مانع الإعلانات (AdBlocker) — متوافق مع قوائم uBlock Origin
+// ─────────────────────────────────────────────────────────────────────────────
+
+object AdBlocker {
+    private val blockedDomains = HashSet<String>()
+    private val blockedPatterns = mutableListOf<String>()
+    private val cosmeticFilters = StringBuilder()
+    @Volatile private var loaded = false
+
+    fun load(assets: android.content.res.AssetManager) {
+        if (loaded) return
+        try {
+            assets.open("adblock_filters.txt").bufferedReader().forEachLine { raw ->
+                val line = raw.trim()
+                if (line.isEmpty() || line.startsWith("#") || line.startsWith("!")) return@forEachLine
+                when {
+                    line.startsWith("##") -> cosmeticFilters.append(line.substring(2)).append(",")
+                    line.startsWith("||") && line.endsWith("^") -> {
+                        val domain = line.substring(2, line.length - 1)
+                        blockedDomains.add(domain)
+                    }
+                    line.startsWith("/") -> blockedPatterns.add(line.trimEnd('^'))
+                    else -> {}
+                }
+            }
+            loaded = true
+        } catch (_: Exception) {}
+    }
+
+    fun isBlocked(url: String, host: String): Boolean {
+        if (!loaded) return false
+        // domain check — exact or subdomain
+        if (blockedDomains.any { host == it || host.endsWith(".$it") }) return true
+        // URL pattern check
+        if (blockedPatterns.any { url.contains(it, ignoreCase = true) }) return true
+        return false
+    }
+
+    fun getCosmeticCss(): String {
+        if (!loaded || cosmeticFilters.isEmpty()) return ""
+        val selectors = cosmeticFilters.toString().trimEnd(',')
+        return "try{var s=document.createElement('style');s.textContent='$selectors{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}';document.head.appendChild(s);}catch(e){}"
+    }
+
+    val emptyResponse: WebResourceResponse
+        get() = WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  بيانات التبويب والمجموعة
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -336,6 +385,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         prefsManager = PrefsManager(this)
         ioExecutor = Executors.newCachedThreadPool()   // تحسين الأداء
+
+        // تحميل قوائم منع الإعلانات في الخلفية
+        ioExecutor.execute { AdBlocker.load(assets) }
 
         initViews()
         setupListeners()
@@ -1382,9 +1434,6 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
                 }
 
                 url?.let {
-                    if (!isHomeStateUrl(it))
-                        prefsManager.addHistory(view.title ?: "Unknown", it)
-
                     currentGroup?.tabs?.find { t -> t.id == tabId }?.let { tab ->
                         tab.title = view.title ?: "Tab"
                         tab.url = if (isHomeStateUrl(it)) HOME_URL else it
@@ -1418,6 +1467,12 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
                     } catch (_: Exception) {
                         null
                     }
+                }
+
+                // منع الإعلانات — يعمل على جميع الطلبات (صور، سكريبتات، إطارات...)
+                if (prefsManager.adBlockEnabled) {
+                    val host = request.url.host ?: ""
+                    if (AdBlocker.isBlocked(url, host)) return AdBlocker.emptyResponse
                 }
 
                 // تم إصلاح الخطأ: استخدام الدالة getBoolean من PrefsManager بدلاً من الوصول المباشر
@@ -1782,9 +1837,10 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
                 cachedMenuSheet?.dismiss()
                 showBookmarksDialog()
             }
-            cachedMenuSheetView?.findViewById<View>(R.id.menuHistory)?.setOnClickListener {
+            cachedMenuSheetView?.findViewById<View>(R.id.menuAdBlock)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
-                showHistoryDialog()
+                prefsManager.adBlockEnabled = !prefsManager.adBlockEnabled
+                updateMenuAdBlockState()
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuConsoleToggle)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
@@ -1831,11 +1887,10 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
             desktopLabel?.setTextColor(Color.parseColor("#CCCCCC"))
         }
         updateMenuConsoleState()
+        updateMenuAdBlockState()
 
         cachedMenuSheet?.show()
-    }
-
-    private fun showBookmarksDialog() {
+    } {
         val bks = prefsManager.getBookmarks()
         if (bks.isEmpty()) {
             Toast.makeText(this, "No bookmarks", Toast.LENGTH_SHORT).show()
@@ -1843,17 +1898,6 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
         }
         showListWithFavicons("Bookmarks", bks) { index ->
             loadUrlInstantly(bks[index].second)
-        }
-    }
-
-    private fun showHistoryDialog() {
-        val hist = prefsManager.getHistory()
-        if (hist.isEmpty()) {
-            Toast.makeText(this, "No history", Toast.LENGTH_SHORT).show()
-            return
-        }
-        showListWithFavicons("History", hist) { index ->
-            loadUrlInstantly(hist[index].second)
         }
     }
 
@@ -1963,7 +2007,6 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
         WebStorage.getInstance().deleteAllData()
         CookieManager.getInstance().removeAllCookies(null)
         webViews.values.forEach { it.clearCache(true); it.clearHistory() }
-        prefsManager.clearHistory()
 
         getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE).edit().remove("SAVED_GROUPS").apply()
 
@@ -2112,12 +2155,25 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
         }
     }
 
+    private fun updateMenuAdBlockState() {
+        val enabled = prefsManager.adBlockEnabled
+        cachedMenuSheetView?.findViewById<TextView>(R.id.menuAdBlockLabel)?.apply {
+            text = if (enabled) "AdBlock On" else "AdBlock Off"
+            setTextColor(if (enabled) Color.WHITE else Color.parseColor("#CCCCCC"))
+        }
+    }
+
     private fun applyConsoleTools(view: WebView) {
         if (prefsManager.consoleEnabled) {
             view.evaluateJavascript(consoleInitScript(), null)
             view.evaluateJavascript(touchHookScript(), null)
         } else {
             view.evaluateJavascript(consoleDisableScript(), null)
+        }
+        // حقن فلاتر CSS لإخفاء عناصر الإعلانات المتبقية
+        if (prefsManager.adBlockEnabled) {
+            val css = AdBlocker.getCosmeticCss()
+            if (css.isNotEmpty()) view.evaluateJavascript(css, null)
         }
     }
 
