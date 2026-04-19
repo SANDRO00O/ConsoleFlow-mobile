@@ -1,6 +1,6 @@
 {
-  "release_name": "v2.0.0 ConsoleFlow",
-  "apk_name": "ConsoleFlow_v2.0.0.apk",
+  "release_name": "v2.1.0 ConsoleFlow",
+  "apk_name": "ConsoleFlow_v2.1.0.apk",
   "is_prerelease": false,
-  "release_body": "UI/UX overhaul: Chrome-style tabs, bottom sheet menu, QR scanner, new Settings screen, redesigned bottom navigation bar"
+  "release_body": "Add Adblocker"
 }
