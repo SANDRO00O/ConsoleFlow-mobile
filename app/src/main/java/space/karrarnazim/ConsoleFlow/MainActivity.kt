@@ -1890,7 +1890,9 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
         updateMenuAdBlockState()
 
         cachedMenuSheet?.show()
-    } {
+    }
+
+    private fun showBookmarksDialog() {
         val bks = prefsManager.getBookmarks()
         if (bks.isEmpty()) {
             Toast.makeText(this, "No bookmarks", Toast.LENGTH_SHORT).show()
