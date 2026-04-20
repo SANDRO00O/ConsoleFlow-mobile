@@ -32,15 +32,19 @@ class PrefsManager(context: Context) {
     fun addHistory(title: String, url: String) {
         if (url == "about:blank" || url == "error://page" || url.startsWith("error://")) return
         val historyArray = getList("history")
-        val newItem = "{\"title\":\"$title\", \"url\":\"$url\"}"
+        val newItem = JSONObject().apply {
+            put("title", title)
+            put("url", url)
+        }
         for (i in 0 until historyArray.length()) {
-            if (historyArray.getString(i).contains(url)) {
+            val old = historyArray.optJSONObject(i) ?: continue
+            if (old.optString("url") == url) {
                 historyArray.remove(i)
                 break
             }
         }
         historyArray.put(newItem)
-        if (historyArray.length() > 100) historyArray.remove(0)
+        while (historyArray.length() > 100) historyArray.remove(0)
         prefs.edit().putString("history", historyArray.toString()).apply()
     }
 
@@ -52,7 +56,8 @@ class PrefsManager(context: Context) {
         var indexToRemove = -1
 
         for (i in 0 until bookmarks.length()) {
-            if (bookmarks.getString(i).contains(url)) {
+            val old = bookmarks.optJSONObject(i) ?: continue
+            if (old.optString("url") == url) {
                 exists = true
                 indexToRemove = i
                 break
@@ -62,7 +67,10 @@ class PrefsManager(context: Context) {
         if (exists) {
             bookmarks.remove(indexToRemove)
         } else {
-            bookmarks.put("{\"title\":\"$title\", \"url\":\"$url\"}")
+            bookmarks.put(JSONObject().apply {
+                put("title", title)
+                put("url", url)
+            })
         }
         prefs.edit().putString("bookmarks", bookmarks.toString()).apply()
         return !exists
@@ -71,7 +79,7 @@ class PrefsManager(context: Context) {
     fun isBookmarked(url: String): Boolean {
         val bookmarks = getList("bookmarks")
         for (i in 0 until bookmarks.length()) {
-            if (bookmarks.getString(i).contains(url)) return true
+            if (bookmarks.optJSONObject(i)?.optString("url") == url) return true
         }
         return false
     }
@@ -81,7 +89,7 @@ class PrefsManager(context: Context) {
         val list = mutableListOf<Pair<String, String>>()
         for (i in 0 until bookmarks.length()) {
             try {
-                val obj = JSONObject(bookmarks.getString(i))
+                val obj = bookmarks.optJSONObject(i) ?: JSONObject(bookmarks.getString(i))
                 list.add(Pair(obj.getString("title"), obj.getString("url")))
             } catch (e: Exception) { }
         }
@@ -93,7 +101,7 @@ class PrefsManager(context: Context) {
         val list = mutableListOf<Pair<String, String>>()
         for (i in history.length() - 1 downTo 0) {
             try {
-                val obj = JSONObject(history.getString(i))
+                val obj = history.optJSONObject(i) ?: JSONObject(history.getString(i))
                 list.add(Pair(obj.getString("title"), obj.getString("url")))
             } catch (e: Exception) { }
         }

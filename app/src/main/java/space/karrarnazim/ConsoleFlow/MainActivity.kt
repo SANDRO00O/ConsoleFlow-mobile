@@ -62,7 +62,8 @@ data class TabState(
     val id: Int,
     var title: String = "New Tab",
     var url: String = "",
-    var hasThumbnail: Boolean = false
+    var hasThumbnail: Boolean = false,
+    var thumbnailUrl: String? = null
 ) : Serializable {
     @Transient var ramThumbnail: Bitmap? = null
     @Transient var faviconBitmap: Bitmap? = null
@@ -303,6 +304,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabAdapter: TabAdapter
 
     private val currentGroup: TabGroup? get() = tabGroups.find { it.id == activeGroupId }
+    private fun tabThumbnailFile(tabId: Int) = File(cacheDir, "thumb_$tabId.webp")
+    private fun homePreviewFile(width: Int, height: Int) = File(cacheDir, "home_preview_${width}x${height}.webp")
+    private fun homePreviewSigFile(width: Int, height: Int) = File(cacheDir, "home_preview_${width}x${height}.sig")
+    private fun hasCachedTabThumbnail(tabId: Int) = tabThumbnailFile(tabId).exists()
 
     // ── عقود نتائج الأذونات ومسح QR ────────────────────────────────────────
     private val requestPermissionLauncher = registerForActivityResult(
@@ -344,7 +349,7 @@ class MainActivity : AppCompatActivity() {
         val intentUrl = intent?.data?.toString()
 
         if (savedInstanceState != null) {
-            // استعادة المجموعات والتبويبات عند تدوير الشاشة
+            // استعادة خفيفة: نعيد البيانات فقط ونبني WebView النشط عند الحاجة
             val savedGroups = savedInstanceState.getSerializable("GROUPS_LIST") as? ArrayList<TabGroup>
             if (savedGroups != null && savedGroups.isNotEmpty()) {
                 tabGroups.clear()
@@ -354,17 +359,16 @@ class MainActivity : AppCompatActivity() {
                 nextTabId = savedInstanceState.getInt("NEXT_TAB_ID", 100)
                 nextGroupId = savedInstanceState.getInt("NEXT_GROUP_ID", 100)
 
-                tabGroups.forEach { group ->
-                    group.tabs.forEach { tab ->
-                        val wv = createNewWebView(tab.id)
-                        // استعادة حالة WebView من Bundle مخصص
-                        savedInstanceState.getBundle("webview_${tab.id}")?.let { wv.restoreState(it) }
-                        webViews[tab.id] = wv
-                        if (tab.id == activeTabId) webViewContainer.addView(wv)
-                    }
+                val activeTab = currentGroup?.tabs?.find { it.id == activeTabId } ?: currentGroup?.tabs?.firstOrNull()
+                if (activeTab != null) {
+                    val restoredState = savedInstanceState.getBundle("active_webview_state")
+                    val wv = ensureWebViewForTab(activeTab, restoredState)
+                    webViewContainer.addView(wv)
                 }
                 updateGroupsUI()
                 refreshTabsRecycler()
+                val activeTabUrl = currentGroup?.tabs?.find { it.id == activeTabId }?.url
+                if (isHomeStateUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay() else hideNativeOverlays(immediate = true)
             } else {
                 createNewGroup("Default")
             }
@@ -390,6 +394,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
+        if (intent != null) setIntent(intent)
         val url = intent?.data?.toString()
         if (!url.isNullOrEmpty()) {
             tabsOverlay.visibility = View.GONE
@@ -405,11 +410,11 @@ class MainActivity : AppCompatActivity() {
         outState.putInt("NEXT_TAB_ID", nextTabId)
         outState.putInt("NEXT_GROUP_ID", nextGroupId)
 
-        // حفظ حالة كل WebView في Bundle مستقل لتجنب التعارض
-        webViews.forEach { (tabId, wv) ->
+        // نحفظ فقط WebView النشط لتقليل حجم الـ Bundle بشكل كبير
+        currentWebView?.let { wv ->
             val bundle = Bundle()
             wv.saveState(bundle)
-            outState.putBundle("webview_$tabId", bundle)
+            outState.putBundle("active_webview_state", bundle)
         }
     }
 
@@ -488,8 +493,8 @@ class MainActivity : AppCompatActivity() {
         val width = resources.displayMetrics.widthPixels.coerceAtLeast(360)
         val height = resources.displayMetrics.heightPixels.coerceAtLeast(640)
         val key = homePreviewCacheKey(width, height)
-        val cacheFile = File(cacheDir, "home_preview_${width}x${height}.webp")
-        val sigFile = File(cacheDir, "home_preview_${width}x${height}.sig")
+        val cacheFile = homePreviewFile(width, height)
+        val sigFile = homePreviewSigFile(width, height)
 
         if (!force && cacheFile.exists() && sigFile.exists()) {
             runCatching { sigFile.readText() }.getOrNull()?.let { stored ->
@@ -991,6 +996,7 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
                         tabObj.put("title", tab.title)
                         tabObj.put("url", tab.url)
                         tabObj.put("hasThumb", tab.hasThumbnail)
+                        tabObj.put("thumbUrl", tab.thumbnailUrl)
                         tabsArray.put(tabObj)
                     }
                     groupObj.put("tabs", tabsArray)
@@ -1025,29 +1031,34 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
                         for (j in 0 until tabsArray.length()) {
                             val tObj = tabsArray.getJSONObject(j)
                             val rawUrl = tObj.getString("url")
+                            val tabId = tObj.getInt("id")
                             val t = TabState(
-                                tObj.getInt("id"),
+                                tabId,
                                 tObj.getString("title"),
                                 if (isHomeStateUrl(rawUrl)) HOME_URL else rawUrl,
-                                tObj.getBoolean("hasThumb")
+                                tObj.optBoolean("hasThumb", false) || hasCachedTabThumbnail(tabId),
+                                tObj.optString("thumbUrl", rawUrl)
                             )
                             group.tabs.add(t)
-                            val wv = createNewWebView(t.id)
-                            webViews[t.id] = wv
-                            wv.loadUrl(t.url)
                         }
                         tabGroups.add(group)
                     }
+
                     activeGroupId = prefs.getInt("ACTIVE_GROUP", tabGroups.first().id)
                     nextTabId = prefs.getInt("NEXT_TAB_ID", 100)
                     nextGroupId = prefs.getInt("NEXT_GROUP_ID", 100)
 
-                    // الآن نحدد activeTabId من المجموعة النشطة
                     val activeGroupTabs = currentGroup?.tabs
-                    activeTabId = prefs.getInt("ACTIVE_TAB", activeGroupTabs?.firstOrNull()?.id ?: 0)
+                    val activeTab = activeGroupTabs?.find { it.id == prefs.getInt("ACTIVE_TAB", activeGroupTabs.firstOrNull()?.id ?: 0) }
+                        ?: activeGroupTabs?.firstOrNull()
+                    activeTabId = activeTab?.id ?: 0
 
-                    val activeWv = webViews[activeTabId]
-                    if (activeWv != null) webViewContainer.addView(activeWv)
+                    if (activeTab != null) {
+                        val wv = ensureWebViewForTab(activeTab)
+                        if (webViewContainer.indexOfChild(wv) == -1) {
+                            webViewContainer.addView(wv)
+                        }
+                    }
 
                     updateGroupsUI()
                     refreshTabsRecycler()
@@ -1065,6 +1076,8 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
         createNewGroup("Default", if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL)
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  إدارة المجموعات والتبويبات
     // ─────────────────────────────────────────────────────────────────────────
     //  إدارة المجموعات والتبويبات
     // ─────────────────────────────────────────────────────────────────────────
@@ -1160,14 +1173,15 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
             val newTab = TabState(id = id, title = "New Tab", url = url)
             if (isHomeStateUrl(url)) {
                 newTab.hasThumbnail = true
+                newTab.thumbnailUrl = url
                 newTab.ramThumbnail = getHomePreviewBitmap()
             }
             currentGroup?.tabs?.add(newTab)
 
-            val wv = createNewWebView(id)
-            webViews[id] = wv
-            wv.loadUrl(url)
-
+            val wv = ensureWebViewForTab(newTab)
+            if (wv.parent == null && webViewContainer.childCount == 0) {
+                webViewContainer.addView(wv)
+            }
             switchToTab(newTab)
             refreshTabsRecycler()
             savePersistentTabs()
@@ -1175,19 +1189,18 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
     }
 
     private fun switchToTab(tab: TabState) {
-        // إخفاء لوحة المفاتيح عند التبديل
         hideKeyboard()
 
         val executeSwitch = {
+            val targetWebView = ensureWebViewForTab(tab)
             activeTabId = tab.id
             tabsOverlay.visibility = View.GONE
             tabAdapter.setActive(tab.id)
 
             webViewContainer.removeAllViews()
-            currentWebView?.let { wv ->
-                webViewContainer.addView(wv)
-                updateUIForCurrentWebView(wv)
-            }
+            webViewContainer.addView(targetWebView)
+            updateUIForCurrentWebView(targetWebView)
+
             if (isHomeStateUrl(tab.url)) showHomeOverlay() else { hideNativeOverlays(); setTopBarVisible(true) }
             updateTabCount()
             savePersistentTabs()
@@ -1208,7 +1221,7 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
         // تدوير الصورة النقطية يدويًا لمنع تسريب الذاكرة
         tab.ramThumbnail?.recycle()
         tab.ramThumbnail = null
-        ioExecutor.execute { File(cacheDir, "thumb_${tab.id}.webp").delete() }
+        ioExecutor.execute { tabThumbnailFile(tab.id).delete() }
 
         webViews[tab.id]?.let { wv ->
             webViewContainer.removeView(wv)
@@ -1228,6 +1241,22 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
             updateTabCount()
             savePersistentTabs()
         }
+    }
+
+    private fun ensureWebViewForTab(tab: TabState, restoreState: Bundle? = null): WebView {
+        val existing = webViews[tab.id]
+        if (existing != null) return existing
+
+        val wv = createNewWebView(tab.id)
+        webViews[tab.id] = wv
+        if (restoreState != null) {
+            runCatching { wv.restoreState(restoreState) }
+        } else if (!isHomeStateUrl(tab.url)) {
+            wv.loadUrl(tab.url)
+        } else {
+            wv.loadUrl(HOME_URL)
+        }
+        return wv
     }
 
     private fun updateTabCount() {
@@ -1261,6 +1290,14 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
         }
 
         val tabId = activeTabId
+        val currentUrl = wv.url ?: HOME_URL
+        val file = tabThumbnailFile(tabId)
+        val tabRef = currentGroup?.tabs?.find { it.id == tabId }
+        if (file.exists() && tabRef?.thumbnailUrl == currentUrl) {
+            onComplete?.invoke()
+            return
+        }
+
         try {
             val homeLike = isHomeStateUrl(wv.url)
             val bitmap = if (homeLike) {
@@ -1277,15 +1314,15 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
                 bitmap
             }
 
-            currentGroup?.tabs?.find { it.id == tabId }?.let {
+            tabRef?.let {
                 it.hasThumbnail = true
+                it.thumbnailUrl = currentUrl
                 it.ramThumbnail = bitmap
             }
             onComplete?.invoke()
 
             ioExecutor.execute {
                 try {
-                    val file = File(cacheDir, "thumb_$tabId.webp")
                     FileOutputStream(file).use { out ->
                         bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out)
                     }
@@ -1391,6 +1428,7 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
                         if (isHomeStateUrl(it) && tab.ramThumbnail == null) {
                             tab.ramThumbnail = getHomePreviewBitmap()
                             tab.hasThumbnail = true
+                            tab.thumbnailUrl = HOME_URL
                         }
                     }
                     savePersistentTabs()
@@ -1438,31 +1476,35 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
                         val cookie = CookieManager.getInstance().getCookie(url)
                         if (!cookie.isNullOrEmpty()) reqBuilder.header("Cookie", cookie)
 
-                        val response = okClient.newCall(reqBuilder.build()).execute()
-                        val contentType = response.header("Content-Type", "") ?: ""
+                        okClient.newCall(reqBuilder.build()).execute().use { response ->
+                            val contentType = response.header("Content-Type", "") ?: ""
 
-                        if (contentType.contains("text/html")) {
-                            var html = response.body?.string() ?: ""
+                            if (contentType.contains("text/html")) {
+                                var html = response.body?.string() ?: ""
 
-                            html = html.replace(Regex("""<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>""", RegexOption.IGNORE_CASE), "")
+                                html = html.replace(
+                                    Regex("""<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>""", RegexOption.IGNORE_CASE),
+                                    ""
+                                )
 
-                                                        val erudaTags = if (prefsManager.consoleEnabled) {
-                                "<script src=\"https://eruda.local/eruda.js\"></script>" +
-                                "<script>(function(){if(window.__erudaInited){try{eruda.show();window.__cfConsoleEnabled=true;}catch(e){};return;}try{eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;}catch(e){}})()</script>"
-                            } else {
-                                ""
+                                val erudaTags = if (prefsManager.consoleEnabled) {
+                                    "<script src=\"https://eruda.local/eruda.js\"></script>" +
+                                        "<script>(function(){if(window.__erudaInited){try{eruda.show();window.__cfConsoleEnabled=true;}catch(e){};return;}try{eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;}catch(e){}})()</script>"
+                                } else {
+                                    ""
+                                }
+                                val customJsTag = prefsManager.customJs.takeIf { it.isNotEmpty() }?.let { "<script>$it</script>" } ?: ""
+
+                                html = html.replaceFirst("<head>", "<head>$erudaTags$customJsTag", ignoreCase = true)
+                                val hdrs = response.headers.toMap().toMutableMap()
+                                hdrs.remove("Content-Security-Policy")
+                                hdrs.remove("content-security-policy")
+
+                                return WebResourceResponse(
+                                    "text/html", "utf-8", response.code, "OK", hdrs,
+                                    ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
+                                )
                             }
-                            val customJsTag = prefsManager.customJs.takeIf { it.isNotEmpty() }?.let { "<script>$it</script>" } ?: ""
-
-                            html = html.replaceFirst("<head>", "<head>$erudaTags$customJsTag", ignoreCase = true)
-                            val hdrs = response.headers.toMap().toMutableMap()
-                            hdrs.remove("Content-Security-Policy")
-                            hdrs.remove("content-security-policy")
-
-                            return WebResourceResponse(
-                                "text/html", "utf-8", response.code, "OK", hdrs,
-                                ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
-                            )
                         }
                     } catch (_: Exception) {
                         return null
@@ -1933,14 +1975,15 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
                     try {
                         val faviconUrl = "https://www.google.com/s2/favicons?domain=$domain&sz=64"
                         val req = okhttp3.Request.Builder().url(faviconUrl).build()
-                        val resp = okClient.newCall(req).execute()
-                        val bytes = resp.body?.bytes()
-                        if (bytes != null && bytes.isNotEmpty()) {
-                            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            mainHandler.post {
-                                if (bmp != null) {
-                                    faviconView.setImageBitmap(bmp)
-                                    faviconView.imageTintList = null
+                        okClient.newCall(req).execute().use { resp ->
+                            val bytes = resp.body?.bytes()
+                            if (bytes != null && bytes.isNotEmpty()) {
+                                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                mainHandler.post {
+                                    if (bmp != null) {
+                                        faviconView.setImageBitmap(bmp)
+                                        faviconView.imageTintList = null
+                                    }
                                 }
                             }
                         }
@@ -1962,10 +2005,21 @@ private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
     private fun clearData() {
         WebStorage.getInstance().deleteAllData()
         CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
         webViews.values.forEach { it.clearCache(true); it.clearHistory() }
         prefsManager.clearHistory()
 
-        getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE).edit().remove("SAVED_GROUPS").apply()
+        getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE).edit()
+            .remove("SAVED_GROUPS")
+            .remove("ACTIVE_GROUP")
+            .remove("ACTIVE_TAB")
+            .remove("NEXT_TAB_ID")
+            .remove("NEXT_GROUP_ID")
+            .apply()
+        cacheDir.listFiles()?.forEach { file ->
+            if (file.name.startsWith("thumb_") && file.name.endsWith(".webp")) file.delete()
+            if (file.name.startsWith("home_preview_") && (file.name.endsWith(".webp") || file.name.endsWith(".sig"))) file.delete()
+        }
 
         Toast.makeText(this, "Data Cleared", Toast.LENGTH_SHORT).show()
     }
@@ -2206,24 +2260,21 @@ class TabAdapter(
         } else if (isHomeStateLikeUrl(tab.url)) {
             val homePreview = (context as? MainActivity)?.getHomePreviewBitmap() ?: generateHomePreviewBitmap()
             h.thumbnail.setImageBitmap(homePreview)
-        } else if (tab.hasThumbnail) {
-            ioExecutor.execute {
-                val file = File(context.cacheDir, "thumb_${tab.id}.webp")
-                if (file.exists()) {
+        } else {
+            val file = File(context.cacheDir, "thumb_${tab.id}.webp")
+            if (tab.hasThumbnail || file.exists()) {
+                ioExecutor.execute {
                     val bitmap = BitmapFactory.decodeFile(file.absolutePath)
                     mainHandler.post {
                         if (h.adapterPosition == position) {
-                            h.thumbnail.setImageBitmap(bitmap)
+                            if (bitmap != null) h.thumbnail.setImageBitmap(bitmap)
+                            else h.thumbnail.setImageResource(android.R.color.transparent)
                         }
                     }
-                } else {
-                    mainHandler.post {
-                        h.thumbnail.setImageResource(android.R.color.transparent)
-                    }
                 }
+            } else {
+                h.thumbnail.setImageResource(android.R.color.transparent)
             }
-        } else {
-            h.thumbnail.setImageResource(android.R.color.transparent)
         }
 
         h.itemView.background = context.getDrawable(
