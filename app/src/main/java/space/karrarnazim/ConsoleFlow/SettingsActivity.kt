@@ -88,10 +88,22 @@ class SettingsActivity : AppCompatActivity() {
                 .setMessage("This will delete cache, cookies, and history.")
                 .setPositiveButton("Clear") { _, _ ->
                     android.webkit.WebStorage.getInstance().deleteAllData()
-                    android.webkit.CookieManager.getInstance().removeAllCookies(null)
+                    val cookies = android.webkit.CookieManager.getInstance()
+                    cookies.removeAllCookies(null)
+                    cookies.flush()
                     prefsManager.clearHistory()
                     getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
-                        .edit().apply()
+                        .edit()
+                        .remove("SAVED_GROUPS")
+                        .remove("ACTIVE_GROUP")
+                        .remove("ACTIVE_TAB")
+                        .remove("NEXT_TAB_ID")
+                        .remove("NEXT_GROUP_ID")
+                        .apply()
+                    cacheDir.listFiles()?.forEach { file ->
+                        if (file.name.startsWith("thumb_") && file.name.endsWith(".webp")) file.delete()
+                        if (file.name.startsWith("home_preview_") && (file.name.endsWith(".webp") || file.name.endsWith(".sig"))) file.delete()
+                    }
                     Toast.makeText(this, "Data cleared", Toast.LENGTH_SHORT).show()
                 }
                 .setNegativeButton("Cancel", null)
