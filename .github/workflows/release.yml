@@ -1,10 +1,7 @@
 name: Build & Release
 
 on:
-  push:
-    branches: [main, master]
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -49,7 +46,7 @@ jobs:
           BODY=$(jq -r '.release_body' builddata.json)
           PRE=$(jq -r '.is_prerelease' builddata.json)
           APK_NAME=$(jq -r '.apk_name' builddata.json)
-          
+
           echo "name=$NAME" >> $GITHUB_OUTPUT
           echo "body=$BODY" >> $GITHUB_OUTPUT
           echo "pre=$PRE" >> $GITHUB_OUTPUT
@@ -61,22 +58,16 @@ jobs:
           ORIGINAL_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
           NEW_NAME="${{ steps.metadata.outputs.apk_custom_name }}"
           NEW_PATH="app/build/outputs/apk/debug/$NEW_NAME"
-          
+
           mv "$ORIGINAL_PATH" "$NEW_PATH"
-          
+
           echo "path=$NEW_PATH" >> $GITHUB_OUTPUT
 
       - name: Determine release info
         id: info
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-            echo "title=${{ steps.metadata.outputs.name }} $TAG" >> $GITHUB_OUTPUT
-          else
-            echo "tag=latest-build" >> $GITHUB_OUTPUT
-            echo "title=${{ steps.metadata.outputs.name }}" >> $GITHUB_OUTPUT
-          fi
+          echo "tag=2.0.0" >> $GITHUB_OUTPUT
+          echo "title=${{ steps.metadata.outputs.name }}" >> $GITHUB_OUTPUT
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
