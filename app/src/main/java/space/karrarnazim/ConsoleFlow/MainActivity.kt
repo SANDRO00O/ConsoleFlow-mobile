@@ -2257,7 +2257,7 @@ class TabAdapter(
                     mainHandler.post {
                         // FIX #8 — استخدام bindingAdapterPosition بدلاً من adapterPosition المُهمل
                         val currentPos = h.bindingAdapterPosition
-                        if (currentPos != RecyclerView.NO_ID && currentPos == position) {
+                        if (currentPos != RecyclerView.NO_POSITION && currentPos == position) {
                             if (bitmap != null) h.thumbnail.setImageBitmap(bitmap)
                             else h.thumbnail.setImageResource(android.R.color.transparent)
                         }
