@@ -66,7 +66,7 @@ jobs:
       - name: Determine release info
         id: info
         run: |
-          echo "tag=2.0.0" >> $GITHUB_OUTPUT
+          echo "tag=v2.0.0" >> $GITHUB_OUTPUT
           echo "title=${{ steps.metadata.outputs.name }}" >> $GITHUB_OUTPUT
 
       - name: Upload Release
