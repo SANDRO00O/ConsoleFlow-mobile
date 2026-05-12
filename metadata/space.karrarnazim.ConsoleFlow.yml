@@ -13,7 +13,7 @@ Repo: https://github.com/SANDRO00O/ConsoleFlow-mobile
 Builds:
   - versionName: 2.1.0
     versionCode: 4
-    commit: 06efd30b8df7c93fca485555c28e3234574c9c47
+    commit: d638a5727dd17204d0879f1a677f3663e77a01de
     subdir: app
     gradle:
       - yes
