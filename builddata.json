@@ -1,6 +1,7 @@
 {
   "release_name": "v2.1.0 ConsoleFlow",
+  "release_body": "bug fix, overall improvement.",
   "apk_name": "ConsoleFlow_v2.1.0.apk",
   "is_prerelease": false,
-  "release_body": "bug fix, overall improvement."
+  "tag": "v2.1.0"
 }
