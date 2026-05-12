@@ -1,0 +1,45 @@
+name: Sync Source Only
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  source:
+    name: Upload Source Archive
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read Metadata
+        id: metadata
+        run: |
+          TAG=$(jq -r '.tag' builddata.json)
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create source archive
+        id: source
+        run: |
+          SOURCE_NAME="source-${{ steps.metadata.outputs.tag }}.tar.gz"
+
+          git archive \
+            --format=tar.gz \
+            --output="$SOURCE_NAME" \
+            HEAD
+
+          echo "path=$SOURCE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Upload Source to Existing Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.metadata.outputs.tag }}
+          files: ${{ steps.source.outputs.path }}
+          overwrite_files: true
+          generate_release_notes: false

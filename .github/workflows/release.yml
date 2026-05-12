@@ -1,4 +1,4 @@
-name: Build & Release
+name: Build & Update Release
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build:
-    name: Build APK
+    name: Build APK and Update Release
     runs-on: ubuntu-latest
 
     steps:
@@ -36,9 +36,6 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
-
       - name: Read Metadata
         id: metadata
         run: |
@@ -46,11 +43,20 @@ jobs:
           BODY=$(jq -r '.release_body' builddata.json)
           PRE=$(jq -r '.is_prerelease' builddata.json)
           APK_NAME=$(jq -r '.apk_name' builddata.json)
+          TAG=$(jq -r '.tag' builddata.json)
 
           echo "name=$NAME" >> $GITHUB_OUTPUT
-          echo "body=$BODY" >> $GITHUB_OUTPUT
+
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
           echo "pre=$PRE" >> $GITHUB_OUTPUT
           echo "apk_custom_name=$APK_NAME" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Locate and Rename APK
         id: apk
@@ -63,18 +69,27 @@ jobs:
 
           echo "path=$NEW_PATH" >> $GITHUB_OUTPUT
 
-      - name: Determine release info
-        id: info
+      - name: Create source archive
+        id: source
         run: |
-          echo "tag=v2.1.0" >> $GITHUB_OUTPUT
-          echo "title=${{ steps.metadata.outputs.name }}" >> $GITHUB_OUTPUT
+          SOURCE_NAME="source-${{ steps.metadata.outputs.tag }}.tar.gz"
 
-      - name: Upload Release
+          git archive \
+            --format=tar.gz \
+            --output="$SOURCE_NAME" \
+            HEAD
+
+          echo "path=$SOURCE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.info.outputs.tag }}
-          name: ${{ steps.info.outputs.title }}
+          tag_name: ${{ steps.metadata.outputs.tag }}
+          name: ${{ steps.metadata.outputs.name }}
           prerelease: ${{ steps.metadata.outputs.pre }}
           body: ${{ steps.metadata.outputs.body }}
-          files: ${{ steps.apk.outputs.path }}
+          files: |
+            ${{ steps.apk.outputs.path }}
+            ${{ steps.source.outputs.path }}
+          overwrite_files: true
           generate_release_notes: true
