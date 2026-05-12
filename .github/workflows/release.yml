@@ -77,13 +77,6 @@ jobs:
           mv "$ORIGINAL_PATH" "$NEW_PATH"
           echo "path=$NEW_PATH" >> $GITHUB_OUTPUT
 
-      - name: Create source archive
-        id: source
-        run: |
-          SOURCE_NAME="source-${{ steps.metadata.outputs.tag }}.tar.gz"
-          git archive --format=tar.gz --output="$SOURCE_NAME" HEAD
-          echo "path=$SOURCE_NAME" >> $GITHUB_OUTPUT
-
       - name: Create new Release
         uses: softprops/action-gh-release@v2
         with:
@@ -91,7 +84,5 @@ jobs:
           name: ${{ steps.metadata.outputs.name }}
           prerelease: ${{ steps.metadata.outputs.pre }}
           body: ${{ steps.metadata.outputs.body }}
-          files: |
-            ${{ steps.apk.outputs.path }}
-            ${{ steps.source.outputs.path }}
+          files: ${{ steps.apk.outputs.path }}
           generate_release_notes: true
