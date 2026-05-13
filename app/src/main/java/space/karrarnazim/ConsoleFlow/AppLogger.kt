@@ -1,7 +1,11 @@
 package space.karrarnazim.ConsoleFlow
 
+import android.content.Context
+import java.io.File
+import java.io.FileOutputStream
 import java.util.Collections
 import java.util.LinkedList
+import java.util.concurrent.Executors
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  AppLogger — مخزن سجلات مركزي مُتزامن (thread-safe)
@@ -49,18 +53,44 @@ enum class LogLevel {
 
 object AppLogger {
     private const val MAX_ENTRIES = 500
+    private val entries = LinkedList<LogEntry>()
+    private val fileExecutor = Executors.newSingleThreadExecutor()
+    private var logFile: File? = null
 
-    // LinkedList محمي بـ Collections.synchronizedList — قراءة/كتابة آمنة من أي thread
-    private val entries: MutableList<LogEntry> =
-        Collections.synchronizedList(LinkedList<LogEntry>())
+    /** تهيئة ملف السجلات */
+    fun init(context: Context) {
+        try {
+            val dir = context.getExternalFilesDir(null) ?: context.filesDir
+            logFile = File(dir, "app_logs.txt")
+            if (!logFile!!.exists()) logFile!!.createNewFile()
+            
+            i("APP", "Logger initialized. File: ${logFile!!.absolutePath}")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     // ─── كتابة ──────────────────────────────────────────────────────────────
 
     fun log(level: LogLevel, source: String, message: String, url: String? = null) {
         val entry = LogEntry(level = level, source = source, message = message, url = url)
+        
         synchronized(entries) {
-            (entries as LinkedList).addLast(entry)
+            entries.addLast(entry)
             if (entries.size > MAX_ENTRIES) entries.removeFirst()
+        }
+
+        // كتابة السجل في الملف في الخلفية
+        logFile?.let { file ->
+            fileExecutor.execute {
+                try {
+                    val line = "[${entry.timeString}] ${entry.level.label} [${entry.source}] ${entry.message}" +
+                            (if (entry.url != null) " → ${entry.url}" else "") + "\n"
+                    FileOutputStream(file, true).use { it.write(line.toByteArray()) }
+                } catch (e: Exception) {
+                    // فشل الكتابة في الملف لا يجب أن يعطل التطبيق
+                }
+            }
         }
     }
 
@@ -72,14 +102,22 @@ object AppLogger {
 
     // ─── قراءة ──────────────────────────────────────────────────────────────
 
-    /** نسخة ثابتة للقراءة على main thread */
     fun snapshot(): List<LogEntry> = synchronized(entries) { entries.toList() }
 
     fun errorCount(): Int = synchronized(entries) {
         entries.count { it.level == LogLevel.ERROR }
     }
 
-    fun clear() = synchronized(entries) { entries.clear() }
+    fun clear() {
+        synchronized(entries) { entries.clear() }
+        fileExecutor.execute {
+            try {
+                logFile?.writeText("")
+            } catch (e: Exception) {}
+        }
+    }
+
+    fun getLogFilePath(): String? = logFile?.absolutePath
 
     // ─── تصدير ──────────────────────────────────────────────────────────────
 
