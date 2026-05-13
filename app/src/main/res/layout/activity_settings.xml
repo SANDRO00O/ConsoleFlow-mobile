@@ -102,7 +102,7 @@
                             android:id="@+id/settingVersion"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Version 2.1.1"
+                            android:text="Version 2.1.0"
                             android:textColor="#888888"
                             android:textSize="12sp" />
                     </LinearLayout>
@@ -228,6 +228,68 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_menu_item"
                 android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/settingLogs"
+                    android:layout_width="match_parent"
+                    android:layout_height="60dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="18dp"
+                    android:background="@drawable/menu_item_ripple">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_code"
+                        android:tint="#4CAF50" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="14dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="App Logs"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="JS console, network &amp; app errors"
+                            android:textColor="#7A7A7A"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/logsErrorBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="7dp"
+                        android:paddingVertical="2dp"
+                        android:text="0"
+                        android:textColor="#EF5350"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="8dp"
+                        android:src="@drawable/arrow_right"
+                        android:tint="#444444" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginHorizontal="18dp"
+                    android:background="#222222" />
 
                 <LinearLayout
                     android:id="@+id/settingCustomJs"
