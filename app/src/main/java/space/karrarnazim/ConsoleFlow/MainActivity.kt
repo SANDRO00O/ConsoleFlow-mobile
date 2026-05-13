@@ -33,10 +33,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.core.view.updatePadding
+import androidx.core.view.WindowInsetsCompat
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -326,7 +325,6 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        AppLogger.init(this)
         prefsManager = PrefsManager(this)
 
         // FIX #10 — fixed thread pool محدود بعدد cores
@@ -465,21 +463,8 @@ class MainActivity : AppCompatActivity() {
         )
         tabsRecycler.layoutManager = GridLayoutManager(this, 2)
         tabsRecycler.adapter       = tabAdapter
-        // FIX CRASH — تعطيل الـ animation لمنع IllegalStateException عند استدعاء dispatchUpdatesTo
-        // أثناء أن الـ RecyclerView لا يزال يُعالج الـ animation السابق (حذف سريع للتبويبات)
-        tabsRecycler.itemAnimator  = null
 
         updateSearchEngineIcon()
-
-        // FIX STATUS BAR — targetSdk=35 يُفعّل edge-to-edge تلقائياً على Android 15+
-        // بدون هذا الكود، الـ topBar يختبئ تحت status bar والـ bottomBar تحت nav bar
-        val bottomBarView = findViewById<View>(R.id.bottomBar)
-        ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
-            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            topBar.updatePadding(top = sys.top)
-            bottomBarView.updatePadding(bottom = sys.bottom)
-            insets
-        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -492,10 +477,6 @@ class MainActivity : AppCompatActivity() {
         nativeErrorOverlay = buildErrorOverlay()
         nativeHomeOverlay?.let  { nativeOverlayContainer.addView(it) }
         nativeErrorOverlay?.let { nativeOverlayContainer.addView(it) }
-        
-        // FIX: Ensure container is visible for a moment if we need to measure/layout
-        // But here we just want to ensure the views are added.
-        
         hideNativeOverlays(immediate = true)
         // FIX #3 — حفظ مرجع أيقونة محرك البحث من الـ View الجديد عبر tag
         homeSearchEngineIcon = nativeHomeOverlay?.findViewWithTag("home_search_engine_icon")
@@ -724,12 +705,7 @@ class MainActivity : AppCompatActivity() {
         // FIX #3 — نضع tag على الـ icon لنتمكن من re-resolve بعد أي rebuild
         val searchIcon = ImageView(this).apply {
             tag = "home_search_engine_icon"
-            try {
-                setImageResource(currentSearchEngineIconRes())
-            } catch (e: Exception) {
-                // Fallback if resource is missing
-                setImageResource(android.R.drawable.ic_menu_search)
-            }
+            setImageResource(currentSearchEngineIconRes())
             setColorFilter(Color.parseColor("#7E7E7E"))
             layoutParams = LinearLayout.LayoutParams((20*dp).toInt(), (20*dp).toInt())
         }
@@ -1234,33 +1210,30 @@ class MainActivity : AppCompatActivity() {
 
     // FIX #6 — حذف notifyItemRemoved اليدوي، نستخدم refreshTabsRecycler مع DiffUtil
     private fun closeTab(tab: TabState) {
-        webViewContainer.post {
-            val group = currentGroup ?: return@post
-            val idx = group.tabs.indexOfFirst { it.id == tab.id }
-            if (idx < 0) return@post
+        val group = currentGroup ?: return
+        val idx   = group.tabs.indexOfFirst { it.id == tab.id }
+        if (idx < 0) return
 
-            tab.ramThumbnail?.recycle()
-            tab.ramThumbnail = null
-            ioExecutor.execute { tabThumbnailFile(tab.id).delete() }
+        tab.ramThumbnail?.recycle()
+        tab.ramThumbnail = null
+        ioExecutor.execute { tabThumbnailFile(tab.id).delete() }
 
-            webViews[tab.id]?.let { wv ->
-                if (wv.parent != null) webViewContainer.removeView(wv)
-                wv.destroy()
-                webViews.remove(tab.id)
-            }
+        webViews[tab.id]?.let { wv ->
+            webViewContainer.removeView(wv)
+            wv.destroy()
+            webViews.remove(tab.id)
+        }
 
-            group.tabs.removeAt(idx)
+        group.tabs.removeAt(idx)
 
-            if (group.tabs.isEmpty()) {
-                activeTabId = 0
-                openNewTab(HOME_URL)
-            } else if (tab.id == activeTabId) {
-                val fallbackTab = group.tabs.getOrNull(idx - 1) ?: group.tabs.first()
-                switchToTab(fallbackTab)
-            } else {
-                refreshTabsRecycler()  // DiffUtil يتولى الـ animation
-                savePersistentTabs()
-            }
+        if (group.tabs.isEmpty()) {
+            openNewTab(HOME_URL)
+        } else if (tab.id == activeTabId) {
+            val fallbackTab = group.tabs.getOrNull(maxOf(0, idx - 1)) ?: group.tabs.first()
+            switchToTab(fallbackTab)
+        } else {
+            refreshTabsRecycler()  // DiffUtil يتولى الـ animation
+            savePersistentTabs()
         }
     }
 
@@ -1430,7 +1403,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
-                if (!isHomeUrl(url)) AppLogger.d("WV", "Loading → $url", url)
                 if (view == currentWebView) {
                     progressBar.visibility = View.VISIBLE
                     textUrl.setText(if (isHomeUrl(url)) "" else url)
@@ -1440,7 +1412,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
-                if (!isHomeUrl(url)) AppLogger.i("WV", "Finished → ${view.title ?: url}", url)
                 if (view == currentWebView) {
                     swipeRefresh.isRefreshing = false
                     progressBar.visibility    = View.INVISIBLE
@@ -1484,19 +1455,7 @@ class MainActivity : AppCompatActivity() {
 
                 if (url == "https://eruda.local/eruda.js") {
                     return try {
-                        WebResourceResponse(
-                            "application/javascript",
-                            "utf-8",
-                            200,
-                            "OK",
-                            mapOf(
-                                "Access-Control-Allow-Origin" to "*",
-                                "Access-Control-Allow-Methods" to "GET, OPTIONS",
-                                "Access-Control-Allow-Headers" to "*",
-                                "Cache-Control" to "no-cache"
-                            ),
-                            assets.open("eruda.js")
-                        )
+                        WebResourceResponse("application/javascript", "utf-8", assets.open("eruda.js"))
                     } catch (_: Exception) { null }
                 }
 
@@ -1555,9 +1514,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
-                val msg = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M)
-                    "[${err.errorCode}] ${err.description}" else "Load error"
-                AppLogger.e("NET", msg, req.url.toString())
                 if (req.isForMainFrame) {
                     runOnUiThread { showErrorOverlay(req.url.toString()) }
                 }
@@ -1576,19 +1532,6 @@ class MainActivity : AppCompatActivity() {
         wv.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView, newProgress: Int) {
                 if (view == currentWebView) progressBar.progress = newProgress
-            }
-
-            override fun onConsoleMessage(msg: android.webkit.ConsoleMessage): Boolean {
-                val level = when (msg.messageLevel()) {
-                    android.webkit.ConsoleMessage.MessageLevel.ERROR   -> LogLevel.ERROR
-                    android.webkit.ConsoleMessage.MessageLevel.WARNING -> LogLevel.WARN
-                    android.webkit.ConsoleMessage.MessageLevel.DEBUG   -> LogLevel.DEBUG
-                    android.webkit.ConsoleMessage.MessageLevel.TIP     -> LogLevel.VERBOSE
-                    else                                               -> LogLevel.INFO
-                }
-                val src = "${msg.sourceId().substringAfterLast('/')}:${msg.lineNumber()}"
-                AppLogger.log(level, "JS", msg.message(), src)
-                return false  // false = Eruda يتولى الـ display أيضاً
             }
 
             override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
@@ -2136,14 +2079,14 @@ class MainActivity : AppCompatActivity() {
             "if(el)el.style.display='';}catch(e){}" +
             "return;" +
         "}" +
-        "var s=document.createElement('script');" +
-        "s.src='https://eruda.local/eruda.js';" +
-        "s.onload=function(){" +
+        "var x=new XMLHttpRequest();" +
+        "x.open('GET','https://eruda.local/eruda.js',true);" +
+        "x.onload=function(){" +
             "if(window.__erudaInited)return;" +
-            "try{if(typeof eruda!=='undefined'){eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;if(el)el.style.display='';}}catch(e){}" +
+            "try{eval(x.responseText);eruda.init();window.__erudaInited=true;" +
+            "window.__cfConsoleEnabled=true;if(el)el.style.display='';}catch(e){}" +
         "};" +
-        "s.onerror=function(){};" +
-        "(document.head||document.documentElement).appendChild(s);" +
+        "x.send();" +
         "})()"
 
     private fun consoleDisableScript(): String =
@@ -2238,22 +2181,34 @@ class TabAdapter(
     private var activeId: Int = -1
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // CRASH FIX — dispatchUpdatesTo يستدعي notifyItemRemoved أثناء layout pass → IllegalStateException
-    // الحل الصحيح: notifyDataSetChanged لا تتحقق من isComputingLayout وتعمل بأمان دائماً.
-    // DiffUtil مع itemAnimator=null لا فائدة منه (لا animations = لا داعي للـ diff أصلاً)
+    // FIX #6 — DiffUtil بدلاً من notifyDataSetChanged الكارثية
     fun submitUpdate(newTabs: List<TabState>, newActiveId: Int) {
+        val oldTabs     = tabs
+        val oldActiveId = activeId
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize() = oldTabs.size
+            override fun getNewListSize() = newTabs.size
+            override fun areItemsTheSame(oldPos: Int, newPos: Int) =
+                oldTabs[oldPos].id == newTabs[newPos].id
+            override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean {
+                val old = oldTabs[oldPos]; val new = newTabs[newPos]
+                // يعيد رسم العنصر فقط إذا تغيّر المحتوى أو حالة النشاط
+                return old.title == new.title &&
+                       old.url == new.url &&
+                       old.hasThumbnail == new.hasThumbnail &&
+                       (old.id == oldActiveId) == (new.id == newActiveId)
+            }
+        })
         tabs     = newTabs.toMutableList()
         activeId = newActiveId
-        notifyDataSetChanged()
+        diff.dispatchUpdatesTo(this)  // يُطبّق فقط التغييرات الضرورية
     }
 
     fun updateFavicon(tabId: Int, favicon: Bitmap) {
-        mainHandler.post {
-            val position = tabs.indexOfFirst { it.id == tabId }
-            if (position in 0 until tabs.size) {
-                tabs[position].faviconBitmap = favicon
-                notifyItemChanged(position)
-            }
+        val position = tabs.indexOfFirst { it.id == tabId }
+        if (position >= 0) {
+            tabs[position].faviconBitmap = favicon
+            mainHandler.post { notifyItemChanged(position) }
         }
     }
 

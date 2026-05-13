@@ -5729,7 +5729,7 @@
             }
           }
           re(n(688), document.head);
-          var co = { monitor: "1.1.1", features: "2.1.0", timing: "2.0.1", code: "2.2.0", benchmark: "2.0.1", geolocation: "2.1.0", orientation: "2.1.1", touches: "2.1.0", vue: "1.1.1" },
+          var co = { monitor: "1.1.1", features: "2.1.1", timing: "2.0.1", code: "2.2.0", benchmark: "2.0.1", geolocation: "2.1.1", orientation: "2.1.1", touches: "2.1.1", vue: "1.1.1" },
             lo = n(961),
             uo = n.n(lo);
           
