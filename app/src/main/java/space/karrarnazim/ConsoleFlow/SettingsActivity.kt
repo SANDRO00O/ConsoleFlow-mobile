@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -18,7 +19,7 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
         prefsManager = PrefsManager(this)
 
-        findViewById<android.view.View>(R.id.btnBack).setOnClickListener { finish() }
+        findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
 
         try {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
@@ -40,7 +41,7 @@ class SettingsActivity : AppCompatActivity() {
             else -> "Google"
         }
         findViewById<TextView>(R.id.settingSearchEngineValue).text = currentLabel
-        findViewById<android.view.View>(R.id.settingSearchEngine).setOnClickListener {
+        findViewById<View>(R.id.settingSearchEngine).setOnClickListener {
             AlertDialog.Builder(this, R.style.DarkDialog)
                 .setTitle("Search Engine")
                 .setItems(engines) { _, which ->
@@ -56,11 +57,11 @@ class SettingsActivity : AppCompatActivity() {
         switchDesktop.setOnCheckedChangeListener { _, isChecked ->
             prefsManager.desktopMode = isChecked
         }
-        findViewById<android.view.View>(R.id.settingDesktopMode).setOnClickListener {
+        findViewById<View>(R.id.settingDesktopMode).setOnClickListener {
             switchDesktop.isChecked = !switchDesktop.isChecked
         }
 
-        findViewById<android.view.View>(R.id.settingCustomJs).setOnClickListener {
+        findViewById<View>(R.id.settingCustomJs).setOnClickListener {
             val input = EditText(this).apply {
                 setText(prefsManager.customJs)
                 setTextColor(0xFFFFFFFF.toInt())
@@ -82,7 +83,7 @@ class SettingsActivity : AppCompatActivity() {
                 .show()
         }
 
-        findViewById<android.view.View>(R.id.settingClearData).setOnClickListener {
+        findViewById<View>(R.id.settingClearData).setOnClickListener {
             AlertDialog.Builder(this, R.style.DarkDialog)
                 .setTitle("Clear Browsing Data")
                 .setMessage("This will delete cache, cookies, and history.")
@@ -110,16 +111,27 @@ class SettingsActivity : AppCompatActivity() {
                 .show()
         }
 
-        findViewById<android.view.View>(R.id.settingPortfolio).setOnClickListener {
+        findViewById<View>(R.id.settingPortfolio).setOnClickListener {
             openUrl("https://karrarnazim.space")
         }
 
-        findViewById<android.view.View>(R.id.settingAppWebsite).setOnClickListener {
+        findViewById<View>(R.id.settingAppWebsite).setOnClickListener {
             openUrl("https://consoleflow.karrarnazim.space")
         }
 
-        findViewById<android.view.View>(R.id.settingOpenSource).setOnClickListener {
+        findViewById<View>(R.id.settingOpenSource).setOnClickListener {
             openUrl("https://github.com/SANDRO00O/ConsoleFlow-mobile")
+        }
+
+        findViewById<View>(R.id.settingLogs).setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java))
+        }
+
+        val badge = findViewById<TextView>(R.id.logsErrorBadge)
+        val errors = AppLogger.errorCount()
+        if (errors > 0) {
+            badge.text = errors.toString()
+            badge.visibility = View.VISIBLE
         }
     }
 

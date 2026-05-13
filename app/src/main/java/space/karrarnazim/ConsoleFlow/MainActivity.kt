@@ -37,7 +37,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
-import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -1418,6 +1417,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                if (!isHomeUrl(url)) AppLogger.d("WV", "Loading → $url", url)
                 if (view == currentWebView) {
                     progressBar.visibility = View.VISIBLE
                     textUrl.setText(if (isHomeUrl(url)) "" else url)
@@ -1427,6 +1427,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
+                if (!isHomeUrl(url)) AppLogger.i("WV", "Finished → ${view.title ?: url}", url)
                 if (view == currentWebView) {
                     swipeRefresh.isRefreshing = false
                     progressBar.visibility    = View.INVISIBLE
@@ -1529,6 +1530,9 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
+                val msg = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M)
+                    "[${err.errorCode}] ${err.description}" else "Load error"
+                AppLogger.e("NET", msg, req.url.toString())
                 if (req.isForMainFrame) {
                     runOnUiThread { showErrorOverlay(req.url.toString()) }
                 }
@@ -1547,6 +1551,19 @@ class MainActivity : AppCompatActivity() {
         wv.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView, newProgress: Int) {
                 if (view == currentWebView) progressBar.progress = newProgress
+            }
+
+            override fun onConsoleMessage(msg: android.webkit.ConsoleMessage): Boolean {
+                val level = when (msg.messageLevel()) {
+                    android.webkit.ConsoleMessage.MessageLevel.ERROR   -> LogLevel.ERROR
+                    android.webkit.ConsoleMessage.MessageLevel.WARNING -> LogLevel.WARN
+                    android.webkit.ConsoleMessage.MessageLevel.DEBUG   -> LogLevel.DEBUG
+                    android.webkit.ConsoleMessage.MessageLevel.TIP     -> LogLevel.VERBOSE
+                    else                                               -> LogLevel.INFO
+                }
+                val src = "${msg.sourceId().substringAfterLast('/')}:${msg.lineNumber()}"
+                AppLogger.log(level, "JS", msg.message(), src)
+                return false  // false = Eruda يتولى الـ display أيضاً
             }
 
             override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
@@ -2196,27 +2213,13 @@ class TabAdapter(
     private var activeId: Int = -1
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // FIX #6 — DiffUtil بدلاً من notifyDataSetChanged الكارثية
+    // CRASH FIX — dispatchUpdatesTo يستدعي notifyItemRemoved أثناء layout pass → IllegalStateException
+    // الحل الصحيح: notifyDataSetChanged لا تتحقق من isComputingLayout وتعمل بأمان دائماً.
+    // DiffUtil مع itemAnimator=null لا فائدة منه (لا animations = لا داعي للـ diff أصلاً)
     fun submitUpdate(newTabs: List<TabState>, newActiveId: Int) {
-        val oldTabs     = tabs
-        val oldActiveId = activeId
-        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize() = oldTabs.size
-            override fun getNewListSize() = newTabs.size
-            override fun areItemsTheSame(oldPos: Int, newPos: Int) =
-                oldTabs[oldPos].id == newTabs[newPos].id
-            override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean {
-                val old = oldTabs[oldPos]; val new = newTabs[newPos]
-                // يعيد رسم العنصر فقط إذا تغيّر المحتوى أو حالة النشاط
-                return old.title == new.title &&
-                       old.url == new.url &&
-                       old.hasThumbnail == new.hasThumbnail &&
-                       (old.id == oldActiveId) == (new.id == newActiveId)
-            }
-        })
         tabs     = newTabs.toMutableList()
         activeId = newActiveId
-        diff.dispatchUpdatesTo(this)  // يُطبّق فقط التغييرات الضرورية
+        notifyDataSetChanged()
     }
 
     fun updateFavicon(tabId: Int, favicon: Bitmap) {
