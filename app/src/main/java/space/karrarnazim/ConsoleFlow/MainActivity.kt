@@ -1234,30 +1234,33 @@ class MainActivity : AppCompatActivity() {
 
     // FIX #6 — حذف notifyItemRemoved اليدوي، نستخدم refreshTabsRecycler مع DiffUtil
     private fun closeTab(tab: TabState) {
-        val group = currentGroup ?: return
-        val idx   = group.tabs.indexOfFirst { it.id == tab.id }
-        if (idx < 0) return
+        webViewContainer.post {
+            val group = currentGroup ?: return@post
+            val idx = group.tabs.indexOfFirst { it.id == tab.id }
+            if (idx < 0) return@post
 
-        tab.ramThumbnail?.recycle()
-        tab.ramThumbnail = null
-        ioExecutor.execute { tabThumbnailFile(tab.id).delete() }
+            tab.ramThumbnail?.recycle()
+            tab.ramThumbnail = null
+            ioExecutor.execute { tabThumbnailFile(tab.id).delete() }
 
-        webViews[tab.id]?.let { wv ->
-            webViewContainer.removeView(wv)
-            wv.destroy()
-            webViews.remove(tab.id)
-        }
+            webViews[tab.id]?.let { wv ->
+                if (wv.parent != null) webViewContainer.removeView(wv)
+                wv.destroy()
+                webViews.remove(tab.id)
+            }
 
-        group.tabs.removeAt(idx)
+            group.tabs.removeAt(idx)
 
-        if (group.tabs.isEmpty()) {
-            openNewTab(HOME_URL)
-        } else if (tab.id == activeTabId) {
-            val fallbackTab = group.tabs.getOrNull(maxOf(0, idx - 1)) ?: group.tabs.first()
-            switchToTab(fallbackTab)
-        } else {
-            refreshTabsRecycler()  // DiffUtil يتولى الـ animation
-            savePersistentTabs()
+            if (group.tabs.isEmpty()) {
+                activeTabId = 0
+                openNewTab(HOME_URL)
+            } else if (tab.id == activeTabId) {
+                val fallbackTab = group.tabs.getOrNull(idx - 1) ?: group.tabs.first()
+                switchToTab(fallbackTab)
+            } else {
+                refreshTabsRecycler()  // DiffUtil يتولى الـ animation
+                savePersistentTabs()
+            }
         }
     }
 
@@ -1481,7 +1484,19 @@ class MainActivity : AppCompatActivity() {
 
                 if (url == "https://eruda.local/eruda.js") {
                     return try {
-                        WebResourceResponse("application/javascript", "utf-8", assets.open("eruda.js"))
+                        WebResourceResponse(
+                            "application/javascript",
+                            "utf-8",
+                            200,
+                            "OK",
+                            mapOf(
+                                "Access-Control-Allow-Origin" to "*",
+                                "Access-Control-Allow-Methods" to "GET, OPTIONS",
+                                "Access-Control-Allow-Headers" to "*",
+                                "Cache-Control" to "no-cache"
+                            ),
+                            assets.open("eruda.js")
+                        )
                     } catch (_: Exception) { null }
                 }
 
@@ -2121,14 +2136,14 @@ class MainActivity : AppCompatActivity() {
             "if(el)el.style.display='';}catch(e){}" +
             "return;" +
         "}" +
-        "var x=new XMLHttpRequest();" +
-        "x.open('GET','https://eruda.local/eruda.js',true);" +
-        "x.onload=function(){" +
+        "var s=document.createElement('script');" +
+        "s.src='https://eruda.local/eruda.js';" +
+        "s.onload=function(){" +
             "if(window.__erudaInited)return;" +
-            "try{eval(x.responseText);eruda.init();window.__erudaInited=true;" +
-            "window.__cfConsoleEnabled=true;if(el)el.style.display='';}catch(e){}" +
+            "try{if(typeof eruda!=='undefined'){eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;if(el)el.style.display='';}}catch(e){}" +
         "};" +
-        "x.send();" +
+        "s.onerror=function(){};" +
+        "(document.head||document.documentElement).appendChild(s);" +
         "})()"
 
     private fun consoleDisableScript(): String =
@@ -2233,10 +2248,12 @@ class TabAdapter(
     }
 
     fun updateFavicon(tabId: Int, favicon: Bitmap) {
-        val position = tabs.indexOfFirst { it.id == tabId }
-        if (position >= 0) {
-            tabs[position].faviconBitmap = favicon
-            mainHandler.post { notifyItemChanged(position) }
+        mainHandler.post {
+            val position = tabs.indexOfFirst { it.id == tabId }
+            if (position in 0 until tabs.size) {
+                tabs[position].faviconBitmap = favicon
+                notifyItemChanged(position)
+            }
         }
     }
 
