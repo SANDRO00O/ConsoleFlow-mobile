@@ -107,9 +107,15 @@ class LogsActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
         }
         val tvSubtitle = TextView(this).apply {
-            text     = "Captured WebView & App events"
-            textSize = 12f
+            text     = "Path: ${AppLogger.getLogFilePath() ?: "Not initialized"}"
+            textSize = 10f
             setTextColor(0xFF666666.toInt())
+            setOnClickListener {
+                // Copy path to clipboard
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("Log Path", text))
+                Toast.makeText(this@LogsActivity, "Path copied", Toast.LENGTH_SHORT).show()
+            }
         }
         titleBlock.addView(tvTitle)
         titleBlock.addView(tvSubtitle)

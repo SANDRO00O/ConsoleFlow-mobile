@@ -326,6 +326,7 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        AppLogger.init(this)
         prefsManager = PrefsManager(this)
 
         // FIX #10 — fixed thread pool محدود بعدد cores
@@ -491,6 +492,10 @@ class MainActivity : AppCompatActivity() {
         nativeErrorOverlay = buildErrorOverlay()
         nativeHomeOverlay?.let  { nativeOverlayContainer.addView(it) }
         nativeErrorOverlay?.let { nativeOverlayContainer.addView(it) }
+        
+        // FIX: Ensure container is visible for a moment if we need to measure/layout
+        // But here we just want to ensure the views are added.
+        
         hideNativeOverlays(immediate = true)
         // FIX #3 — حفظ مرجع أيقونة محرك البحث من الـ View الجديد عبر tag
         homeSearchEngineIcon = nativeHomeOverlay?.findViewWithTag("home_search_engine_icon")
@@ -719,7 +724,12 @@ class MainActivity : AppCompatActivity() {
         // FIX #3 — نضع tag على الـ icon لنتمكن من re-resolve بعد أي rebuild
         val searchIcon = ImageView(this).apply {
             tag = "home_search_engine_icon"
-            setImageResource(currentSearchEngineIconRes())
+            try {
+                setImageResource(currentSearchEngineIconRes())
+            } catch (e: Exception) {
+                // Fallback if resource is missing
+                setImageResource(android.R.drawable.ic_menu_search)
+            }
             setColorFilter(Color.parseColor("#7E7E7E"))
             layoutParams = LinearLayout.LayoutParams((20*dp).toInt(), (20*dp).toInt())
         }
