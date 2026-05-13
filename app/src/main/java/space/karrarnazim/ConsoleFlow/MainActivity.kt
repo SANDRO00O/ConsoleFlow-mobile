@@ -33,8 +33,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -463,8 +465,21 @@ class MainActivity : AppCompatActivity() {
         )
         tabsRecycler.layoutManager = GridLayoutManager(this, 2)
         tabsRecycler.adapter       = tabAdapter
+        // FIX CRASH — تعطيل الـ animation لمنع IllegalStateException عند استدعاء dispatchUpdatesTo
+        // أثناء أن الـ RecyclerView لا يزال يُعالج الـ animation السابق (حذف سريع للتبويبات)
+        tabsRecycler.itemAnimator  = null
 
         updateSearchEngineIcon()
+
+        // FIX STATUS BAR — targetSdk=35 يُفعّل edge-to-edge تلقائياً على Android 15+
+        // بدون هذا الكود، الـ topBar يختبئ تحت status bar والـ bottomBar تحت nav bar
+        val bottomBarView = findViewById<View>(R.id.bottomBar)
+        ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
+            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            topBar.updatePadding(top = sys.top)
+            bottomBarView.updatePadding(bottom = sys.bottom)
+            insets
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
