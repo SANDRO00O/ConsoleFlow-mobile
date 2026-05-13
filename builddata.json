@@ -1,7 +1,7 @@
 {
-  "release_name": "v2.1.0 ConsoleFlow",
-  "release_body": "bug fix, overall improvement.",
-  "apk_name": "ConsoleFlow_v2.1.0.apk",
-  "is_prerelease": false,
-  "tag": "v2.1.0"
+  "release_name": "v2.1.1 ConsoleFlow",
+  "release_body": "fix status bar padding in Android 15. fix taps crash problem.",
+  "apk_name": "ConsoleFlow_v2.1.1.apk",
+  "is_prerelease": true,
+  "tag": "v2.1.1"
 }
