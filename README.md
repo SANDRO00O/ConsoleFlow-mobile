@@ -8,18 +8,20 @@
  
 **A lightweight, developer-focused Android web browser that brings desktop-like debugging to mobile.**
 
-<br>
-
-
-<p align="center">
-[<img src="https://f-droid.org/badge/get-it-on.svg" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/space.karrarnazim.consoleflow)
-</p>
-
 [![Open Source](https://img.shields.io/badge/Open%20Source-Yes!-brightgreen?style=for-the-badge)](#)
 [![GitHub stars](https://img.shields.io/github/stars/SANDRO00O/ConsoleFlow-mobile?style=for-the-badge&logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/SANDRO00O/ConsoleFlow-mobile?style=for-the-badge&logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/network/members)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](https://github.com/SANDRO00O/ConsoleFlow-mobile/blob/main/LICENSE)
 
+<br>
+
+<p align="center">
+  <a href="https://f-droid.org/packages/space.karrarnazim.consoleflow">
+    <img src="https://f-droid.org/badge/get-it-on.svg"
+         alt="Get it on F-Droid"
+         height="80">
+  </a>
+</p>
 
 <br>
 
