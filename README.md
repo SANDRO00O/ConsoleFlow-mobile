@@ -16,7 +16,7 @@
 <br>
 
 <p align="center">
-  <a href="https://f-droid.org/packages/space.karrarnazim.consoleflow">
+  <a href="https://f-droid.org/en/packages/space.karrarnazim.ConsoleFlow">
     <img src="https://f-droid.org/badge/get-it-on.svg"
          alt="Get it on F-Droid"
          height="80">
