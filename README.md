@@ -27,6 +27,8 @@
 </p>
 </div>
 
+[<img src="https://f-droid.org/badge/get-it-on.svg" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/space.karrarnazim.consoleflow)
+
 ## About The Project
 
 [ConsoleFlow](https://consoleflow.karrarnazim.space) is not just another web browser. It is built specifically for web developers who need to debug websites on mobile devices. By intercepting web requests using `OkHttp`, ConsoleFlow automatically injects [Eruda](https://github.com/liriliri/eruda) (a mobile web console) into web pages, allowing you to view console logs, inspect DOM elements, check network requests, and execute JavaScript right from your Android phone.
