@@ -362,11 +362,19 @@ class MainActivity : AppCompatActivity() {
                 val activeTabUrl = currentGroup?.tabs?.find { it.id == activeTabId }?.url
                 if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay()
                 else hideNativeOverlays(immediate = true)
+
+                activeTab?.let { switchToTab(it) }
             } else {
                 createNewGroup("Default")
             }
         } else {
             loadPersistentTabs(intentUrl)
+        }
+
+        // Prefetch the home preview once so the first opening of the tabs overlay is smoother.
+        // Render is still done on the main thread because it builds a View hierarchy.
+        mainHandler.post {
+            runCatching { getHomePreviewBitmap() }
         }
 
         onBackPressedDispatcher.addCallback(this) {
@@ -412,6 +420,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateSearchEngineIcon()
+        if (nativeHomeOverlay?.visibility == View.VISIBLE) {
+            homeOverlayDirty = true
+            showHomeOverlay()
+        }
 
         val root = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
@@ -497,6 +509,7 @@ class MainActivity : AppCompatActivity() {
         )
         tabsRecycler.layoutManager = GridLayoutManager(this, 2)
         tabsRecycler.adapter       = tabAdapter
+        tabsRecycler.itemAnimator  = null
 
         updateSearchEngineIcon()
 
@@ -1133,6 +1146,8 @@ class MainActivity : AppCompatActivity() {
                     if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay()
                     else hideNativeOverlays(immediate = true)
 
+                    activeTab?.let { switchToTab(it) }
+
                     if (!intentUrl.isNullOrEmpty()) openNewTab(intentUrl)
                     return
                 }
@@ -1167,6 +1182,8 @@ class MainActivity : AppCompatActivity() {
                     sanitizeActiveTabSelection()
                     refreshTabsRecycler()
                     updateGroupsUI()
+
+                    currentGroup?.tabs?.find { it.id == activeTabId }?.let { switchToTab(it) }
                 }
 
                 setOnLongClickListener {
