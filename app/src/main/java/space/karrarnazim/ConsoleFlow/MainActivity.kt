@@ -433,12 +433,12 @@ class MainActivity : AppCompatActivity() {
                 tabsOverlay.paddingBottom
             )
 
-            bottomBar.setPadding(
-                bottomBar.paddingLeft,
-                bottomBar.paddingTop,
-                bottomBar.paddingRight,
-                navBarBottom
-            )
+            (bottomBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                if (lp.bottomMargin != navBarBottom) {
+                    lp.bottomMargin = navBarBottom
+                    bottomBar.layoutParams = lp
+                }
+            }
 
             insets
         }
@@ -520,12 +520,12 @@ class MainActivity : AppCompatActivity() {
                 tabsOverlay.paddingBottom
             )
 
-            bottomBar.setPadding(
-                bottomBar.paddingLeft,
-                bottomBar.paddingTop,
-                bottomBar.paddingRight,
-                navBarBottom
-            )
+            (bottomBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                if (lp.bottomMargin != navBarBottom) {
+                    lp.bottomMargin = navBarBottom
+                    bottomBar.layoutParams = lp
+                }
+            }
 
             insets
         }
