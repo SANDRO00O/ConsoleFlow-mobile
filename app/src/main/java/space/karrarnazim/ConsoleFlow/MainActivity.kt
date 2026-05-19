@@ -33,6 +33,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.DiffUtil
@@ -232,6 +233,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnBookmark: ImageView
     private lateinit var imgSearchEngine: ImageView
     private lateinit var findBar: LinearLayout
+    private lateinit var bottomBar: LinearLayout
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
@@ -410,6 +412,37 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateSearchEngineIcon()
+
+        val root = findViewById<View>(android.R.id.content)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val extraTop = (resources.displayMetrics.density * 4f).toInt()
+
+            topBar.setPadding(
+                topBar.paddingLeft,
+                statusBarTop + extraTop,
+                topBar.paddingRight,
+                topBar.paddingBottom
+            )
+
+            tabsOverlay.setPadding(
+                tabsOverlay.paddingLeft,
+                statusBarTop,
+                tabsOverlay.paddingRight,
+                tabsOverlay.paddingBottom
+            )
+
+            bottomBar.setPadding(
+                bottomBar.paddingLeft,
+                bottomBar.paddingTop,
+                bottomBar.paddingRight,
+                navBarBottom
+            )
+
+            insets
+        }
+        root.requestApplyInsets()
     }
 
     override fun onPause() {
@@ -444,6 +477,7 @@ class MainActivity : AppCompatActivity() {
         btnBookmark            = findViewById(R.id.btnBookmark)
         imgSearchEngine        = findViewById(R.id.imgSearchEngine)
         findBar                = findViewById(R.id.findBar)
+        bottomBar              = findViewById(R.id.bottomBar)
         fullscreenContainer    = findViewById(R.id.fullscreenContainer)
         tabsOverlay            = findViewById(R.id.tabsOverlay)
         tabsRecycler           = findViewById(R.id.tabsRecycler)
@@ -465,6 +499,37 @@ class MainActivity : AppCompatActivity() {
         tabsRecycler.adapter       = tabAdapter
 
         updateSearchEngineIcon()
+
+        val root = findViewById<View>(android.R.id.content)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val extraTop = (resources.displayMetrics.density * 4f).toInt()
+
+            topBar.setPadding(
+                topBar.paddingLeft,
+                statusBarTop + extraTop,
+                topBar.paddingRight,
+                topBar.paddingBottom
+            )
+
+            tabsOverlay.setPadding(
+                tabsOverlay.paddingLeft,
+                statusBarTop,
+                tabsOverlay.paddingRight,
+                tabsOverlay.paddingBottom
+            )
+
+            bottomBar.setPadding(
+                bottomBar.paddingLeft,
+                bottomBar.paddingTop,
+                bottomBar.paddingRight,
+                navBarBottom
+            )
+
+            insets
+        }
+        root.requestApplyInsets()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1052,9 +1117,8 @@ class MainActivity : AppCompatActivity() {
                     nextGroupId   = prefs.getInt("NEXT_GROUP_ID", 100)
 
                     val activeGroupTabs = currentGroup?.tabs
-                    val activeTab = activeGroupTabs?.find {
-                        it.id == prefs.getInt("ACTIVE_TAB", activeGroupTabs.firstOrNull()?.id ?: 0)
-                    } ?: activeGroupTabs?.firstOrNull()
+                    val preferredTabId = prefs.getInt("ACTIVE_TAB", activeGroupTabs?.firstOrNull()?.id ?: 0)
+                    val activeTab = activeGroupTabs?.find { it.id == preferredTabId } ?: activeGroupTabs?.firstOrNull()
                     activeTabId = activeTab?.id ?: 0
 
                     if (activeTab != null) {
@@ -1100,6 +1164,7 @@ class MainActivity : AppCompatActivity() {
 
                 setOnClickListener {
                     activeGroupId = group.id
+                    sanitizeActiveTabSelection()
                     refreshTabsRecycler()
                     updateGroupsUI()
                 }
@@ -1134,6 +1199,7 @@ class MainActivity : AppCompatActivity() {
                                     activeGroupId = tabGroups.first().id
                                     activeTabId   = currentGroup?.tabs?.firstOrNull()?.id ?: 0
                                 }
+                                sanitizeActiveTabSelection()
                                 updateGroupsUI(); refreshTabsRecycler(); savePersistentTabs()
                             }
                         }
@@ -1155,9 +1221,30 @@ class MainActivity : AppCompatActivity() {
 
     // FIX #6 — استخدام DiffUtil عبر submitUpdate في TabAdapter
     private fun refreshTabsRecycler() {
+        sanitizeActiveTabSelection()
         val newTabs = currentGroup?.tabs?.toList() ?: emptyList()
         tabAdapter.submitUpdate(newTabs, activeTabId)
         updateTabCount()
+    }
+
+    private fun sanitizeActiveTabSelection(preferredTabId: Int? = null) {
+        val group = currentGroup ?: return
+
+        val preferred = preferredTabId?.let { wanted ->
+            group.tabs.firstOrNull { it.id == wanted }
+        }
+        val validActive = group.tabs.firstOrNull { it.id == activeTabId }
+        val fallback = preferred ?: validActive ?: group.tabs.firstOrNull()
+
+        activeTabId = fallback?.id ?: 0
+    }
+
+    private fun showTabsOverlay() {
+        sanitizeActiveTabSelection()
+        captureAndStoreThumbnail {
+            refreshTabsRecycler()
+            tabsOverlay.visibility = View.VISIBLE
+        }
     }
 
     private fun openNewTab(url: String = HOME_URL) {
@@ -1184,10 +1271,11 @@ class MainActivity : AppCompatActivity() {
     private fun switchToTab(tab: TabState) {
         hideKeyboard()
 
+        val shouldAnimateOverlay = tabsOverlay.visibility == View.VISIBLE
+
         val executeSwitch = {
             val targetWebView = ensureWebViewForTab(tab)
             activeTabId = tab.id
-            tabsOverlay.visibility = View.GONE
 
             webViewContainer.removeAllViews()
             webViewContainer.addView(targetWebView)
@@ -1199,6 +1287,16 @@ class MainActivity : AppCompatActivity() {
             updateTabCount()
             savePersistentTabs()
             refreshTabsRecycler()
+
+            if (shouldAnimateOverlay) {
+                tabsOverlay.postDelayed({
+                    if (tabsOverlay.visibility == View.VISIBLE) {
+                        tabsOverlay.visibility = View.GONE
+                    }
+                }, 120)
+            } else {
+                tabsOverlay.visibility = View.GONE
+            }
         }
 
         if (activeTabId != tab.id && currentWebView != null) {
@@ -1214,12 +1312,16 @@ class MainActivity : AppCompatActivity() {
         val idx   = group.tabs.indexOfFirst { it.id == tab.id }
         if (idx < 0) return
 
+        val wasActive = tab.id == activeTabId
+
         tab.ramThumbnail?.recycle()
         tab.ramThumbnail = null
         ioExecutor.execute { tabThumbnailFile(tab.id).delete() }
 
         webViews[tab.id]?.let { wv ->
-            webViewContainer.removeView(wv)
+            if (webViewContainer.indexOfChild(wv) >= 0) {
+                webViewContainer.removeView(wv)
+            }
             wv.destroy()
             webViews.remove(tab.id)
         }
@@ -1227,11 +1329,17 @@ class MainActivity : AppCompatActivity() {
         group.tabs.removeAt(idx)
 
         if (group.tabs.isEmpty()) {
+            activeTabId = 0
             openNewTab(HOME_URL)
-        } else if (tab.id == activeTabId) {
+            return
+        }
+
+        if (wasActive) {
             val fallbackTab = group.tabs.getOrNull(maxOf(0, idx - 1)) ?: group.tabs.first()
+            activeTabId = fallbackTab.id
             switchToTab(fallbackTab)
         } else {
+            sanitizeActiveTabSelection()
             refreshTabsRecycler()  // DiffUtil يتولى الـ animation
             savePersistentTabs()
         }
@@ -1662,10 +1770,7 @@ class MainActivity : AppCompatActivity() {
             if (tabsOverlay.visibility == View.VISIBLE) {
                 tabsOverlay.visibility = View.GONE
             } else {
-                captureAndStoreThumbnail {
-                    refreshTabsRecycler()
-                    tabsOverlay.visibility = View.VISIBLE
-                }
+                showTabsOverlay()
             }
         }
 
