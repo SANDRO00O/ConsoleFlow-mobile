@@ -102,7 +102,7 @@
                             android:id="@+id/settingVersion"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Version 2.1.6"
+                            android:text="Version 2.1.7"
                             android:textColor="#888888"
                             android:textSize="12sp" />
                     </LinearLayout>
