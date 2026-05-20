@@ -12,7 +12,7 @@ applicationId "space.karrarnazim.ConsoleFlow"
 minSdk 24
 targetSdk 35
 versionCode 7
-versionName "2.1.6"
+versionName "2.1.7"
 }
 
 buildTypes {

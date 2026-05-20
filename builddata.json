@@ -1,7 +1,7 @@
 {
-  "release_name": "v2.1.6 ConsoleFlow",
+  "release_name": "v2.1.7 ConsoleFlow",
   "release_body": "fix status bar padding in Android 15. fix taps crash problem. adding logs page",
-  "apk_name": "ConsoleFlow_v2.1.6.apk",
+  "apk_name": "ConsoleFlow_v2.1.7.apk",
   "is_prerelease": false,
-  "tag": "v2.1.6"
+  "tag": "v2.1.7"
 }
