@@ -1606,11 +1606,10 @@ class MainActivity : AppCompatActivity() {
                                 )
 
                                 val erudaTags = if (prefsManager.consoleEnabled) {
-                                    """<script src="https://eruda.local/eruda.js"></script>""" +
-                                    """<script>(function(){""" +
-                                    "try{if(window.__erudaInited){window.__cfConsoleEnabled=true;if(window.eruda&&eruda.hide)eruda.hide();return;}" +
-                                    "if(typeof eruda!=='undefined'){eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;if(eruda.hide)eruda.hide();}" +
-                                    "}catch(e){}})()</script>"""
+                                    """
+                                    <script src="https://eruda.local/eruda.js"></script>
+                                    <script>(function(){try{if(window.__erudaInited){window.__cfConsoleEnabled=true;if(window.eruda&&eruda.hide)eruda.hide();return;}if(typeof eruda!=='undefined'){eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;if(eruda.hide)eruda.hide();}}catch(e){}})()</script>
+                                    """.trimIndent()
                                 } else ""
 
                                 val customJsTag = prefsManager.customJs.takeIf { it.isNotEmpty() }
