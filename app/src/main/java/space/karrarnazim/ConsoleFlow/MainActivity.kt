@@ -1344,16 +1344,25 @@ class MainActivity : AppCompatActivity() {
         if (idx < 0) return
 
         val wasActive = tab.id == activeTabId
-        val closingWebView = webViews[tab.id]
 
-        tab.ramThumbnail?.recycle()
+        // FIX #A — نُزيل من الـ map فوراً بشكل atomic لمنع LRU في ensureWebViewForTab
+        // من اختيار هذا الـ WebView للإزالة بعد تغيير activeTabId، مما يؤدي لـ double-destroy
+        val closingWebView = webViews.remove(tab.id)
+
+        // FIX #B — لا نستدعي recycle() هنا أبداً
+        // الـ RecyclerView لا يزال يرسم كارت التبويب المحذوف في animation الإزالة
+        // وهو يحمل مرجعاً للـ Bitmap داخل ImageView — recycle() يسبب crash فوري
+        // نكتفي بـ null والـ GC يتولى الباقي
         tab.ramThumbnail = null
+        tab.faviconBitmap = null
+
         ioExecutor.execute { tabThumbnailFile(tab.id).delete() }
 
         group.tabs.removeAt(idx)
 
         fun destroyClosedTabWebView() {
             closingWebView?.let { wv ->
+                // closingWebView أُزيل من webViews أعلاه — لن يُدمَّر مرتين
                 runCatching {
                     if (webViewContainer.indexOfChild(wv) >= 0) {
                         webViewContainer.removeView(wv)
@@ -1364,7 +1373,7 @@ class MainActivity : AppCompatActivity() {
                 runCatching { wv.removeAllViews() }
                 runCatching { wv.destroy() }
             }
-            webViews.remove(tab.id)
+            // webViews.remove(tab.id) — تم أعلاه، لا حاجة لتكراره
         }
 
         if (group.tabs.isEmpty()) {
@@ -1382,7 +1391,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             destroyClosedTabWebView()
             sanitizeActiveTabSelection()
-            refreshTabsRecycler()  // DiffUtil يتولى الـ animation
+            refreshTabsRecycler()
             savePersistentTabs()
         }
     }
