@@ -32,8 +32,6 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.browser.customtabs.CustomTabsIntent
-import androidx.core.content.edit
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -288,24 +286,6 @@ class MainActivity : AppCompatActivity() {
     )
 
     private val LOCALHOST_HOSTS = setOf("localhost", "127.0.0.1", "::1", "10.0.2.2")
-    private val AUTH_HOSTS = setOf(
-        "accounts.google.com",
-        "login.live.com",
-        "login.microsoftonline.com",
-        "github.com",
-        "appleid.apple.com",
-        "facebook.com",
-        "discord.com",
-        "x.com",
-        "twitter.com",
-        "linkedin.com",
-        "amazon.com"
-    )
-    private val AUTH_PATH_HINTS = listOf(
-        "/login", "/signin", "/sign-in", "/sign_in",
-        "/auth", "/oauth", "/authorize", "/account",
-        "/accounts", "/session"
-    )
 
     private fun isLocalhostHost(host: String?): Boolean {
         val normalized = host?.lowercase().orEmpty()
@@ -1065,7 +1045,7 @@ class MainActivity : AppCompatActivity() {
     // يمنع ConcurrentModificationException الصامت
     private fun savePersistentTabs() {
         // نبني نسخة ثابتة من البيانات على الـ main thread
-        val snapshot    = tabGroups.map { g -> g.copy(tabs = g.tabs.map { it.copy() }.toMutableList()) }
+        val snapshot    = tabGroups.map { g -> g.copy(tabs = g.tabs.toMutableList()) }
         val gId         = activeGroupId
         val tId         = activeTabId
         val nextTab     = nextTabId
@@ -1236,14 +1216,8 @@ class MainActivity : AppCompatActivity() {
         val group = TabGroup(nextGroupId++, name)
         tabGroups.add(group)
         activeGroupId = group.id
-
-        val externalUrl = shouldOpenInExternalBrowser(url)
-        openNewTab(if (externalUrl) HOME_URL else url)
+        openNewTab(url)
         updateGroupsUI()
-
-        if (externalUrl) {
-            openUrlInCustomTab(url)
-        }
     }
 
     // FIX #6 — استخدام DiffUtil عبر submitUpdate في TabAdapter
@@ -1275,10 +1249,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openNewTab(url: String = HOME_URL) {
-        if (shouldOpenInExternalBrowser(url)) {
-            openUrlInCustomTab(url)
-            return
-        }
         captureAndStoreThumbnail {
             val id     = nextTabId++
             val newTab = TabState(id = id, title = "New Tab", url = url)
@@ -1344,25 +1314,16 @@ class MainActivity : AppCompatActivity() {
         if (idx < 0) return
 
         val wasActive = tab.id == activeTabId
-
-        // FIX #A — نُزيل من الـ map فوراً بشكل atomic لمنع LRU في ensureWebViewForTab
-        // من اختيار هذا الـ WebView للإزالة بعد تغيير activeTabId، مما يؤدي لـ double-destroy
         val closingWebView = webViews.remove(tab.id)
 
-        // FIX #B — لا نستدعي recycle() هنا أبداً
-        // الـ RecyclerView لا يزال يرسم كارت التبويب المحذوف في animation الإزالة
-        // وهو يحمل مرجعاً للـ Bitmap داخل ImageView — recycle() يسبب crash فوري
-        // نكتفي بـ null والـ GC يتولى الباقي
         tab.ramThumbnail = null
         tab.faviconBitmap = null
-
         ioExecutor.execute { tabThumbnailFile(tab.id).delete() }
 
         group.tabs.removeAt(idx)
 
         fun destroyClosedTabWebView() {
             closingWebView?.let { wv ->
-                // closingWebView أُزيل من webViews أعلاه — لن يُدمَّر مرتين
                 runCatching {
                     if (webViewContainer.indexOfChild(wv) >= 0) {
                         webViewContainer.removeView(wv)
@@ -1373,7 +1334,6 @@ class MainActivity : AppCompatActivity() {
                 runCatching { wv.removeAllViews() }
                 runCatching { wv.destroy() }
             }
-            // webViews.remove(tab.id) — تم أعلاه، لا حاجة لتكراره
         }
 
         if (group.tabs.isEmpty()) {
@@ -1391,7 +1351,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             destroyClosedTabWebView()
             sanitizeActiveTabSelection()
-            refreshTabsRecycler()
+            refreshTabsRecycler()  // DiffUtil يتولى الـ animation
             savePersistentTabs()
         }
     }
@@ -1520,15 +1480,6 @@ class MainActivity : AppCompatActivity() {
             mixedContentMode                 = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             mediaPlaybackRequiresUserGesture = false
             cacheMode                        = WebSettings.LOAD_DEFAULT
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                safeBrowsingEnabled = true
-            }
-        }
-
-        val cookieManager = CookieManager.getInstance()
-        cookieManager.setAcceptCookie(true)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            cookieManager.setAcceptThirdPartyCookies(wv, true)
         }
 
         applyUserAgentToWebView(wv)
@@ -1565,10 +1516,6 @@ class MainActivity : AppCompatActivity() {
         wv.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                 val url = req.url.toString()
-                if (req.isForMainFrame && shouldOpenInExternalBrowser(url)) {
-                    openUrlInCustomTab(url)
-                    return true
-                }
                 if (url.startsWith("http") || url.startsWith("file:")) return false
                 return try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); true }
                 catch (_: Exception) { true }
@@ -1632,7 +1579,6 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (prefsManager.getBoolean("disable_intercept", false)) return null
-                if (request.isForMainFrame && shouldOpenInExternalBrowser(url)) return null
 
                 val host = request.url.host ?: ""
                 if (isLocalhostHost(host)) return null
@@ -1660,13 +1606,11 @@ class MainActivity : AppCompatActivity() {
                                 )
 
                                 val erudaTags = if (prefsManager.consoleEnabled) {
-                                    """
-                                    <script src="https://eruda.local/eruda.js"></script>
-                                    <script>(function(){
-                                    try{if(window.__erudaInited){window.__cfConsoleEnabled=true;if(window.eruda&&eruda.hide)eruda.hide();return;}
-                                    if(typeof eruda!=='undefined'){eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;if(eruda.hide)eruda.hide();}
-                                    }catch(e){}})()</script>
-                                    """.trimIndent()
+                                    """<script src="https://eruda.local/eruda.js"></script>""" +
+                                    """<script>(function(){""" +
+                                    "try{if(window.__erudaInited){window.__cfConsoleEnabled=true;if(window.eruda&&eruda.hide)eruda.hide();return;}" +
+                                    "if(typeof eruda!=='undefined'){eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;if(eruda.hide)eruda.hide();}" +
+                                    "}catch(e){}})()</script>"""
                                 } else ""
 
                                 val customJsTag = prefsManager.customJs.takeIf { it.isNotEmpty() }
@@ -1901,10 +1845,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadUrlInstantly(url: String) {
-        if (shouldOpenInExternalBrowser(url)) {
-            openUrlInCustomTab(url)
-            return
-        }
         if (isHomeUrl(url)) {
             showHomeOverlay()
             currentWebView?.loadUrl(HOME_URL)
@@ -2194,35 +2134,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun shouldOpenInExternalBrowser(rawUrl: String): Boolean {
-        val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return false
-        val scheme = uri.scheme?.lowercase().orEmpty()
-        if (scheme != "http" && scheme != "https") return false
-
-        val host = uri.host?.lowercase().orEmpty()
-        if (host.isBlank() || isLocalhostHost(host)) return false
-
-        if (AUTH_HOSTS.any { host == it || host.endsWith(".$it") }) return true
-
-        val path = (uri.path ?: "").lowercase()
-        return AUTH_PATH_HINTS.any { path.contains(it) }
-    }
-
-    private fun openUrlInCustomTab(url: String) {
-        try {
-            CustomTabsIntent.Builder()
-                .setShowTitle(true)
-                .build()
-                .launchUrl(this, Uri.parse(url))
-        } catch (_: Exception) {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            } catch (_: Exception) {
-                Toast.makeText(this, "No browser found to open link", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     //  تحديث أيقونة محرك البحث والعلامة المرجعية
     // ─────────────────────────────────────────────────────────────────────────
@@ -2362,8 +2273,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyConsoleTools(view: WebView) {
-        val url = view.url.orEmpty()
-        if (shouldOpenInExternalBrowser(url)) return
         if (prefsManager.consoleEnabled) {
             view.evaluateJavascript(consoleInitScript(), null)
             view.evaluateJavascript(touchHookScript(), null)
