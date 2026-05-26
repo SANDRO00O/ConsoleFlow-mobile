@@ -1606,11 +1606,13 @@ class MainActivity : AppCompatActivity() {
                                 )
 
                                 val erudaTags = if (prefsManager.consoleEnabled) {
-                                    """
-                                    <script src="https://eruda.local/eruda.js"></script>
-                                    <script>(function(){try{if(window.__erudaInited){window.__cfConsoleEnabled=true;if(window.eruda&&eruda.hide)eruda.hide();return;}if(typeof eruda!=='undefined'){eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;if(eruda.hide)eruda.hide();}}catch(e){}})()</script>
-                                    """.trimIndent()
-                                } else ""
+    "<script src=\"https://eruda.local/eruda.js\"></script>" +
+    "<script>(function(){if(window.__erudaInited){" +
+    "try{eruda.show();window.__cfConsoleEnabled=true;}catch(e){};return;}" +
+    "try{eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;" +
+    "}catch(e){}})()</script>"
+} else ""
+
 
                                 val customJsTag = prefsManager.customJs.takeIf { it.isNotEmpty() }
                                     ?.let { "<script>$it</script>" } ?: ""
@@ -1631,6 +1633,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 return super.shouldInterceptRequest(view, request)
             }
+
 
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
                 if (req.isForMainFrame) {
@@ -2188,13 +2191,13 @@ class MainActivity : AppCompatActivity() {
         "window.__cfConsoleEnabled=true;" +
         "var el=document.getElementById('eruda');" +
         "if(window.__erudaInited){" +
-            "try{if(window.eruda&&eruda.hide)eruda.hide();}catch(e){}" +
-            "if(el)el.style.display='none';" +
+            "try{if(window.eruda&&eruda.show)eruda.show();}catch(e){}" +
+            "if(el)el.style.display='';" +
             "return;" +
         "}" +
         "if(typeof eruda!=='undefined'){" +
             "try{eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;" +
-            "if(window.eruda&&eruda.hide)eruda.hide();if(el)el.style.display='none';}catch(e){}" +
+            "if(el)el.style.display='';}catch(e){}" +
             "return;" +
         "}" +
         "var x=new XMLHttpRequest();" +
@@ -2202,20 +2205,8 @@ class MainActivity : AppCompatActivity() {
         "x.onload=function(){" +
             "if(window.__erudaInited)return;" +
             "try{eval(x.responseText);eruda.init();window.__erudaInited=true;" +
-            "window.__cfConsoleEnabled=true;if(window.eruda&&eruda.hide)eruda.hide();if(el)el.style.display='none';}catch(e){}" +
+            "window.__cfConsoleEnabled=true;if(el)el.style.display='';}catch(e){}" +
         "};" +
-        "x.send();" +
-        "})()"
-
-    private fun consoleOpenScript(): String =
-        "(function(){" +
-        "window.__cfConsoleEnabled=true;" +
-        "var el=document.getElementById('eruda');" +
-        "function show(){try{if(typeof eruda==='undefined')return;if(!window.__erudaInited){eruda.init();window.__erudaInited=true;}if(eruda.show)eruda.show();if(el)el.style.display='';}catch(e){}}" +
-        "if(typeof eruda!=='undefined' || window.__erudaInited){show();return;}" +
-        "var x=new XMLHttpRequest();" +
-        "x.open('GET','https://eruda.local/eruda.js',true);" +
-        "x.onload=function(){try{eval(x.responseText);show();}catch(e){}};" +
         "x.send();" +
         "})()"
 
@@ -2253,7 +2244,7 @@ class MainActivity : AppCompatActivity() {
         prefsManager.consoleEnabled = enable
         currentWebView?.let { view ->
             if (enable) {
-                view.evaluateJavascript(consoleOpenScript(), null)
+                view.evaluateJavascript(consoleInitScript(), null)
                 view.evaluateJavascript(touchHookScript(), null)
             } else {
                 view.evaluateJavascript(consoleDisableScript(), null)
@@ -2266,7 +2257,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateMenuConsoleState() {
         val enabled = prefsManager.consoleEnabled
         cachedMenuSheetView?.findViewById<TextView>(R.id.menuConsoleLabel)?.apply {
-            text = if (enabled) "Hide Console" else "Open Console"
+            text = if (enabled) "Console On" else "Console Off"
             setTextColor(if (enabled) Color.WHITE else Color.parseColor("#CCCCCC"))
         }
     }
@@ -2279,6 +2270,7 @@ class MainActivity : AppCompatActivity() {
             view.evaluateJavascript(consoleDisableScript(), null)
         }
     }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     //  جسر JavaScript
