@@ -285,6 +285,13 @@ class MainActivity : AppCompatActivity() {
         "yahoo.com", "yandex.com"
     )
 
+    private val LOCALHOST_HOSTS = setOf("localhost", "127.0.0.1", "::1", "10.0.2.2")
+
+    private fun isLocalhostHost(host: String?): Boolean {
+        val normalized = host?.lowercase().orEmpty()
+        return normalized in LOCALHOST_HOSTS
+    }
+
     // ── مجموعات التبويبات والتبويب النشط ───────────────────────────────────
     private var tabGroups = mutableListOf<TabGroup>()
     private var activeGroupId = 0
@@ -614,13 +621,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun currentSearchEngineIconRes(): Int {
-        return when {
-            prefsManager.searchEngine.contains("google")      -> R.drawable.ic_engine_google
-            prefsManager.searchEngine.contains("duckduckgo")  -> R.drawable.ic_engine_duckduckgo
-            prefsManager.searchEngine.contains("bing")        -> R.drawable.ic_engine_bing
-            prefsManager.searchEngine.contains("brave")       -> R.drawable.ic_engine_brave
-            else                                               -> R.drawable.ic_engine_google
-        }
+        return if (prefsManager.searchEngineIsCustom) R.drawable.ic_find else searchEngineIconRes(prefsManager.searchEngine)
     }
 
     private fun setTopBarVisible(visible: Boolean, immediate: Boolean = false) {
@@ -1313,23 +1314,31 @@ class MainActivity : AppCompatActivity() {
         if (idx < 0) return
 
         val wasActive = tab.id == activeTabId
+        val closingWebView = webViews.remove(tab.id)
 
-        tab.ramThumbnail?.recycle()
         tab.ramThumbnail = null
+        tab.faviconBitmap = null
         ioExecutor.execute { tabThumbnailFile(tab.id).delete() }
-
-        webViews[tab.id]?.let { wv ->
-            if (webViewContainer.indexOfChild(wv) >= 0) {
-                webViewContainer.removeView(wv)
-            }
-            wv.destroy()
-            webViews.remove(tab.id)
-        }
 
         group.tabs.removeAt(idx)
 
+        fun destroyClosedTabWebView() {
+            closingWebView?.let { wv ->
+                runCatching {
+                    if (webViewContainer.indexOfChild(wv) >= 0) {
+                        webViewContainer.removeView(wv)
+                    }
+                }
+                runCatching { wv.stopLoading() }
+                runCatching { wv.clearHistory() }
+                runCatching { wv.removeAllViews() }
+                runCatching { wv.destroy() }
+            }
+        }
+
         if (group.tabs.isEmpty()) {
             activeTabId = 0
+            destroyClosedTabWebView()
             openNewTab(HOME_URL)
             return
         }
@@ -1338,7 +1347,9 @@ class MainActivity : AppCompatActivity() {
             val fallbackTab = group.tabs.getOrNull(maxOf(0, idx - 1)) ?: group.tabs.first()
             activeTabId = fallbackTab.id
             switchToTab(fallbackTab)
+            destroyClosedTabWebView()
         } else {
+            destroyClosedTabWebView()
             sanitizeActiveTabSelection()
             refreshTabsRecycler()  // DiffUtil يتولى الـ animation
             savePersistentTabs()
@@ -1392,7 +1403,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun captureAndStoreThumbnail(onComplete: (() -> Unit)? = null) {
         val wv = currentWebView
-        if (wv == null || wv.width <= 0 || wv.height <= 0) {
+        if (wv == null || wv.width <= 0 || wv.height <= 0 || !wv.isAttachedToWindow) {
             currentGroup?.tabs?.find { it.id == activeTabId }?.let {
                 if (isHomeUrl(it.url)) {
                     it.hasThumbnail = true
@@ -1404,7 +1415,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val tabId      = activeTabId
-        val currentUrl = wv.url ?: HOME_URL
+        val currentUrl = runCatching { wv.url ?: HOME_URL }.getOrDefault(HOME_URL)
         val file       = tabThumbnailFile(tabId)
         val tabRef     = currentGroup?.tabs?.find { it.id == tabId }
 
@@ -1413,18 +1424,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         try {
-            val homeLike = isHomeUrl(wv.url)
+            val homeLike = isHomeUrl(currentUrl)
             val bitmap   = if (homeLike) {
                 getHomePreviewBitmap()
             } else {
                 val scale  = 0.3f
-                val w      = (wv.width * scale).toInt()
-                val h      = (wv.height * scale).toInt()
+                val w      = maxOf(1, (wv.width * scale).toInt())
+                val h      = maxOf(1, (wv.height * scale).toInt())
                 val bmp    = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
                 val canvas = Canvas(bmp)
                 canvas.scale(scale, scale)
                 canvas.translate(-wv.scrollX.toFloat(), -wv.scrollY.toFloat())
-                wv.draw(canvas)
+                runCatching { wv.draw(canvas) }
                 bmp
             }
 
@@ -1570,6 +1581,7 @@ class MainActivity : AppCompatActivity() {
                 if (prefsManager.getBoolean("disable_intercept", false)) return null
 
                 val host = request.url.host ?: ""
+                if (isLocalhostHost(host)) return null
                 if (NO_INTERCEPT_DOMAINS.any { host == it || host.endsWith(".$it") }) return null
 
                 if (request.isForMainFrame && request.method == "GET" && url.startsWith("http")) {
@@ -1594,12 +1606,13 @@ class MainActivity : AppCompatActivity() {
                                 )
 
                                 val erudaTags = if (prefsManager.consoleEnabled) {
-                                    "<script src=\"https://eruda.local/eruda.js\"></script>" +
-                                    "<script>(function(){if(window.__erudaInited){" +
-                                    "try{eruda.show();window.__cfConsoleEnabled=true;}catch(e){};return;}" +
-                                    "try{eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;" +
-                                    "}catch(e){}})()</script>"
-                                } else ""
+    "<script src=\"https://eruda.local/eruda.js\"></script>" +
+    "<script>(function(){if(window.__erudaInited){" +
+    "try{eruda.show();window.__cfConsoleEnabled=true;}catch(e){};return;}" +
+    "try{eruda.init();window.__erudaInited=true;window.__cfConsoleEnabled=true;" +
+    "}catch(e){}})()</script>"
+} else ""
+
 
                                 val customJsTag = prefsManager.customJs.takeIf { it.isNotEmpty() }
                                     ?.let { "<script>$it</script>" } ?: ""
@@ -1620,6 +1633,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 return super.shouldInterceptRequest(view, request)
             }
+
 
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
                 if (req.isForMainFrame) {
@@ -1822,10 +1836,12 @@ class MainActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun navigateTo(input: String) {
+        val trimmed = input.trim()
         val finalUrl = when {
-            input.startsWith("http://") || input.startsWith("https://") -> input
-            Patterns.WEB_URL.matcher(input).matches() -> "https://$input"
-            else -> prefsManager.searchEngine + URLEncoder.encode(input, "utf-8")
+            trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("file:") -> trimmed
+            isLocalhostUrl(trimmed) -> "http://$trimmed"
+            Patterns.WEB_URL.matcher(trimmed).matches() -> "https://$trimmed"
+            else -> buildSearchUrl(prefsManager.searchEngine, trimmed)
         }
         loadUrlInstantly(finalUrl)
     }
@@ -2254,6 +2270,7 @@ class MainActivity : AppCompatActivity() {
             view.evaluateJavascript(consoleDisableScript(), null)
         }
     }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     //  جسر JavaScript

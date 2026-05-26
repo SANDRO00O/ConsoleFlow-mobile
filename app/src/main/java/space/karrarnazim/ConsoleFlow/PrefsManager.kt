@@ -16,12 +16,16 @@ class PrefsManager(context: Context) {
         get() = prefs.getString("search_engine", "https://www.google.com/search?q=")!!
         set(value) = prefs.edit().putString("search_engine", value).apply()
 
+    var searchEngineIsCustom: Boolean
+        get() = prefs.getBoolean("search_engine_is_custom", false)
+        set(value) = prefs.edit().putBoolean("search_engine_is_custom", value).apply()
+
     var customJs: String
         get() = prefs.getString("custom_js", "")!!
         set(value) = prefs.edit().putString("custom_js", value).apply()
 
     var consoleEnabled: Boolean
-        get() = prefs.getBoolean("console_enabled", true)
+        get() = prefs.getBoolean("console_enabled", false)
         set(value) = prefs.edit().putBoolean("console_enabled", value).apply()
 
     // ✅ الدالة المضافة حديثًا لحل خطأ "Unresolved reference: getBoolean"
