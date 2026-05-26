@@ -11,8 +11,8 @@ defaultConfig {
 applicationId "space.karrarnazim.ConsoleFlow"
 minSdk 24
 targetSdk 35
-versionCode 8
-versionName "2.1.8"
+versionCode 9
+versionName "2.2.0"
 }
 
 buildTypes {
