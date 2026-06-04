@@ -1,1 +1,1 @@
-Initial release of ConsoleFlow — developer browser with automatic Eruda console injection on every page.
+Refactored the browser codebase into separate ui, web, tabs, storage, console, and cache layers.
