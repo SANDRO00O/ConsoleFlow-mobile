@@ -9,8 +9,6 @@
 **A lightweight, developer-focused Android web browser that brings desktop-like debugging to mobile.**
 
 [![Open Source](https://img.shields.io/badge/Open%20Source-Yes!-brightgreen?style=for-the-badge)](#)
-[![GitHub stars](https://img.shields.io/github/stars/SANDRO00O/ConsoleFlow-mobile?style=for-the-badge&logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/SANDRO00O/ConsoleFlow-mobile?style=for-the-badge&logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/network/members)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](https://github.com/SANDRO00O/ConsoleFlow-mobile/blob/main/LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/SANDRO00O/ConsoleFlow-mobile/total?logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/releases)
 [![Downloads last month](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fkitswas%2Ffdroid-metrics-dashboard%2Fraw%2Frefs%2Fheads%2Fmain%2Fprocessed%2Fmonthly%2Fspace.karrarnazim.ConsoleFlow.json&query=%24.total_downloads&logo=fdroid&label=Downloads%20last%20month)](https://f-droid.org/en/packages/space.karrarnazim.ConsoleFlow/)
