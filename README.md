@@ -12,6 +12,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/SANDRO00O/ConsoleFlow-mobile?style=for-the-badge&logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/SANDRO00O/ConsoleFlow-mobile?style=for-the-badge&logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/network/members)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](https://github.com/SANDRO00O/ConsoleFlow-mobile/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/SANDRO00O/ConsoleFlow-mobile/total?style=for-the-badge&labelColor=0d1117)](https://github.com/SANDRO00O/ConsoleFlow-mobile/releases)
 
 <br>
 
