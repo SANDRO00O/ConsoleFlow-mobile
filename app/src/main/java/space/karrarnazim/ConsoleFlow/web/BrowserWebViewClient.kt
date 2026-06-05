@@ -95,7 +95,7 @@ class BrowserWebViewClient(
                         )
                         val injectedScripts = UserScriptsManager.buildInjectedScripts(prefsManager.consoleEnabled, prefsManager.customJs)
                         html = html.replaceFirst("<head>", "<head>$injectedScripts", ignoreCase = true)
-                        val hdrs = response.headers.toMap().toMutableMap()
+                        val hdrs = response.headers.toMultimap().mapValues { it.value.firstOrNull().orEmpty() }.toMutableMap()
                         hdrs.remove("Content-Security-Policy")
                         hdrs.remove("content-security-policy")
 

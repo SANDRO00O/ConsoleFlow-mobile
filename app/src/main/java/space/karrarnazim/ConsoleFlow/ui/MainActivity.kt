@@ -12,7 +12,6 @@ import android.net.*
 import android.os.*
 import android.provider.*
 import android.text.*
-import android.util.*
 import android.view.*
 import android.view.accessibility.*
 import android.view.inputmethod.*
@@ -430,6 +429,7 @@ class MainActivity : AppCompatActivity() {
         // FIX #5 — نمرر ioExecutor للـ Adapter بدلاً من أن ينشئ هو thread pool خاص به
         tabAdapter = TabAdapter(
             context    = this,
+            ioExecutor = ioExecutor,
             onTabClick = { tab -> switchToTab(tab) },
             onTabClose = { tab -> closeTab(tab) }
         )
@@ -502,7 +502,7 @@ class MainActivity : AppCompatActivity() {
 
         val width  = resources.displayMetrics.widthPixels.coerceAtLeast(360)
         val height = resources.displayMetrics.heightPixels.coerceAtLeast(640)
-        val key        = homePreviewCacheKey(width, height)
+        val key        = BrowserCacheFiles.homePreviewCacheKey(width, height)
         val cacheFile  = BrowserCacheFiles.homePreviewFile(cacheDir, width, height)
         val sigFile    = BrowserCacheFiles.homePreviewSigFile(cacheDir, width, height)
 
@@ -529,10 +529,6 @@ class MainActivity : AppCompatActivity() {
         }
         return rendered
     }
-
-private fun homePreviewCacheKey(width: Int, height: Int): String =
-    BrowserCacheFiles.homePreviewCacheKey(width, height)
-
 
     private fun renderHomePreviewBitmap(width: Int, height: Int): Bitmap {
         val view  = buildHomeOverlay(loadFavicons = false)
@@ -752,7 +748,7 @@ private fun homePreviewCacheKey(width: Int, height: Int): String =
         }
         content.addView(fixedHeader)
 
-        fun bookmarkGrid(items: List<Pair<String, String>>, loadRemoteIcons: Boolean) {
+        fun bookmarkGrid(items: List<kotlin.Pair<String, String>>, loadRemoteIcons: Boolean) {
             if (items.isEmpty()) return
             val grid = GridLayout(this).apply {
                 columnCount = 4; useDefaultMargins = true
@@ -1024,13 +1020,13 @@ private fun savePersistentTabs() {
                 }
 
                 setOnLongClickListener {
-                    BrowserDialogHelpers.showModernPopup(this, group.name, listOf("Rename Group", "Delete Group")) { index ->
+                    BrowserDialogHelpers.showModernPopup(context, group.name, listOf("Rename Group", "Delete Group")) { index ->
                         when (index) {
                             0 -> {
-                                val input = EditText(this@MainActivity).apply {
+                                val input = EditText(context).apply {
                                     setText(group.name); setTextColor(Color.WHITE)
                                 }
-                                AlertDialog.Builder(this@MainActivity, R.style.DarkDialog)
+                                AlertDialog.Builder(context, R.style.DarkDialog)
                                     .setTitle("Rename Group")
                                     .setView(input)
                                     .setPositiveButton("Save") { _, _ ->
@@ -1040,7 +1036,7 @@ private fun savePersistentTabs() {
                             }
                             1 -> {
                                 if (tabGroups.size == 1) {
-                                    Toast.makeText(this@MainActivity, "Cannot delete the last group", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Cannot delete the last group", Toast.LENGTH_SHORT).show()
                                     return@showModernPopup
                                 }
                                 group.tabs.forEach { t ->
