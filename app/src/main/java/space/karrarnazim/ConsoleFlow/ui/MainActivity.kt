@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.*
+import android.content.ClipboardManager
 import android.content.pm.*
 import android.graphics.*
 import android.graphics.drawable.*
@@ -16,12 +17,18 @@ import android.view.*
 import android.view.accessibility.*
 import android.view.inputmethod.*
 import android.webkit.*
+import android.webkit.CookieManager
 import android.widget.*
 import androidx.activity.result.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.*
 import androidx.fragment.app.*
 import androidx.webkit.*
+import androidx.core.splashscreen.installSplashScreen
+import android.speech.RecognizerIntent
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanIntentResult
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.lifecycle.*
 import com.google.android.material.tabs.*
 import androidx.appcompat.app.*
@@ -247,7 +254,7 @@ class MainActivity : AppCompatActivity() {
                 if (prefsManager.desktopMode) {
                     view.evaluateJavascript(
                         "(function(){" +
-                            "var meta=document.querySelector('meta[name="viewport"]');" +
+                            "var meta=document.querySelector('meta[name=\"viewport\"]');" +
                             "if(meta){meta.setAttribute('content','width=1024');}" +
                             "else{var nm=document.createElement('meta');nm.name='viewport';" +
                             "nm.content='width=1024';document.head.appendChild(nm);" +
