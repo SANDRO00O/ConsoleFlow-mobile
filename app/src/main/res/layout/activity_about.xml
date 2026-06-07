@@ -72,28 +72,20 @@
                 android:orientation="vertical"
                 android:gravity="center"
                 android:paddingTop="40dp"
-                android:paddingBottom="32dp">
+                android:paddingBottom="28dp">
 
-                <ImageView
-                    android:layout_width="72dp"
-                    android:layout_height="72dp"
-                    android:src="@drawable/splash_icon" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="18dp"
-                    android:text="ConsoleFlow"
-                    android:textColor="#FFFFFF"
-                    android:textSize="26sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="-0.01" />
+                <!-- Banner SVG — height set dynamically in AboutActivity -->
+                <WebView
+                    android:id="@+id/bannerWebView"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="#00000000" />
 
                 <TextView
                     android:id="@+id/tvVersion"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="5dp"
+                    android:layout_marginTop="12dp"
                     android:text="v2.2.7"
                     android:textColor="#444444"
                     android:textSize="13sp" />

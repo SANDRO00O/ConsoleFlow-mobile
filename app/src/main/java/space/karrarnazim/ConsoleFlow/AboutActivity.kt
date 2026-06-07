@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.webkit.WebView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
@@ -15,6 +17,9 @@ class AboutActivity : AppCompatActivity() {
 
         // ── back button
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
+
+        // ── banner
+        loadBanner()
 
         // ── current version
         findViewById<TextView>(R.id.tvVersion).text = "v${UpdateManager.currentVersion(this)}"
@@ -36,6 +41,39 @@ class AboutActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnCheckUpdate).setOnClickListener {
             startUpdateCheck(forceRefresh = true)
         }
+    }
+
+    // ─── banner ──────────────────────────────────────────────────────────────
+
+    private fun loadBanner() {
+        val wv = findViewById<WebView>(R.id.bannerWebView)
+
+        // Calculate exact height from banner aspect ratio (viewBox 1778.04 × 250)
+        val horizontalPaddingPx = (32 * resources.displayMetrics.density).toInt()
+        val availableWidth      = resources.displayMetrics.widthPixels - horizontalPaddingPx
+        val bannerHeight        = (availableWidth / 7.112f).toInt()
+
+        wv.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, bannerHeight)
+
+        wv.settings.loadWithOverviewMode    = true
+        wv.settings.useWideViewPort         = true
+        wv.isVerticalScrollBarEnabled       = false
+        wv.isHorizontalScrollBarEnabled     = false
+        wv.isScrollContainer                = false
+        wv.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+
+        val svg = assets.open("banner.svg").bufferedReader().readText()
+        val html = """<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>
+  html,body{margin:0;padding:0;background:#000000;overflow:hidden;}
+  svg{width:100%;height:auto;display:block;}
+</style>
+</head><body>$svg</body></html>"""
+
+        wv.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
     }
 
     // ─── update logic ────────────────────────────────────────────────────────
