@@ -45,5 +45,12 @@
             android:exported="false"
             android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustPan" />
+
+        <activity
+            android:name=".AboutActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:windowSoftInputMode="adjustPan" />
     </application>
 </manifest>
