@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build:
-    name: Build APK and Replace Release
+    name: Build Release APK and Replace Release
     runs-on: ubuntu-latest
 
     steps:
@@ -64,15 +64,26 @@ jobs:
             gh release delete "$TAG" -y
           fi
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Restore keystore from secret
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 --decode > release.keystore
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Locate and Rename APK
         id: apk
         run: |
-          ORIGINAL_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
+          ORIGINAL_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
           NEW_NAME="${{ steps.metadata.outputs.apk_custom_name }}"
-          NEW_PATH="app/build/outputs/apk/debug/$NEW_NAME"
+          NEW_PATH="app/build/outputs/apk/release/$NEW_NAME"
 
           mv "$ORIGINAL_PATH" "$NEW_PATH"
           echo "path=$NEW_PATH" >> $GITHUB_OUTPUT

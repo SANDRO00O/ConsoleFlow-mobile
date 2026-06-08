@@ -15,8 +15,18 @@ versionCode 12
 versionName "2.2.7"
 }
 
+signingConfigs {
+release {
+storeFile file(System.getenv("KEYSTORE_FILE") ?: "$rootDir/release.keystore")
+storePassword System.getenv("KEYSTORE_PASSWORD")
+keyAlias System.getenv("KEY_ALIAS")
+keyPassword System.getenv("KEY_PASSWORD")
+}
+}
+
 buildTypes {
 release {
+signingConfig signingConfigs.release
 minifyEnabled true
 proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
 }
