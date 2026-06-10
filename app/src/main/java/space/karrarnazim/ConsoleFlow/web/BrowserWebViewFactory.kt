@@ -57,7 +57,15 @@ class BrowserWebViewFactory(
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             mediaPlaybackRequiresUserGesture = false
             cacheMode = WebSettings.LOAD_DEFAULT
+            // Enable spatial navigation so D-pad/arrow keys move focus between
+            // links and form controls inside the page (TV remote / keyboard use)
+            @Suppress("DEPRECATION")
+            setNeedInitialFocus(true)
         }
+
+        // WebView must be focusable so TV-remote / keyboard events reach it
+        wv.isFocusable = true
+        wv.isFocusableInTouchMode = true
 
         WebViewSettingsHelper.applyUserAgentToWebView(activity, wv, prefsManager.desktopMode)
         wv.addJavascriptInterface(JsBridge(onNavigate, onSetSwipeRefresh), "Android")

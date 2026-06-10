@@ -48,7 +48,6 @@
 - **Custom JS Injection:** Add your own custom JavaScript to be executed automatically on every page load.
 - **Find in Page:** Easily search for specific text within any webpage.
 - **Bookmarks & History:** Built-in local storage manager for your favorite sites and browsing history.
-- **Universal Control Support:** Works with TV remotes, gamepads/joysticks, mouse, and keyboard, with an on-screen joystick cursor for mouse-like navigation.
 - **Native Downloads:** Integrated with Android's native `DownloadManager` for stable file downloading.
 - **Sleek UI:** Custom dark-themed start page, error pages, menus, and Android 12+ Splash Screen support.
 
