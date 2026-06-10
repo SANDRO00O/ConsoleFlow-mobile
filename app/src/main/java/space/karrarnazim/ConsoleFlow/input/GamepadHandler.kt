@@ -1,12 +1,14 @@
 package space.karrarnazim.ConsoleFlow
 
 import android.app.Activity
+import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.webkit.WebView
 import android.widget.FrameLayout
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Handles Gamepad and Joystick input for ConsoleFlow.
@@ -24,12 +26,58 @@ class GamepadHandler(
 ) {
 
     companion object {
-        private const val STICK_DEADZONE = 0.3f
-        private const val SCROLL_SPEED = 50
+        private const val STICK_DEADZONE = 0.18f
+        private const val LEFT_STICK_SCROLL_SPEED_PX_PER_SEC = 1800f
+        private const val RIGHT_STICK_CURSOR_SPEED_PX_PER_SEC = 1300f
     }
 
-    private var lastScrollTime = 0L
-    private val scrollDebounceMs = 50L
+    private var leftStickX = 0f
+    private var leftStickY = 0f
+    private var rightStickX = 0f
+    private var rightStickY = 0f
+
+    private var analogLoopRunning = false
+    private var lastFrameTimeMs = 0L
+
+    private val analogUpdateRunnable = object : Runnable {
+        override fun run() {
+            val webView = webViewContainer.getChildAt(0) as? WebView
+            if (webView == null) {
+                analogLoopRunning = false
+                lastFrameTimeMs = 0L
+                return
+            }
+
+            val now = SystemClock.uptimeMillis()
+            val dt = if (lastFrameTimeMs == 0L) 1f / 60f else ((now - lastFrameTimeMs).coerceAtLeast(1L) / 1000f)
+            lastFrameTimeMs = now
+
+            var active = false
+
+            if (abs(leftStickX) > STICK_DEADZONE || abs(leftStickY) > STICK_DEADZONE) {
+                val scrollX = (leftStickX * LEFT_STICK_SCROLL_SPEED_PX_PER_SEC * dt).roundToInt()
+                val scrollY = (leftStickY * LEFT_STICK_SCROLL_SPEED_PX_PER_SEC * dt).roundToInt()
+                if (scrollX != 0 || scrollY != 0) {
+                    webView.scrollBy(scrollX, scrollY)
+                }
+                active = true
+            }
+
+            if (abs(rightStickX) > STICK_DEADZONE || abs(rightStickY) > STICK_DEADZONE) {
+                val moveX = rightStickX * RIGHT_STICK_CURSOR_SPEED_PX_PER_SEC * dt
+                val moveY = rightStickY * RIGHT_STICK_CURSOR_SPEED_PX_PER_SEC * dt
+                onRightStickMove(moveX, moveY)
+                active = true
+            }
+
+            if (active) {
+                webViewContainer.postOnAnimation(this)
+            } else {
+                analogLoopRunning = false
+                lastFrameTimeMs = 0L
+            }
+        }
+    }
 
     /**
      * Handles generic motion events (analog sticks and triggers).
@@ -40,27 +88,23 @@ class GamepadHandler(
             event.isFromSource(InputDevice.SOURCE_GAMEPAD)
         if (!isJoystick) return false
 
+        leftStickX = getCenteredAxis(event, MotionEvent.AXIS_X)
+        leftStickY = getCenteredAxis(event, MotionEvent.AXIS_Y)
+        rightStickX = getCenteredAxis(event, MotionEvent.AXIS_Z)
+        rightStickY = getCenteredAxis(event, MotionEvent.AXIS_RZ)
+
+        val hasAnalogInput =
+            abs(leftStickX) > STICK_DEADZONE ||
+            abs(leftStickY) > STICK_DEADZONE ||
+            abs(rightStickX) > STICK_DEADZONE ||
+            abs(rightStickY) > STICK_DEADZONE
+
+        if (hasAnalogInput) {
+            startAnalogLoop()
+            return true
+        }
+
         val webView = webViewContainer.getChildAt(0) as? WebView ?: return false
-
-        // Get analog stick positions
-        val leftStickX = getCenteredAxis(event, MotionEvent.AXIS_X)
-        val leftStickY = getCenteredAxis(event, MotionEvent.AXIS_Y)
-        val rightStickX = getCenteredAxis(event, MotionEvent.AXIS_Z)
-        val rightStickY = getCenteredAxis(event, MotionEvent.AXIS_RZ)
-
-        // Handle left stick (scroll)
-        if (abs(leftStickX) > STICK_DEADZONE || abs(leftStickY) > STICK_DEADZONE) {
-            handleLeftStickScroll(webView, leftStickX, leftStickY)
-            return true
-        }
-
-        // Handle right stick (mouse-style cursor)
-        if (abs(rightStickX) > STICK_DEADZONE || abs(rightStickY) > STICK_DEADZONE) {
-            onRightStickMove(rightStickX, rightStickY)
-            return true
-        }
-
-        // Handle triggers (L2/R2)
         val leftTrigger = getCenteredAxis(event, MotionEvent.AXIS_LTRIGGER)
         val rightTrigger = getCenteredAxis(event, MotionEvent.AXIS_RTRIGGER)
 
@@ -125,53 +169,25 @@ class GamepadHandler(
         }
     }
 
-    /**
-     * Handles left stick scroll (vertical and horizontal).
-     */
-    private fun handleLeftStickScroll(webView: WebView, x: Float, y: Float) {
-        val now = System.currentTimeMillis()
-        if (now - lastScrollTime < scrollDebounceMs) return
-        lastScrollTime = now
-
-        val scrollX = (x * SCROLL_SPEED).toInt()
-        val scrollY = (y * SCROLL_SPEED).toInt()
-
-        webView.evaluateJavascript(
-            """
-            (function() {
-                window.scrollBy($scrollX, $scrollY);
-            })();
-            """.trimIndent(),
-            null
-        )
+    private fun startAnalogLoop() {
+        if (analogLoopRunning) return
+        analogLoopRunning = true
+        lastFrameTimeMs = 0L
+        webViewContainer.postOnAnimation(analogUpdateRunnable)
     }
 
     /**
      * Handles left trigger (L2) - typically for page up or zoom out.
      */
     private fun handleLeftTrigger(webView: WebView) {
-        webView.evaluateJavascript(
-            """
-            (function() {
-                window.scrollBy(0, -300);
-            })();
-            """.trimIndent(),
-            null
-        )
+        webView.scrollBy(0, -300)
     }
 
     /**
      * Handles right trigger (R2) - typically for page down or zoom in.
      */
     private fun handleRightTrigger(webView: WebView) {
-        webView.evaluateJavascript(
-            """
-            (function() {
-                window.scrollBy(0, 300);
-            })();
-            """.trimIndent(),
-            null
-        )
+        webView.scrollBy(0, 300)
     }
 
     /**
@@ -217,19 +233,82 @@ class GamepadHandler(
     }
 
     /**
-     * Injects JavaScript to enable Gamepad API support in WebView.
+     * Injects JavaScript to enable Gamepad API support in WebView and to expose
+     * a reliable click helper for synthetic cursor clicks.
      */
     fun injectGamepadAPISupport(webView: WebView) {
         webView.evaluateJavascript(
             """
             (function() {
-                // Ensure Gamepad API is available
+                if (!window.__cfPointerController) {
+                    window.__cfPointerController = {
+                        clickAt: function(x, y) {
+                            var elements = [];
+                            if (document.elementsFromPoint) {
+                                elements = document.elementsFromPoint(x, y) || [];
+                            } else {
+                                var fallback = document.elementFromPoint(x, y);
+                                if (fallback) elements = [fallback];
+                            }
+
+                            if (elements.length === 0) {
+                                var fallbackTarget = document.elementFromPoint(x, y) || document.activeElement;
+                                if (fallbackTarget) elements = [fallbackTarget];
+                            }
+
+                            for (var i = 0; i < elements.length; i++) {
+                                var el = elements[i];
+                                if (!el) continue;
+
+                                try {
+                                    if (typeof el.focus === 'function') {
+                                        el.focus({ preventScroll: true });
+                                    } else if (typeof el.focus === 'function') {
+                                        el.focus();
+                                    }
+                                } catch (e) {}
+
+                                try {
+                                    ['pointermove', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(type) {
+                                        var evt;
+                                        try {
+                                            evt = new MouseEvent(type, {
+                                                bubbles: true,
+                                                cancelable: true,
+                                                view: window,
+                                                clientX: x,
+                                                clientY: y,
+                                                buttons: 1
+                                            });
+                                        } catch (e) {
+                                            evt = document.createEvent('MouseEvents');
+                                            evt.initMouseEvent(type, true, true, window, 1, 0, 0, x, y, false, false, false, false, 0, null);
+                                        }
+                                        el.dispatchEvent(evt);
+                                    });
+                                } catch (e) {}
+
+                                try {
+                                    if (typeof el.click === 'function') {
+                                        el.click();
+                                    }
+                                } catch (e) {}
+
+                                if (el !== document.body && el !== document.documentElement) {
+                                    return true;
+                                }
+                            }
+
+                            return false;
+                        }
+                    };
+                }
+
                 if (!navigator.getGamepads) {
                     console.warn('Gamepad API not supported');
                     return;
                 }
 
-                // Gamepad event listeners
                 window.addEventListener('gamepadconnected', function(e) {
                     console.log('Gamepad connected:', e.gamepad.id);
                 });
@@ -238,12 +317,10 @@ class GamepadHandler(
                     console.log('Gamepad disconnected:', e.gamepad.id);
                 });
 
-                // Polling for gamepad input (fallback)
                 var gamepadPollInterval = setInterval(function() {
                     var gamepads = navigator.getGamepads();
                     for (var i = 0; i < gamepads.length; i++) {
                         if (gamepads[i]) {
-                            // Gamepad is connected, can be used by web apps
                             console.log('Gamepad ' + i + ' is active');
                         }
                     }

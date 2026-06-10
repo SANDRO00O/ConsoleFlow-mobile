@@ -83,22 +83,18 @@ class InputManager(
      * Prioritizes input in this order: Keyboard shortcuts > Gamepad buttons > TV Remote > Special keys
      */
     fun handleKeyEvent(keyCode: Int, event: KeyEvent): Boolean {
-        // First, try keyboard shortcuts (highest priority)
         if (mouseKeyboardHandler.handleKeyboardShortcut(keyCode, event)) {
             return true
         }
 
-        // Then, try gamepad buttons
         if (gamepadHandler.handleGamepadButtonEvent(keyCode, event)) {
             return true
         }
 
-        // Then, try TV remote D-Pad and buttons
         if (tvRemoteHandler.handleKeyEvent(keyCode, event)) {
             return true
         }
 
-        // Finally, try special keys (Home, End, Page Up, Page Down, Escape)
         if (mouseKeyboardHandler.handleSpecialKeys(keyCode)) {
             return true
         }
@@ -117,19 +113,10 @@ class InputManager(
      * Initializes all input handlers for a WebView.
      */
     fun initializeWebView(webView: WebView) {
-        // Enable TV remote support
         tvRemoteHandler.enableSpatialNavigation(webView)
-
-        // Inject gamepad API support
         gamepadHandler.injectGamepadAPISupport(webView)
-
-        // Inject keyboard accessibility CSS
         mouseKeyboardHandler.injectKeyboardAccessibilityCSS(webView)
-
-        // Inject context menu support
         mouseKeyboardHandler.injectContextMenuSupport(webView)
-
-        // Enable smart keyboard handling
         mouseKeyboardHandler.enableSmartKeyboardHandling(webView)
     }
 
@@ -146,6 +133,8 @@ class InputManager(
                     var focused = document.activeElement;
                     if (focused && typeof focused.click === 'function') {
                         focused.click();
+                    } else if (focused && typeof focused.dispatchEvent === 'function') {
+                        focused.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
                     }
                 })();
                 """.trimIndent(),
@@ -162,21 +151,39 @@ class InputManager(
             (function() {
                 var x = $x;
                 var y = $y;
+
+                if (window.__cfPointerController && typeof window.__cfPointerController.clickAt === 'function') {
+                    if (window.__cfPointerController.clickAt(x, y)) {
+                        return;
+                    }
+                }
+
                 var target = document.elementFromPoint(x, y) || document.activeElement;
                 if (!target) return;
 
-                ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(function(type) {
-                    target.dispatchEvent(new MouseEvent(type, {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window,
-                        clientX: x,
-                        clientY: y
-                    }));
+                try {
+                    if (typeof target.focus === 'function') {
+                        target.focus({ preventScroll: true });
+                    }
+                } catch (e) {
+                    try { if (typeof target.focus === 'function') target.focus(); } catch (e2) {}
+                }
+
+                ['pointermove', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(type) {
+                    try {
+                        target.dispatchEvent(new MouseEvent(type, {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            clientX: x,
+                            clientY: y,
+                            buttons: 1
+                        }));
+                    } catch (e) {}
                 });
 
                 if (typeof target.click === 'function') {
-                    target.click();
+                    try { target.click(); } catch (e) {}
                 }
             })();
             """.trimIndent(),
@@ -215,12 +222,11 @@ class InputManager(
             joystickCursorInitialized = true
         }
 
-        val speed = 18f
         val maxX = (width - joystickCursor.width).coerceAtLeast(0).toFloat()
         val maxY = (height - joystickCursor.height).coerceAtLeast(0).toFloat()
 
-        joystickCursorX = (joystickCursorX + (dx * speed)).coerceIn(0f, maxX)
-        joystickCursorY = (joystickCursorY + (dy * speed)).coerceIn(0f, maxY)
+        joystickCursorX = (joystickCursorX + dx).coerceIn(0f, maxX)
+        joystickCursorY = (joystickCursorY + dy).coerceIn(0f, maxY)
 
         if (joystickCursor.visibility != View.VISIBLE) {
             joystickCursor.visibility = View.VISIBLE
