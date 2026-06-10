@@ -9,6 +9,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
+    <!-- Touch is NOT required — allows install on Android TV / Fire TV / tablets -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <!-- Leanback (Android TV platform) — optional, enables TV launcher icon -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -21,15 +26,22 @@
 
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|keyboard|navigation"
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/AppTheme.SplashScreen"
             android:windowSoftInputMode="adjustPan">
+            <!-- Phone / tablet launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Android TV / Fire TV launcher (shows app on TV home screen) -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <!-- URL intent handling -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -41,14 +53,14 @@
 
         <activity
             android:name=".SettingsActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
             android:exported="false"
             android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustPan" />
 
         <activity
             android:name=".AboutActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
             android:exported="false"
             android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustPan" />
