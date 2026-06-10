@@ -40,14 +40,11 @@ class TVRemoteHandler(
             KeyEvent.KEYCODE_BACK -> handleBackButton()
             KeyEvent.KEYCODE_MENU -> handleMenuButton()
             KeyEvent.KEYCODE_TV_POWER,
-            KeyEvent.KEYCODE_POWER -> false // Let system handle power
+            KeyEvent.KEYCODE_POWER -> false
             else -> false
         }
     }
 
-    /**
-     * Handles D-Pad Up: Scroll up or focus to previous element.
-     */
     private fun handleDPadUp(): Boolean {
         val webView = webViewContainer.getChildAt(0) as? WebView ?: return false
         webView.evaluateJavascript(
@@ -71,9 +68,6 @@ class TVRemoteHandler(
         return true
     }
 
-    /**
-     * Handles D-Pad Down: Scroll down or focus to next element.
-     */
     private fun handleDPadDown(): Boolean {
         val webView = webViewContainer.getChildAt(0) as? WebView ?: return false
         webView.evaluateJavascript(
@@ -97,9 +91,6 @@ class TVRemoteHandler(
         return true
     }
 
-    /**
-     * Handles D-Pad Left: Scroll left or focus to previous focusable element.
-     */
     private fun handleDPadLeft(): Boolean {
         val webView = webViewContainer.getChildAt(0) as? WebView ?: return false
         webView.evaluateJavascript(
@@ -126,9 +117,6 @@ class TVRemoteHandler(
         return true
     }
 
-    /**
-     * Handles D-Pad Right: Scroll right or focus to next focusable element.
-     */
     private fun handleDPadRight(): Boolean {
         val webView = webViewContainer.getChildAt(0) as? WebView ?: return false
         webView.evaluateJavascript(
@@ -155,9 +143,6 @@ class TVRemoteHandler(
         return true
     }
 
-    /**
-     * Handles D-Pad Center / Enter: Activate focused element or click.
-     */
     private fun handleDPadCenter(): Boolean {
         val webView = webViewContainer.getChildAt(0) as? WebView ?: return false
         webView.evaluateJavascript(
@@ -178,17 +163,11 @@ class TVRemoteHandler(
         return true
     }
 
-    /**
-     * Handles Back Button: Go back in history or close overlays.
-     */
     private fun handleBackButton(): Boolean {
         onNavigateBack()
         return true
     }
 
-    /**
-     * Handles Menu Button: Toggle the menu or show options.
-     */
     private fun handleMenuButton(): Boolean {
         onToggleMenu()
         return true
@@ -204,12 +183,15 @@ class TVRemoteHandler(
                 var style = document.createElement('style');
                 style.textContent = `
                     *:focus {
-                        outline: 3px solid #FFD700 !important;
-                        outline-offset: 2px !important;
-                        box-shadow: 0 0 10px rgba(255, 215, 0, 0.5) !important;
+                        outline: 3px solid #7DD3FC !important;
+                        outline-offset: 3px !important;
+                        box-shadow: 0 0 0 4px rgba(125, 211, 252, 0.28) !important,
+                                    0 0 14px rgba(255, 255, 255, 0.22) !important;
                     }
-                    a:focus, button:focus, input:focus, textarea:focus, select:focus {
-                        background-color: rgba(255, 215, 0, 0.1) !important;
+
+                    a:focus, button:focus, input:focus, textarea:focus, select:focus,
+                    [role="button"]:focus, [tabindex]:focus {
+                        background-color: rgba(255, 255, 255, 0.12) !important;
                     }
                 `;
                 document.head.appendChild(style);
