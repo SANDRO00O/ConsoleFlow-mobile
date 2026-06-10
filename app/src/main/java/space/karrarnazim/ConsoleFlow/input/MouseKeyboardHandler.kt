@@ -206,7 +206,7 @@ class MouseKeyboardHandler(
                 )
                 true
             }
-            KeyEvent.KEYCODE_END -> {
+            KeyEvent.KEYCODE_MOVE_END -> {
                 webView.evaluateJavascript(
                     """
                     (function() {

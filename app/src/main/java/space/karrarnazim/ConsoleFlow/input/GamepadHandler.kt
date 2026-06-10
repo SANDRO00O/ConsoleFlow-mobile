@@ -30,8 +30,6 @@ class GamepadHandler(
 
     private var lastScrollTime = 0L
     private val scrollDebounceMs = 50L
-    private var joystickCursorX = 0f
-    private var joystickCursorY = 0f
 
     /**
      * Handles generic motion events (analog sticks and triggers).
@@ -202,34 +200,6 @@ class GamepadHandler(
      */
     private fun handleRightThumbClick() {
         // Can be mapped to context menu or special action
-    }
-
-    /**
-     * Moves the on-screen joystick cursor.
-     */
-    private fun moveJoystickCursor(dx: Float, dy: Float) {
-        val containerWidth = webViewContainer.width.takeIf { it > 0 } ?: return
-        val containerHeight = webViewContainer.height.takeIf { it > 0 } ?: return
-
-        if (joystickCursorX == 0f && joystickCursorY == 0f) {
-            joystickCursorX = containerWidth / 2f
-            joystickCursorY = containerHeight / 2f
-        }
-
-        val speed = 18f
-        val maxX = (containerWidth - 28).coerceAtLeast(0).toFloat()
-        val maxY = (containerHeight - 28).coerceAtLeast(0).toFloat()
-
-        joystickCursorX = (joystickCursorX + (dx * speed)).coerceIn(0f, maxX)
-        joystickCursorY = (joystickCursorY + (dy * speed)).coerceIn(0f, maxY)
-
-        activity.runOnUiThread {
-            if (joystickCursor.visibility != android.view.View.VISIBLE) {
-                joystickCursor.visibility = android.view.View.VISIBLE
-            }
-            joystickCursor.translationX = joystickCursorX - 14f
-            joystickCursor.translationY = joystickCursorY - 14f
-        }
     }
 
     /**
