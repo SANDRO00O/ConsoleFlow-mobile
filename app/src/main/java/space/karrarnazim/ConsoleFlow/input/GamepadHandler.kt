@@ -240,67 +240,159 @@ class GamepadHandler(
         webView.evaluateJavascript(
             """
             (function() {
+                function deepElementFromPoint(doc, x, y) {
+                    if (!doc) return null;
+                    var el = null;
+                    try {
+                        if (doc.elementsFromPoint) {
+                            var stack = doc.elementsFromPoint(x, y) || [];
+                            for (var i = 0; i < stack.length; i++) {
+                                if (stack[i] && stack[i].tagName !== 'HTML' && stack[i].tagName !== 'BODY') {
+                                    el = stack[i];
+                                    break;
+                                }
+                            }
+                            if (!el && stack.length > 0) {
+                                el = stack[0];
+                            }
+                        } else {
+                            el = doc.elementFromPoint(x, y);
+                        }
+                    } catch (e) {
+                        try { el = doc.elementFromPoint(x, y); } catch (e2) {}
+                    }
+
+                    if (!el) return null;
+
+                    try {
+                        var rect = el.getBoundingClientRect && el.getBoundingClientRect();
+                        if (el.tagName === 'IFRAME' && rect) {
+                            var innerDoc = null;
+                            try { innerDoc = el.contentDocument || (el.contentWindow && el.contentWindow.document); } catch (e) {}
+                            if (innerDoc) {
+                                var inner = deepElementFromPoint(innerDoc, x - rect.left, y - rect.top);
+                                if (inner) return inner;
+                            }
+                        }
+                    } catch (e) {}
+
+                    return el;
+                }
+
+                function fireMouseSequence(el, x, y) {
+                    var types = ['pointermove', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+                    for (var i = 0; i < types.length; i++) {
+                        var type = types[i];
+                        try {
+                            var evt;
+                            if (type.indexOf('pointer') === 0 && typeof PointerEvent !== 'undefined') {
+                                evt = new PointerEvent(type, {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    view: window,
+                                    clientX: x,
+                                    clientY: y,
+                                    pointerId: 1,
+                                    pointerType: 'mouse',
+                                    isPrimary: true,
+                                    buttons: 1
+                                });
+                            } else {
+                                evt = new MouseEvent(type, {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    view: window,
+                                    clientX: x,
+                                    clientY: y,
+                                    buttons: 1
+                                });
+                            }
+                            el.dispatchEvent(evt);
+                        } catch (e) {
+                            try {
+                                var legacy = document.createEvent('MouseEvents');
+                                legacy.initMouseEvent(type, true, true, window, 1, 0, 0, x, y, false, false, false, false, 0, null);
+                                el.dispatchEvent(legacy);
+                            } catch (e2) {}
+                        }
+                    }
+
+                    try {
+                        if (typeof el.click === 'function') {
+                            el.click();
+                        }
+                    } catch (e) {}
+                }
+
+                function ensureClickHighlightLayer() {
+                    var id = '__cf_click_highlight';
+                    var layer = document.getElementById(id);
+                    if (layer) return layer;
+
+                    layer = document.createElement('div');
+                    layer.id = id;
+                    layer.style.position = 'fixed';
+                    layer.style.left = '0';
+                    layer.style.top = '0';
+                    layer.style.width = '46px';
+                    layer.style.height = '46px';
+                    layer.style.marginLeft = '-23px';
+                    layer.style.marginTop = '-23px';
+                    layer.style.borderRadius = '999px';
+                    layer.style.pointerEvents = 'none';
+                    layer.style.zIndex = '2147483647';
+                    layer.style.opacity = '0';
+                    layer.style.transform = 'scale(0.4)';
+                    layer.style.boxSizing = 'border-box';
+                    layer.style.border = '3px solid rgba(255,255,255,0.95)';
+                    layer.style.boxShadow = '0 0 0 2px rgba(0,0,0,0.95), inset 0 0 0 2px rgba(0,0,0,0.95)';
+                    layer.style.background = 'radial-gradient(circle at center, rgba(255,255,255,0.9) 0 30%, rgba(0,0,0,0.65) 31% 60%, rgba(255,255,255,0.0) 61% 100%)';
+                    layer.style.transition = 'transform 180ms ease-out, opacity 180ms ease-out';
+                    (document.body || document.documentElement).appendChild(layer);
+                    return layer;
+                }
+
                 if (!window.__cfPointerController) {
                     window.__cfPointerController = {
                         clickAt: function(x, y) {
-                            var elements = [];
-                            if (document.elementsFromPoint) {
-                                elements = document.elementsFromPoint(x, y) || [];
-                            } else {
-                                var fallback = document.elementFromPoint(x, y);
-                                if (fallback) elements = [fallback];
-                            }
+                            var target = deepElementFromPoint(document, x, y) || document.activeElement || document.body;
+                            if (!target) return false;
 
-                            if (elements.length === 0) {
-                                var fallbackTarget = document.elementFromPoint(x, y) || document.activeElement;
-                                if (fallbackTarget) elements = [fallbackTarget];
-                            }
-
-                            for (var i = 0; i < elements.length; i++) {
-                                var el = elements[i];
-                                if (!el) continue;
-
-                                try {
-                                    if (typeof el.focus === 'function') {
-                                        el.focus({ preventScroll: true });
-                                    } else if (typeof el.focus === 'function') {
-                                        el.focus();
-                                    }
-                                } catch (e) {}
-
-                                try {
-                                    ['pointermove', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(type) {
-                                        var evt;
-                                        try {
-                                            evt = new MouseEvent(type, {
-                                                bubbles: true,
-                                                cancelable: true,
-                                                view: window,
-                                                clientX: x,
-                                                clientY: y,
-                                                buttons: 1
-                                            });
-                                        } catch (e) {
-                                            evt = document.createEvent('MouseEvents');
-                                            evt.initMouseEvent(type, true, true, window, 1, 0, 0, x, y, false, false, false, false, 0, null);
-                                        }
-                                        el.dispatchEvent(evt);
-                                    });
-                                } catch (e) {}
-
-                                try {
-                                    if (typeof el.click === 'function') {
-                                        el.click();
-                                    }
-                                } catch (e) {}
-
-                                if (el !== document.body && el !== document.documentElement) {
-                                    return true;
+                            try {
+                                if (typeof target.focus === 'function') {
+                                    target.focus({ preventScroll: true });
                                 }
-                            }
+                            } catch (e) {}
 
-                            return false;
+                            fireMouseSequence(target, x, y);
+                            this.showClickHighlight(x, y);
+                            return true;
+                        },
+                        showClickHighlight: function(x, y) {
+                            var layer = ensureClickHighlightLayer();
+                            layer.style.left = x + 'px';
+                            layer.style.top = y + 'px';
+                            layer.style.opacity = '1';
+                            layer.style.transform = 'scale(1)';
+                            clearTimeout(layer.__cfHideTimer);
+                            layer.__cfHideTimer = setTimeout(function() {
+                                layer.style.opacity = '0';
+                                layer.style.transform = 'scale(1.25)';
+                            }, 120);
                         }
+                    };
+                } else if (typeof window.__cfPointerController.showClickHighlight !== 'function') {
+                    window.__cfPointerController.showClickHighlight = function(x, y) {
+                        var layer = ensureClickHighlightLayer();
+                        layer.style.left = x + 'px';
+                        layer.style.top = y + 'px';
+                        layer.style.opacity = '1';
+                        layer.style.transform = 'scale(1)';
+                        clearTimeout(layer.__cfHideTimer);
+                        layer.__cfHideTimer = setTimeout(function() {
+                            layer.style.opacity = '0';
+                            layer.style.transform = 'scale(1.25)';
+                        }, 120);
                     };
                 }
 

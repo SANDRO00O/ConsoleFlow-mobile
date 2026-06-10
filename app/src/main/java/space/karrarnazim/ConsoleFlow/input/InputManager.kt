@@ -31,7 +31,9 @@ class InputManager(
     private val onNavigateBack: () -> Unit,
     private val onNavigateForward: () -> Unit,
     private val onToggleFullscreen: () -> Unit,
-    private val onToggleDarkMode: () -> Unit
+    private val onToggleDarkMode: () -> Unit,
+    private val onCursorClickAt: (Float, Float) -> Boolean,
+    private val onCursorClickHighlight: (Float, Float) -> Unit
 ) {
 
     private val tvRemoteHandler = TVRemoteHandler(
@@ -146,6 +148,10 @@ class InputManager(
         val x = joystickCursorX.roundToInt()
         val y = joystickCursorY.roundToInt()
 
+        if (onCursorClickAt(x.toFloat(), y.toFloat())) {
+            return
+        }
+
         webView.evaluateJavascript(
             """
             (function() {
@@ -171,14 +177,10 @@ class InputManager(
 
                 ['pointermove', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(type) {
                     try {
-                        target.dispatchEvent(new MouseEvent(type, {
-                            bubbles: true,
-                            cancelable: true,
-                            view: window,
-                            clientX: x,
-                            clientY: y,
-                            buttons: 1
-                        }));
+                        var evt = (type.indexOf('pointer') === 0 && typeof PointerEvent !== 'undefined')
+                            ? new PointerEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true, buttons: 1 })
+                            : new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, buttons: 1 });
+                        target.dispatchEvent(evt);
                     } catch (e) {}
                 });
 
@@ -189,6 +191,7 @@ class InputManager(
             """.trimIndent(),
             null
         )
+        onCursorClickHighlight(x.toFloat(), y.toFloat())
     }
 
     /**
@@ -231,8 +234,8 @@ class InputManager(
         if (joystickCursor.visibility != View.VISIBLE) {
             joystickCursor.visibility = View.VISIBLE
         }
-        joystickCursor.translationX = joystickCursorX - joystickCursor.width / 2f
-        joystickCursor.translationY = joystickCursorY - joystickCursor.height / 2f
+        joystickCursor.translationX = webViewContainer.x + joystickCursorX - joystickCursor.width / 2f
+        joystickCursor.translationY = webViewContainer.y + joystickCursorY - joystickCursor.height / 2f
     }
 
     /**

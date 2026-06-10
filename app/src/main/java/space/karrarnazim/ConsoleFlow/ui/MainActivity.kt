@@ -1,6 +1,7 @@
 package space.karrarnazim.ConsoleFlow
 
 import android.Manifest
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.*
@@ -13,6 +14,7 @@ import android.os.*
 import android.provider.*
 import android.text.*
 import android.view.*
+import android.view.animation.LinearInterpolator
 import android.view.accessibility.*
 import android.view.inputmethod.*
 import android.webkit.*
@@ -47,6 +49,7 @@ import java.io.*
 import java.net.*
 import java.util.*
 import java.util.concurrent.*
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
@@ -65,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bottomBar: LinearLayout
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var joystickCursor: View
+    private lateinit var clickHighlight: View
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
@@ -74,6 +78,7 @@ class MainActivity : AppCompatActivity() {
     private var homeSearchEngineIcon: ImageView? = null
     private var lastErrorUrl: String? = null
     private var tabGroupsContainer: LinearLayout? = null
+    private var joystickCursorAnimator: ValueAnimator? = null
 
     // FIX #3 — dirty flag للـ home overlay بدلاً من rebuild فوري
     private var homeOverlayDirty = false
@@ -403,6 +408,7 @@ class MainActivity : AppCompatActivity() {
             wv.destroy()
         }
         webViews.clear()
+        joystickCursorAnimator?.cancel()
         ioExecutor.shutdown()
         cachedMenuSheet?.dismiss()
         super.onDestroy()
@@ -425,6 +431,8 @@ class MainActivity : AppCompatActivity() {
         bottomBar              = findViewById(R.id.bottomBar)
         fullscreenContainer    = findViewById(R.id.fullscreenContainer)
         joystickCursor         = findViewById(R.id.joystickCursor)
+        startJoystickCursorInversionEffect()
+        clickHighlight         = findViewById(R.id.clickHighlight)
         tabsOverlay            = findViewById(R.id.tabsOverlay)
         tabsRecycler           = findViewById(R.id.tabsRecycler)
         tabCount               = findViewById(R.id.tabCount)
@@ -1123,6 +1131,7 @@ private fun savePersistentTabs() {
 
         val executeSwitch = {
             val targetWebView = ensureWebViewForTab(tab)
+            inputManager.initializeWebView(targetWebView)
             activeTabId = tab.id
 
             webViewContainer.removeAllViews()
@@ -1228,6 +1237,7 @@ private fun savePersistentTabs() {
         } else {
             wv.loadUrl(HOME_URL)
         }
+        inputManager.initializeWebView(wv)
         return wv
     }
 
@@ -1305,9 +1315,174 @@ private fun savePersistentTabs() {
         }
     }
 
+    private fun showCursorClickHighlight(x: Float, y: Float) {
+        if (clickHighlight.width <= 0 || clickHighlight.height <= 0) {
+            clickHighlight.post { showCursorClickHighlight(x, y) }
+            return
+        }
+
+        clickHighlight.clearAnimation()
+        clickHighlight.visibility = View.VISIBLE
+        clickHighlight.translationX = webViewContainer.x + x - clickHighlight.width / 2f
+        clickHighlight.translationY = webViewContainer.y + y - clickHighlight.height / 2f
+        clickHighlight.scaleX = 0.35f
+        clickHighlight.scaleY = 0.35f
+        clickHighlight.alpha = 1f
+        clickHighlight.animate()
+            .scaleX(1.15f)
+            .scaleY(1.15f)
+            .alpha(0f)
+            .setDuration(220)
+            .withEndAction {
+                clickHighlight.visibility = View.GONE
+                clickHighlight.scaleX = 1f
+                clickHighlight.scaleY = 1f
+                clickHighlight.alpha = 1f
+            }
+            .start()
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  إنشاء WebView جديد مع جميع الإعدادات والمستمعين
     // ─────────────────────────────────────────────────────────────────────────
+
+
+    private fun startJoystickCursorInversionEffect() {
+        val background = joystickCursor.background?.mutate() as? LayerDrawable ?: return
+
+        val layers = (0 until background.numberOfLayers).mapNotNull { index ->
+            background.getDrawable(index)
+        }
+        if (layers.isEmpty()) return
+
+        joystickCursorAnimator?.cancel()
+        joystickCursorAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 900L
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            interpolator = LinearInterpolator()
+            addUpdateListener { animator ->
+                val t = animator.animatedFraction.coerceIn(0f, 1f)
+                val inverse = 1f - t
+
+                val outer = blendColor(Color.BLACK, Color.WHITE, t)
+                val middle = blendColor(Color.WHITE, Color.BLACK, t)
+                val inner = blendColor(Color.BLACK, Color.WHITE, inverse)
+
+                setLayerColor(layers.getOrNull(0), outer)
+                setLayerColor(layers.getOrNull(1), middle)
+                setLayerColor(layers.getOrNull(2), inner)
+            }
+            start()
+        }
+    }
+
+    private fun setLayerColor(drawable: Drawable?, color: Int) {
+        when (drawable) {
+            is GradientDrawable -> drawable.setColor(color)
+            is LayerDrawable -> {
+                for (i in 0 until drawable.numberOfLayers) {
+                    setLayerColor(drawable.getDrawable(i), color)
+                }
+            }
+        }
+    }
+
+    private fun blendColor(from: Int, to: Int, fraction: Float): Int {
+        val f = fraction.coerceIn(0f, 1f)
+        val a = (Color.alpha(from) + ((Color.alpha(to) - Color.alpha(from)) * f)).toInt()
+        val r = (Color.red(from) + ((Color.red(to) - Color.red(from)) * f)).toInt()
+        val g = (Color.green(from) + ((Color.green(to) - Color.green(from)) * f)).toInt()
+        val b = (Color.blue(from) + ((Color.blue(to) - Color.blue(from)) * f)).toInt()
+        return Color.argb(a, r, g, b)
+    }
+
+    private fun performCursorClickAt(x: Float, y: Float): Boolean {
+        val root = findViewById<ViewGroup>(android.R.id.content)
+        val screenCoords = IntArray(2)
+        val rootCoords = IntArray(2)
+        webViewContainer.getLocationOnScreen(screenCoords)
+        root.getLocationOnScreen(rootCoords)
+
+        val absoluteX = screenCoords[0] + x
+        val absoluteY = screenCoords[1] + y
+        val localX = absoluteX - rootCoords[0]
+        val localY = absoluteY - rootCoords[1]
+
+        val nativeTarget = findClickableNativeViewUnder(root, localX.toInt(), localY.toInt())
+        if (nativeTarget != null) {
+            nativeTarget.requestFocus()
+            nativeTarget.performClick()
+            showCursorClickHighlight(x, y)
+            return true
+        }
+
+        val webView = currentWebView ?: return false
+        if (webView.parent == null) return false
+
+        webView.evaluateJavascript(
+            """
+            (function() {
+                var x = ${x.roundToInt()};
+                var y = ${y.roundToInt()};
+                if (window.__cfPointerController && typeof window.__cfPointerController.clickAt === 'function') {
+                    if (window.__cfPointerController.clickAt(x, y)) return true;
+                }
+                var target = document.elementFromPoint(x, y);
+                if (!target) return false;
+                try { if (typeof target.focus === 'function') target.focus({ preventScroll: true }); } catch (e) {}
+                ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(type) {
+                    try {
+                        var evt = (type.indexOf('pointer') === 0 && typeof PointerEvent !== 'undefined')
+                            ? new PointerEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true, buttons: 1 })
+                            : new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, buttons: 1 });
+                        target.dispatchEvent(evt);
+                    } catch (e) {}
+                });
+                try { if (typeof target.click === 'function') target.click(); } catch (e) {}
+                return true;
+            })();
+            """.trimIndent(),
+            null
+        )
+        showCursorClickHighlight(x, y)
+        return true
+    }
+
+    private fun findClickableNativeViewUnder(root: ViewGroup, x: Int, y: Int): View? {
+        fun hitTest(view: View, pointX: Int, pointY: Int): Boolean {
+            if (view.visibility != View.VISIBLE) return false
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+            val rootLocation = IntArray(2)
+            root.getLocationOnScreen(rootLocation)
+            val left = location[0] - rootLocation[0]
+            val top = location[1] - rootLocation[1]
+            val right = left + view.width
+            val bottom = top + view.height
+            return pointX >= left && pointX < right && pointY >= top && pointY < bottom
+        }
+
+        fun recurse(view: View): View? {
+            if (!hitTest(view, x, y)) return null
+            if (view is WebView) return null
+            if (view is ViewGroup) {
+                for (i in view.childCount - 1 downTo 0) {
+                    recurse(view.getChildAt(i))?.let { return it }
+                }
+            }
+            if (view.isClickable || view.hasOnClickListeners()) {
+                return view
+            }
+            return null
+        }
+
+        for (i in root.childCount - 1 downTo 0) {
+            val found = recurse(root.getChildAt(i))
+            if (found != null) return found
+        }
+        return null
+    }
 
     private fun setFullscreen(fullscreen: Boolean) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -1670,7 +1845,9 @@ private fun savePersistentTabs() {
             onNavigateBack = { if (currentWebView?.canGoBack() == true) currentWebView?.goBack() },
             onNavigateForward = { if (currentWebView?.canGoForward() == true) currentWebView?.goForward() },
             onToggleFullscreen = { setFullscreen(customView == null) },
-            onToggleDarkMode = { toggleDarkMode() }
+            onToggleDarkMode = { toggleDarkMode() },
+            onCursorClickAt = { x, y -> performCursorClickAt(x, y) },
+            onCursorClickHighlight = { x, y -> showCursorClickHighlight(x, y) }
         )
 
         // Initialize input support for current WebView
