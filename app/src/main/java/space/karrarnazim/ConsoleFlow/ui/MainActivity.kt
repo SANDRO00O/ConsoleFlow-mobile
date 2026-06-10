@@ -183,6 +183,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         prefsManager = PrefsManager(this)
+        AppCompatDelegate.setDefaultNightMode(
+            if (prefsManager.darkMode) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+        )
         bookmarkRepository = BookmarkRepository(prefsManager)
         historyRepository = HistoryRepository(prefsManager)
 
@@ -1663,7 +1666,7 @@ private fun savePersistentTabs() {
             onReload = { currentWebView?.reload() },
             onFind = { showFindBar() },
             onFocusUrlBar = { textUrl.requestFocus(); textUrl.selectAll() },
-            onToggleMenu = { showMainMenu() },
+            onToggleMenu = { showMenuSheet() },
             onNavigateBack = { if (currentWebView?.canGoBack() == true) currentWebView?.goBack() },
             onNavigateForward = { if (currentWebView?.canGoForward() == true) currentWebView?.goForward() },
             onToggleFullscreen = { setFullscreen(customView == null) },
@@ -1674,8 +1677,8 @@ private fun savePersistentTabs() {
         currentWebView?.let { inputManager.initializeWebView(it) }
     }
 
-    override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
-        if (event != null && inputManager.handleKeyEvent(event.keyCode, event)) {
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (inputManager.handleKeyEvent(event.keyCode, event)) {
             return true
         }
         return super.dispatchKeyEvent(event)
@@ -1698,6 +1701,9 @@ private fun savePersistentTabs() {
 
     private fun toggleDarkMode() {
         prefsManager.darkMode = !prefsManager.darkMode
+        AppCompatDelegate.setDefaultNightMode(
+            if (prefsManager.darkMode) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+        )
         recreate()
     }
 
