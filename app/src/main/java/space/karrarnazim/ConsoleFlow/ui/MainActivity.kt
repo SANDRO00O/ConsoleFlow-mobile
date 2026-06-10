@@ -64,6 +64,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var findBar: LinearLayout
     private lateinit var bottomBar: LinearLayout
     private lateinit var fullscreenContainer: FrameLayout
+    private lateinit var joystickCursor: View
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
@@ -126,6 +127,7 @@ class MainActivity : AppCompatActivity() {
     // ── إدارة الجلسات والتبويبات ───────────────────────────────────────────
     private lateinit var sessionManager: BrowserSessionManager
     private lateinit var webViewFactory: BrowserWebViewFactory
+    private lateinit var inputManager: InputManager
 
     private var tabGroups: MutableList<TabGroup>
         get() = sessionManager.tabGroups
@@ -275,6 +277,7 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         setupListeners()
+        initializeInputManager()
         setTopBarVisible(false, immediate = true)
 
         val intentUrl = intent?.data?.toString()
@@ -418,6 +421,7 @@ class MainActivity : AppCompatActivity() {
         findBar                = findViewById(R.id.findBar)
         bottomBar              = findViewById(R.id.bottomBar)
         fullscreenContainer    = findViewById(R.id.fullscreenContainer)
+        joystickCursor         = findViewById(R.id.joystickCursor)
         tabsOverlay            = findViewById(R.id.tabsOverlay)
         tabsRecycler           = findViewById(R.id.tabsRecycler)
         tabCount               = findViewById(R.id.tabCount)
@@ -1641,6 +1645,61 @@ private fun savePersistentTabs() {
     // ─────────────────────────────────────────────────────────────────────────
     //  جسر JavaScript
     // ─────────────────────────────────────────────────────────────────────────
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  معالجات الإدخال (TV Remote, Gamepad, Keyboard, Mouse)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun initializeInputManager() {
+        inputManager = InputManager(
+            activity = this,
+            webViewContainer = webViewContainer,
+            topBar = topBar,
+            bottomBar = bottomBar,
+            textUrl = textUrl,
+            joystickCursor = joystickCursor,
+            onNewTab = { openNewTab(HOME_URL) },
+            onCloseTab = { currentGroup?.tabs?.find { it.id == activeTabId }?.let { closeTab(it) } },
+            onReload = { currentWebView?.reload() },
+            onFind = { showFindBar() },
+            onFocusUrlBar = { textUrl.requestFocus(); textUrl.selectAll() },
+            onToggleMenu = { showMainMenu() },
+            onNavigateBack = { if (currentWebView?.canGoBack() == true) currentWebView?.goBack() },
+            onNavigateForward = { if (currentWebView?.canGoForward() == true) currentWebView?.goForward() },
+            onToggleFullscreen = { setFullscreen(customView == null) },
+            onToggleDarkMode = { toggleDarkMode() }
+        )
+
+        // Initialize input support for current WebView
+        currentWebView?.let { inputManager.initializeWebView(it) }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
+        if (event != null && inputManager.handleKeyEvent(event.keyCode, event)) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent?): Boolean {
+        if (event != null && inputManager.handleMotionEvent(event)) {
+            return true
+        }
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    private fun showFindBar() {
+        if (findBar.visibility != View.VISIBLE) {
+            findBar.visibility = View.VISIBLE
+            val findInput = findBar.findViewById<EditText>(R.id.findInput)
+            findInput?.requestFocus()
+        }
+    }
+
+    private fun toggleDarkMode() {
+        prefsManager.darkMode = !prefsManager.darkMode
+        recreate()
+    }
 
     inner class SearchBridge {
         @JavascriptInterface
