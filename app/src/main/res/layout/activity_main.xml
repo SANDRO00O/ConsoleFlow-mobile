@@ -27,8 +27,17 @@
             
             <FrameLayout android:id="@+id/webViewContainer" android:layout_width="match_parent" android:layout_height="match_parent" />
             
-            <FrameLayout android:id="@+id/nativeOverlayContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:visibility="gone" />
-            
+                        <FrameLayout android:id="@+id/nativeOverlayContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:visibility="gone" />
+
+            <!-- Joystick cursor overlay -->
+            <View
+                android:id="@+id/joystickCursor"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="@drawable/joystick_cursor"
+                android:elevation="24dp"
+                android:visibility="gone" />
+
         </FrameLayout>
         
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
