@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
+    
     android:background="#000000">
+    <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000" android:orientation="vertical">
 
     <!-- ── Top bar ──────────────────────────────────────────────────────────── -->
     <LinearLayout
@@ -356,4 +360,25 @@
 
         </LinearLayout>
     </ScrollView>
-</LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Joystick cursor overlay for settings -->
+    <View
+        android:id="@+id/settingsJoystickCursor"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="top|start"
+        android:background="@drawable/joystick_cursor"
+        android:elevation="120dp"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/settingsJoystickClickFlash"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="top|start"
+        android:background="@drawable/joystick_cursor_click"
+        android:elevation="121dp"
+        android:visibility="gone" />
+</FrameLayout>

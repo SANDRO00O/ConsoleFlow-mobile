@@ -438,6 +438,9 @@ class MainActivity : AppCompatActivity() {
         joystickCursor.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         joystickClickFlash.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         clickHighlight.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        joystickCursor.translationZ = 1000f
+        joystickClickFlash.translationZ = 1001f
+        clickHighlight.translationZ = 1002f
         tabsOverlay            = findViewById(R.id.tabsOverlay)
         tabsRecycler           = findViewById(R.id.tabsRecycler)
         tabCount               = findViewById(R.id.tabCount)
@@ -445,6 +448,7 @@ class MainActivity : AppCompatActivity() {
         tabGroupsContainer     = findViewById(R.id.tabGroupsContainer)
 
         buildNativeOverlays()
+        ensureJoystickCursorVisible()
         setTopBarVisible(false, immediate = true)
 
         // FIX #5 — نمرر ioExecutor للـ Adapter بدلاً من أن ينشئ هو thread pool خاص به
@@ -1105,6 +1109,8 @@ private fun savePersistentTabs() {
         captureAndStoreThumbnail {
             refreshTabsRecycler()
             tabsOverlay.visibility = View.VISIBLE
+            tabsOverlay.bringToFront()
+            ensureJoystickCursorVisible()
         }
     }
 
@@ -1321,13 +1327,14 @@ private fun savePersistentTabs() {
     }
 
     private fun showCursorClickHighlight(x: Float, y: Float) {
-        showJoystickClickFlash()
         if (clickHighlight.width <= 0 || clickHighlight.height <= 0) {
             clickHighlight.post { showCursorClickHighlight(x, y) }
             return
         }
 
+        clickHighlight.animate().cancel()
         clickHighlight.clearAnimation()
+        clickHighlight.bringToFront()
         clickHighlight.visibility = View.VISIBLE
         clickHighlight.translationX = webViewContainer.x + x - clickHighlight.width / 2f
         clickHighlight.translationY = webViewContainer.y + y - clickHighlight.height / 2f
@@ -1354,18 +1361,21 @@ private fun savePersistentTabs() {
             return
         }
 
+        joystickClickFlash.animate().cancel()
         joystickClickFlash.clearAnimation()
+        joystickClickFlash.bringToFront()
+        joystickCursor.bringToFront()
         joystickClickFlash.visibility = View.VISIBLE
         joystickClickFlash.translationX = joystickCursor.translationX
         joystickClickFlash.translationY = joystickCursor.translationY
-        joystickClickFlash.scaleX = 0.55f
-        joystickClickFlash.scaleY = 0.55f
+        joystickClickFlash.scaleX = 0.7f
+        joystickClickFlash.scaleY = 0.7f
         joystickClickFlash.alpha = 1f
         joystickClickFlash.animate()
-            .scaleX(1.18f)
-            .scaleY(1.18f)
+            .scaleX(1.08f)
+            .scaleY(1.08f)
             .alpha(0f)
-            .setDuration(140)
+            .setDuration(110)
             .withEndAction {
                 joystickClickFlash.visibility = View.GONE
                 joystickClickFlash.scaleX = 1f
@@ -1373,6 +1383,15 @@ private fun savePersistentTabs() {
                 joystickClickFlash.alpha = 1f
             }
             .start()
+    }
+
+    private fun ensureJoystickCursorVisible() {
+        if (joystickCursor.visibility != View.VISIBLE) {
+            joystickCursor.visibility = View.VISIBLE
+        }
+        joystickCursor.bringToFront()
+        joystickClickFlash.bringToFront()
+        clickHighlight.bringToFront()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1427,26 +1446,112 @@ private fun savePersistentTabs() {
         val webView = currentWebView ?: return false
         if (webView.parent == null) return false
 
+        val jsX = x.roundToInt()
+        val jsY = y.roundToInt()
+
         webView.evaluateJavascript(
             """
             (function() {
-                var x = ${x.roundToInt()};
-                var y = ${y.roundToInt()};
+                var x = $jsX;
+                var y = $jsY;
                 if (window.__cfPointerController && typeof window.__cfPointerController.clickAt === 'function') {
-                    if (window.__cfPointerController.clickAt(x, y)) return true;
+                    return window.__cfPointerController.clickAt(x, y);
                 }
-                var target = document.elementFromPoint(x, y);
-                if (!target) return false;
-                try { if (typeof target.focus === 'function') target.focus({ preventScroll: true }); } catch (e) {}
-                ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(type) {
+
+                function deepElementFromPoint(doc, px, py) {
+                    if (!doc) return null;
+                    var el = null;
                     try {
-                        var evt = (type.indexOf('pointer') === 0 && typeof PointerEvent !== 'undefined')
-                            ? new PointerEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true, buttons: 1 })
-                            : new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, buttons: 1 });
-                        target.dispatchEvent(evt);
+                        if (doc.elementsFromPoint) {
+                            var stack = doc.elementsFromPoint(px, py) || [];
+                            for (var i = 0; i < stack.length; i++) {
+                                if (stack[i] && stack[i].tagName !== 'HTML' && stack[i].tagName !== 'BODY') {
+                                    el = stack[i];
+                                    break;
+                                }
+                            }
+                            if (!el && stack.length > 0) {
+                                el = stack[0];
+                            }
+                        } else {
+                            el = doc.elementFromPoint(px, py);
+                        }
+                    } catch (e) {
+                        try { el = doc.elementFromPoint(px, py); } catch (e2) {}
+                    }
+
+                    if (!el) return null;
+
+                    try {
+                        var rect = el.getBoundingClientRect && el.getBoundingClientRect();
+                        if (el.tagName === 'IFRAME' && rect) {
+                            var innerDoc = null;
+                            try { innerDoc = el.contentDocument || (el.contentWindow && el.contentWindow.document); } catch (e) {}
+                            if (innerDoc) {
+                                var inner = deepElementFromPoint(innerDoc, px - rect.left, py - rect.top);
+                                if (inner) return inner;
+                            }
+                        }
                     } catch (e) {}
-                });
-                try { if (typeof target.click === 'function') target.click(); } catch (e) {}
+
+                    return el;
+                }
+
+                function fireMouseSequence(el, px, py) {
+                    var types = ['pointermove', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+                    for (var i = 0; i < types.length; i++) {
+                        var type = types[i];
+                        try {
+                            var evt;
+                            if (type.indexOf('pointer') === 0 && typeof PointerEvent !== 'undefined') {
+                                evt = new PointerEvent(type, {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    view: window,
+                                    clientX: px,
+                                    clientY: py,
+                                    pointerId: 1,
+                                    pointerType: 'mouse',
+                                    isPrimary: true,
+                                    buttons: 1
+                                });
+                            } else {
+                                evt = new MouseEvent(type, {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    view: window,
+                                    clientX: px,
+                                    clientY: py,
+                                    buttons: 1
+                                });
+                            }
+                            el.dispatchEvent(evt);
+                        } catch (e) {
+                            try {
+                                var legacy = document.createEvent('MouseEvents');
+                                legacy.initMouseEvent(type, true, true, window, 1, 0, 0, px, py, false, false, false, false, 0, null);
+                                el.dispatchEvent(legacy);
+                            } catch (e2) {}
+                        }
+                    }
+
+                    try {
+                        if (typeof el.click === 'function') {
+                            el.click();
+                        }
+                    } catch (e) {}
+                }
+
+                var target = deepElementFromPoint(document, x, y) || document.elementFromPoint(x, y) || document.activeElement || document.body;
+                if (!target) return false;
+
+                try {
+                    if (typeof target.focus === 'function') {
+                        target.focus({ preventScroll: true });
+                    }
+                } catch (e) {}
+
+                fireMouseSequence(target, x, y);
                 return true;
             })();
             """.trimIndent(),
