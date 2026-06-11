@@ -141,6 +141,7 @@ class InputManager(
         val y = joystickCursorY.roundToInt()
 
         onCursorClickFlash()
+
         if (onCursorClickAt(x.toFloat(), y.toFloat())) {
             return
         }
@@ -150,15 +151,12 @@ class InputManager(
             (function() {
                 var x = $x;
                 var y = $y;
-
                 if (window.__cfPointerController && typeof window.__cfPointerController.clickAt === 'function') {
-                    if (window.__cfPointerController.clickAt(x, y)) {
-                        return;
-                    }
+                    return window.__cfPointerController.clickAt(x, y);
                 }
 
-                var target = document.elementFromPoint(x, y) || document.activeElement;
-                if (!target) return;
+                var target = document.elementFromPoint(x, y) || document.activeElement || document.body;
+                if (!target) return false;
 
                 try {
                     if (typeof target.focus === 'function') {
@@ -180,6 +178,7 @@ class InputManager(
                 if (typeof target.click === 'function') {
                     try { target.click(); } catch (e) {}
                 }
+                return true;
             })();
             """.trimIndent(),
             null
@@ -227,6 +226,7 @@ class InputManager(
         if (joystickCursor.visibility != View.VISIBLE) {
             joystickCursor.visibility = View.VISIBLE
         }
+        joystickCursor.bringToFront()
         joystickCursor.translationX = webViewContainer.x + joystickCursorX - joystickCursor.width / 2f
         joystickCursor.translationY = webViewContainer.y + joystickCursorY - joystickCursor.height / 2f
     }

@@ -133,6 +133,10 @@ class GamepadHandler(
      * Handles gamepad button events (A, B, X, Y, Start, Select, etc.).
      */
     fun handleGamepadButtonEvent(keyCode: Int, event: KeyEvent): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN || event.repeatCount != 0) {
+            return false
+        }
+
         return when (keyCode) {
             KeyEvent.KEYCODE_BUTTON_A -> {
                 onButtonA()
@@ -363,6 +367,17 @@ class GamepadHandler(
                 if (!window.__cfPointerController) {
                     window.__cfPointerController = {
                         clickAt: function(x, y) {
+                            var scale = 1;
+                            try {
+                                if (window.visualViewport && typeof window.visualViewport.scale === 'number' && window.visualViewport.scale > 0) {
+                                    scale = window.visualViewport.scale;
+                                } else if (window.devicePixelRatio && window.devicePixelRatio > 0) {
+                                    scale = window.devicePixelRatio;
+                                }
+                            } catch (e) {}
+                            x = x / scale;
+                            y = y / scale;
+
                             var target = deepElementFromPoint(document, x, y) || document.activeElement || document.body;
                             if (!target) return false;
 
