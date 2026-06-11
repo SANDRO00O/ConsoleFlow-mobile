@@ -181,9 +181,9 @@ class InputController(private val h: Handlers) {
     // ─────────────────────────────────────────────────────────────────────
 
     private fun handleAlt(event: KeyEvent): Boolean = when (event.keyCode) {
-        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_LEFT  -> { h.navigateBack(); true }
-        KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_RIGHT -> { h.navigateForward(); true }
-        KeyEvent.KEYCODE_HOME -> { h.navigateHome(); true }
+        KeyEvent.KEYCODE_DPAD_LEFT  -> { h.navigateBack(); true }
+        KeyEvent.KEYCODE_DPAD_RIGHT -> { h.navigateForward(); true }
+        KeyEvent.KEYCODE_HOME       -> { h.navigateHome(); true }
         else -> false
     }
 
@@ -263,27 +263,19 @@ class InputController(private val h: Handlers) {
         if (h.isTopBarVisible() || h.isTabsOverlayVisible()) return false
         val wv = h.getWebView() ?: return false
         return when {
-            wv.scrollX > 0     -> { wv.scrollBy(-STEP, 0); true }
-            wv.canGoBack()     -> { h.navigateBack(); true }
-            else               -> false
+            wv.canScrollHorizontally(-1) -> { wv.scrollBy(-STEP, 0); true }
+            wv.canGoBack()               -> { h.navigateBack(); true }
+            else                         -> false
         }
     }
 
-    /**
-     * RIGHT:
-     *  • Overlays visible         → focus system handles
-     *  • Page has horizontal room → scroll right
-     *  • Can go forward           → browser forward
-     *  • Otherwise                → pass through
-     */
     private fun dpadRight(): Boolean {
         if (h.isTopBarVisible() || h.isTabsOverlayVisible()) return false
         val wv = h.getWebView() ?: return false
-        val maxH = wv.computeHorizontalScrollRange() - wv.computeHorizontalScrollExtent()
         return when {
-            wv.scrollX < maxH  -> { wv.scrollBy(STEP, 0); true }
-            wv.canGoForward()  -> { h.navigateForward(); true }
-            else               -> false
+            wv.canScrollHorizontally(1) -> { wv.scrollBy(STEP, 0); true }
+            wv.canGoForward()           -> { h.navigateForward(); true }
+            else                        -> false
         }
     }
 
