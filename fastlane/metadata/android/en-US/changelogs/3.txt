@@ -1,0 +1,1 @@
+Refactored the browser codebase into separate ui, web, tabs, storage, console, and cache layers.
