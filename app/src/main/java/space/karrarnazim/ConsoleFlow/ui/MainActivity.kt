@@ -434,6 +434,10 @@ class MainActivity : AppCompatActivity() {
         joystickCursor         = findViewById(R.id.joystickCursor)
         joystickClickFlash     = findViewById(R.id.joystickClickFlash)
         clickHighlight         = findViewById(R.id.clickHighlight)
+
+        joystickCursor.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        joystickClickFlash.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        clickHighlight.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         tabsOverlay            = findViewById(R.id.tabsOverlay)
         tabsRecycler           = findViewById(R.id.tabsRecycler)
         tabCount               = findViewById(R.id.tabCount)
@@ -1850,7 +1854,8 @@ private fun savePersistentTabs() {
             onToggleFullscreen = { setFullscreen(customView == null) },
             onToggleDarkMode = { toggleDarkMode() },
             onCursorClickAt = { x, y -> performCursorClickAt(x, y) },
-            onCursorClickHighlight = { x, y -> showCursorClickHighlight(x, y) }
+            onCursorClickHighlight = { x, y -> showCursorClickHighlight(x, y) },
+            onCursorClickFlash = { showJoystickClickFlash() }
         )
 
         // Initialize input support for current WebView
