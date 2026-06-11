@@ -33,7 +33,8 @@ class InputManager(
     private val onToggleFullscreen: () -> Unit,
     private val onToggleDarkMode: () -> Unit,
     private val onCursorClickAt: (Float, Float) -> Boolean,
-    private val onCursorClickHighlight: (Float, Float) -> Unit
+    private val onCursorClickHighlight: (Float, Float) -> Unit,
+    private val onCursorClickFlash: () -> Unit
 ) {
 
     private val tvRemoteHandler = TVRemoteHandler(
@@ -139,6 +140,7 @@ class InputManager(
         val x = joystickCursorX.roundToInt()
         val y = joystickCursorY.roundToInt()
 
+        onCursorClickFlash()
         if (onCursorClickAt(x.toFloat(), y.toFloat())) {
             return
         }

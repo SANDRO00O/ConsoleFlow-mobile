@@ -38,6 +38,8 @@ class GamepadHandler(
 
     private var analogLoopRunning = false
     private var lastFrameTimeMs = 0L
+    private var lastEmittedRightX = Float.NaN
+    private var lastEmittedRightY = Float.NaN
 
     private val analogUpdateRunnable = object : Runnable {
         override fun run() {
@@ -66,7 +68,11 @@ class GamepadHandler(
             if (abs(rightStickX) > STICK_DEADZONE || abs(rightStickY) > STICK_DEADZONE) {
                 val moveX = rightStickX * RIGHT_STICK_CURSOR_SPEED_PX_PER_SEC * dt
                 val moveY = rightStickY * RIGHT_STICK_CURSOR_SPEED_PX_PER_SEC * dt
-                onRightStickMove(moveX, moveY)
+                if (moveX != lastEmittedRightX || moveY != lastEmittedRightY) {
+                    onRightStickMove(moveX, moveY)
+                    lastEmittedRightX = moveX
+                    lastEmittedRightY = moveY
+                }
                 active = true
             }
 
@@ -75,6 +81,8 @@ class GamepadHandler(
             } else {
                 analogLoopRunning = false
                 lastFrameTimeMs = 0L
+                lastEmittedRightX = Float.NaN
+                lastEmittedRightY = Float.NaN
             }
         }
     }
