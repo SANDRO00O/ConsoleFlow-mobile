@@ -1,0 +1,7 @@
+{
+  "release_name": "v2.2.7 ConsoleFlow",
+  "release_body": "Major modular refactor: split browser logic into ui, web, tabs, storage, console, and cache modules. Improved maintainability and prepared the codebase for future feature work.",
+  "apk_name": "ConsoleFlow_v2.2.7.apk",
+  "is_prerelease": false,
+  "tag": "v2.2.7"
+}
