@@ -38,7 +38,7 @@
 
 ## About The Project
 
-[ConsoleFlow](https://consoleflow.karrarnazim.space) is not just another web browser. It is built specifically for web developers who need to debug websites on mobile devices. By intercepting web requests using `OkHttp`, ConsoleFlow automatically injects [Eruda](https://github.com/liriliri/eruda) (a mobile web console) into web pages, allowing you to view console logs, inspect DOM elements, check network requests, and execute JavaScript right from your Android phone.
+[ConsoleFlow](https://consoleflow.karrarnazim.space) is not just another web browser. It is built specifically for web developers who need to debug websites on mobile devices. By intercepting web requests using `OkHttp`, ConsoleFlow automatically injects [Eruda](https://github.com/liriliri/eruda) (a mobile web console) into web pages, allowing you to view console logs, inspect DOM elements, check network requests, and execute JavaScript right from your Android phone. The controller system is unified across remotes, gamepads, keyboard input, and the on-screen cursor.
 
 ## Features
 
@@ -48,7 +48,7 @@
 - **Custom JS Injection:** Add your own custom JavaScript to be executed automatically on every page load.
 - **Find in Page:** Easily search for specific text within any webpage.
 - **Bookmarks & History:** Built-in local storage manager for your favorite sites and browsing history.
-- **Universal Control Support:** Works with TV remotes, gamepads/joysticks, mouse, and keyboard, with an on-screen joystick cursor for mouse-like navigation.
+- **Unified Controller System:** One controller layer handles TV remotes, gamepads/joysticks, mouse, and keyboard, with a smooth on-screen cursor and WebView click bridging for page controls.
 - **Native Downloads:** Integrated with Android's native `DownloadManager` for stable file downloading.
 - **Sleek UI:** Custom dark-themed start page, error pages, menus, and Android 12+ Splash Screen support.
 
