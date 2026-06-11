@@ -281,7 +281,7 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onReceivedErrorUi = { url -> showErrorOverlay(url) },
-            onApplyConsoleTools = { view -> applyConsoleTools(view) }
+            onApplyConsoleTools = { view -> applyConsoleTools(view); inputManager.injectControllerScript(view) }
         )
 
         initViews()
@@ -1241,6 +1241,7 @@ private fun savePersistentTabs() {
 
         val wv = webViewFactory.create(tab.id)
         webViews[tab.id] = wv
+        inputManager.initializeWebView(wv)
         if (restoreState != null) {
             runCatching { wv.restoreState(restoreState) }
         } else if (!isHomeUrl(tab.url)) {
@@ -1248,7 +1249,6 @@ private fun savePersistentTabs() {
         } else {
             wv.loadUrl(HOME_URL)
         }
-        inputManager.initializeWebView(wv)
         return wv
     }
 
@@ -1336,8 +1336,8 @@ private fun savePersistentTabs() {
         clickHighlight.clearAnimation()
         clickHighlight.bringToFront()
         clickHighlight.visibility = View.VISIBLE
-        clickHighlight.translationX = webViewContainer.x + x - clickHighlight.width / 2f
-        clickHighlight.translationY = webViewContainer.y + y - clickHighlight.height / 2f
+        clickHighlight.translationX = x - clickHighlight.width / 2f
+        clickHighlight.translationY = y - clickHighlight.height / 2f
         clickHighlight.scaleX = 0.35f
         clickHighlight.scaleY = 0.35f
         clickHighlight.alpha = 1f
@@ -1425,17 +1425,12 @@ private fun savePersistentTabs() {
 
     private fun performCursorClickAt(x: Float, y: Float): Boolean {
         val root = findViewById<ViewGroup>(android.R.id.content)
-        val screenCoords = IntArray(2)
         val rootCoords = IntArray(2)
-        webViewContainer.getLocationOnScreen(screenCoords)
+        val webCoords = IntArray(2)
         root.getLocationOnScreen(rootCoords)
+        webViewContainer.getLocationOnScreen(webCoords)
 
-        val absoluteX = screenCoords[0] + x
-        val absoluteY = screenCoords[1] + y
-        val localX = absoluteX - rootCoords[0]
-        val localY = absoluteY - rootCoords[1]
-
-        val nativeTarget = findClickableNativeViewUnder(root, localX.toInt(), localY.toInt())
+        val nativeTarget = findClickableNativeViewUnder(root, x.roundToInt(), y.roundToInt())
         if (nativeTarget != null) {
             nativeTarget.requestFocus()
             nativeTarget.performClick()
@@ -1443,11 +1438,35 @@ private fun savePersistentTabs() {
             return true
         }
 
+        val insideWebView = x >= webViewContainer.left.toFloat() &&
+            y >= webViewContainer.top.toFloat() &&
+            x <= webViewContainer.right.toFloat() &&
+            y <= webViewContainer.bottom.toFloat()
+        if (!insideWebView) return false
+
+        if (tabsOverlay.visibility == View.VISIBLE &&
+            x >= tabsOverlay.left.toFloat() && x <= tabsOverlay.right.toFloat() &&
+            y >= tabsOverlay.top.toFloat() && y <= tabsOverlay.bottom.toFloat()) {
+            return false
+        }
+
+        if (nativeOverlayContainer.visibility == View.VISIBLE &&
+            x >= nativeOverlayContainer.left.toFloat() && x <= nativeOverlayContainer.right.toFloat() &&
+            y >= nativeOverlayContainer.top.toFloat() && y <= nativeOverlayContainer.bottom.toFloat()) {
+            return false
+        }
+
+        if (fullscreenContainer.visibility == View.VISIBLE) {
+            return false
+        }
+
         val webView = currentWebView ?: return false
         if (webView.parent == null) return false
 
-        val jsX = x.roundToInt()
-        val jsY = y.roundToInt()
+        val absoluteX = rootCoords[0] + x
+        val absoluteY = rootCoords[1] + y
+        val jsX = (absoluteX - webCoords[0]).roundToInt()
+        val jsY = (absoluteY - webCoords[1]).roundToInt()
 
         webView.evaluateJavascript(
             """
@@ -1943,6 +1962,7 @@ private fun savePersistentTabs() {
     private fun initializeInputManager() {
         inputManager = InputManager(
             activity = this,
+            rootView = findViewById(android.R.id.content) as ViewGroup,
             webViewContainer = webViewContainer,
             topBar = topBar,
             bottomBar = bottomBar,
