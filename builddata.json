@@ -1,0 +1,7 @@
+{
+  "release_name": "v2.2.8 ConsoleFlow",
+  "release_body": "Added broader input support for TV remotes, gamepads, joysticks, keyboard, and mouse, including an on-screen joystick cursor for mouse-like navigation. Updated app metadata for the 2.2.8 release.",
+  "apk_name": "ConsoleFlow_v2.2.8.apk",
+  "is_prerelease": false,
+  "tag": "v2.2.8"
+}
