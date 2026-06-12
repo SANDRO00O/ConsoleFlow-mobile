@@ -1798,7 +1798,7 @@ private fun savePersistentTabs() {
     // ── onGenericMotionEvent ──────────────────────────────────────────────────
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (inputController.onMotion(event)) return true
+        if (inputController.onGenericMotion(event)) return true
         return super.onGenericMotionEvent(event)
     }
 }
