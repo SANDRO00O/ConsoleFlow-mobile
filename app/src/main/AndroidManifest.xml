@@ -9,6 +9,14 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
+    <!-- Download service permissions -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"
+        android:minSdkVersion="34" />
+    <!-- Shows download-complete notifications on Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"
+        android:minSdkVersion="33" />
+
     <!-- Touch is NOT required — allows install on Android TV / Fire TV / tablets -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <!-- Leanback (Android TV platform) — optional, enables TV launcher icon -->
@@ -64,5 +72,20 @@
             android:exported="false"
             android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustPan" />
+
+        <!-- Downloads page activity -->
+        <activity
+            android:name=".DownloadsActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:windowSoftInputMode="adjustPan" />
+
+        <!-- Foreground download service — dataSync type required on API 34+ -->
+        <service
+            android:name=".DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
     </application>
 </manifest>

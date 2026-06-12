@@ -36,7 +36,8 @@ class BrowserWebViewFactory(
     private val onPageFinishedUi: (Int, WebView, String?) -> Unit,
     private val onReceivedIconUi: (Int, Bitmap) -> Unit,
     private val onReceivedErrorUi: (String?) -> Unit,
-    private val onApplyConsoleTools: (WebView) -> Unit
+    private val onApplyConsoleTools: (WebView) -> Unit,
+    private val onDownloadStart: (url: String, userAgent: String, contentDisposition: String, mimeType: String, contentLength: Long) -> Unit
 ) {
 
     @Suppress("SetJavaScriptEnabled")
@@ -127,6 +128,12 @@ class BrowserWebViewFactory(
             onHideCustomViewUi = onHideCustomViewUi,
             onPermissionRequestUi = onPermissionRequestUi
         )
+
+        // ── Download listener ────────────────────────────────────────────────
+        // Called by WebView when it encounters a URL it can't render itself.
+        wv.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+            onDownloadStart(url, userAgent, contentDisposition, mimeType, contentLength)
+        }
 
         return wv
     }

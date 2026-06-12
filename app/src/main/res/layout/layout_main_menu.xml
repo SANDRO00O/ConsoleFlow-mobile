@@ -18,7 +18,7 @@
         android:layout_height="wrap_content"
         android:alignmentMode="alignMargins"
         android:columnCount="4"
-        android:rowCount="2"
+        android:rowCount="3"
         android:useDefaultMargins="true">
 
         <LinearLayout
@@ -227,6 +227,33 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Clear Data"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/menuDownloads"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_columnWeight="1"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_download"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:id="@+id/menuDownloadsLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Downloads"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp" />
         </LinearLayout>

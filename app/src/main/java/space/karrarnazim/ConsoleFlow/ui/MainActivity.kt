@@ -160,6 +160,11 @@ class MainActivity : AppCompatActivity() {
         else webPermissionRequest?.deny()
     }
 
+    // POST_NOTIFICATIONS permission for download completion alerts (API 33+)
+    private val notifPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* granted or denied — downloads work either way */ }
+
     private val qrScanLauncher = registerForActivityResult(ScanContract()) { result: ScanIntentResult ->
         result.contents?.let { scanned -> navigateTo(scanned) }
     }
@@ -272,7 +277,10 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onReceivedErrorUi = { url -> showErrorOverlay(url) },
-            onApplyConsoleTools = { view -> applyConsoleTools(view) }
+            onApplyConsoleTools = { view -> applyConsoleTools(view) },
+            onDownloadStart = { url, userAgent, contentDisposition, mimeType, contentLength ->
+                handleDownloadRequest(url, userAgent, contentDisposition, mimeType, contentLength)
+            }
         )
 
         initViews()
@@ -1534,6 +1542,11 @@ private fun savePersistentTabs() {
             cachedMenuSheetView?.findViewById<View>(R.id.menuSettings)?.setOnClickListener {
                 cachedMenuSheet?.dismiss(); startSettingsActivity()
             }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuDownloads)?.setOnClickListener {
+                cachedMenuSheet?.dismiss()
+                startActivity(Intent(this, DownloadsActivity::class.java))
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+            }
             cachedMenuSheetView?.findViewById<View>(R.id.menuClearData)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 AlertDialog.Builder(this, R.style.DarkDialog)
@@ -1632,6 +1645,48 @@ private fun savePersistentTabs() {
     private fun startSettingsActivity() {
         startActivity(Intent(this, SettingsActivity::class.java))
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Download handling
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Called from BrowserWebViewFactory when WebView can't render a URL.
+     * Requests POST_NOTIFICATIONS on API 33+ (once), then fires the service.
+     */
+    private fun handleDownloadRequest(
+        url: String,
+        userAgent: String,
+        contentDisposition: String,
+        mimeType: String,
+        contentLength: Long
+    ) {
+        // Request notification permission on Android 13+ so completion
+        // notifications are visible. Downloads work either way.
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                notifPermLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+        val cookies  = android.webkit.CookieManager.getInstance().getCookie(url) ?: ""
+
+        androidx.core.content.ContextCompat.startForegroundService(
+            this,
+            Intent(this, DownloadService::class.java).apply {
+                action = DownloadService.ACTION_START
+                putExtra(DownloadService.EXTRA_URL,      url)
+                putExtra(DownloadService.EXTRA_FILENAME, fileName)
+                putExtra(DownloadService.EXTRA_MIME,     mimeType)
+                putExtra(DownloadService.EXTRA_UA,       userAgent)
+                putExtra(DownloadService.EXTRA_COOKIES,  cookies)
+            }
+        )
+
+        Toast.makeText(this, "Downloading: $fileName", Toast.LENGTH_SHORT).show()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
