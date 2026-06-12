@@ -12,6 +12,7 @@ import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.WebView
 import android.widget.FrameLayout
 import kotlin.math.abs
 
@@ -38,6 +39,9 @@ class CursorController(private val activity: Activity) {
     private val SIZE   = (RADIUS * 2f + 0.5f).toInt() // حجم الـ View بالبكسل
 
     val view = CursorView(activity)
+
+    private val contentRoot: View
+        get() = activity.findViewById(android.R.id.content)
 
     private var posX    = 0f
     private var posY    = 0f
@@ -91,9 +95,8 @@ class CursorController(private val activity: Activity) {
     fun performClick(): Boolean {
         if (!isVisible) return false
 
-        // المؤشر موجود فوق المشهد، لذلك يجب إخفاؤه لحظة النقر حتى لا يصبح
-        // هو الهدف الفعلي للّمس. بهذه الطريقة يصل الحدث إلى العنصر الحقيقي
-        // الموجود تحته عبر المسار النظامي نفسه.
+        // نجعل المؤشر غير مرئي فقط أثناء إرسال النقرة حتى لا يلتقط
+        // هو نفسه اللمسة، ثم نعيده مباشرةً بعد الإرسال.
         hideHandler.removeCallbacks(hideTask)
         view.animate().cancel()
 
@@ -103,22 +106,77 @@ class CursorController(private val activity: Activity) {
             view.visibility = View.INVISIBLE
         }
 
-        val t  = SystemClock.uptimeMillis()
-        val dn = MotionEvent.obtain(t, t,        MotionEvent.ACTION_DOWN, posX, posY, 0)
-        val up = MotionEvent.obtain(t, t + 80L,  MotionEvent.ACTION_UP,   posX, posY, 0)
-        activity.dispatchTouchEvent(dn)
-        activity.dispatchTouchEvent(up)
-        dn.recycle()
-        up.recycle()
+        val handled = dispatchSystemTap(contentRoot, posX, posY)
 
-        // ارجع المؤشر فورًا وبشفافية كاملة بعد اكتمال النقر.
         if (wasVisible) {
             view.visibility = View.VISIBLE
             view.alpha = 1f
         }
         view.animateClick()
         hideHandler.postDelayed(hideTask, HIDE_DELAY_MS)
-        return true
+        return handled
+    }
+
+    /** يرسل نقرة نظامية مباشرة إلى العنصر الواقع تحت المؤشر. */
+    private fun dispatchSystemTap(root: View, screenX: Float, screenY: Float): Boolean {
+        val target = findTargetView(root, screenX, screenY) ?: return false
+
+        val loc = IntArray(2)
+        target.getLocationOnScreen(loc)
+        val localX = screenX - loc[0]
+        val localY = screenY - loc[1]
+        if (target.width <= 0 || target.height <= 0) return false
+        if (localX < 0f || localY < 0f || localX > target.width.toFloat() || localY > target.height.toFloat()) {
+            return false
+        }
+
+        if (target.isFocusable) {
+            target.requestFocus()
+        }
+
+        val t  = SystemClock.uptimeMillis()
+        val dn = MotionEvent.obtain(t, t,        MotionEvent.ACTION_DOWN, localX, localY, 0)
+        val up = MotionEvent.obtain(t, t + 80L,  MotionEvent.ACTION_UP,   localX, localY, 0)
+
+        val downHandled = target.dispatchTouchEvent(dn)
+        val upHandled = target.dispatchTouchEvent(up)
+        dn.recycle()
+        up.recycle()
+
+        return downHandled || upHandled || target.performClick()
+    }
+
+    /** يبحث عن أعمق View قابلة للتفاعل تحت إحداثيات الشاشة المعطاة. */
+    private fun findTargetView(view: View, screenX: Float, screenY: Float): View? {
+        if (view === this.view) return null
+        if (view.visibility != View.VISIBLE || view.alpha <= 0.05f) return null
+
+        val loc = IntArray(2)
+        view.getLocationOnScreen(loc)
+        val left = loc[0].toFloat()
+        val top = loc[1].toFloat()
+        val right = left + view.width.toFloat()
+        val bottom = top + view.height.toFloat()
+
+        if (screenX < left || screenX > right || screenY < top || screenY > bottom) return null
+
+        if (view is ViewGroup) {
+            for (i in view.childCount - 1 downTo 0) {
+                val child = view.getChildAt(i)
+                val hit = findTargetView(child, screenX, screenY)
+                if (hit != null) return hit
+            }
+        }
+
+        return if (isTargetable(view)) view else null
+    }
+
+    private fun isTargetable(view: View): Boolean {
+        return view is WebView ||
+            view.isClickable ||
+            view.isLongClickable ||
+            view.hasOnClickListeners() ||
+            view is android.widget.EditText
     }
 
     /** ينعش المؤشر ويمنعه من الاختفاء عند تبديل التبويبات أو القوائم. */

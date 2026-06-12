@@ -325,40 +325,6 @@ class InputController(private val h: Handlers) {
 
     private fun performCursorClick(): Boolean {
         val c = cursor ?: return false
-        val wv = h.getWebView() ?: return c.performClick()
-        if (!c.isVisible) return false
-
-        val (screenX, screenY) = c.screenPosition()
-        val loc = IntArray(2)
-        wv.getLocationOnScreen(loc)
-        val left = loc[0].toFloat()
-        val top = loc[1].toFloat()
-        val right = left + wv.width.toFloat()
-        val bottom = top + wv.height.toFloat()
-
-        stopScrollLoop()
-        wv.requestFocus()
-
-        // داخل الـ WebView: استخدم نقرة JS داخل الصفحة لتفادي تبديل وضع اللمس/التركيز.
-        if (screenX in left..right && screenY in top..bottom) {
-            val x = (screenX - left).coerceIn(0f, (wv.width - 1).coerceAtLeast(0).toFloat())
-            val y = (screenY - top).coerceIn(0f, (wv.height - 1).coerceAtLeast(0).toFloat())
-            val js = """(function(){
-                var x=$x, y=$y;
-                var el=document.elementFromPoint(x,y);
-                if(!el) return '0';
-                var opts={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y};
-                try{el.dispatchEvent(new MouseEvent('mousemove',opts));}catch(e){}
-                try{el.dispatchEvent(new MouseEvent('mousedown',opts));}catch(e){}
-                try{el.dispatchEvent(new MouseEvent('mouseup',opts));}catch(e){}
-                try{el.dispatchEvent(new MouseEvent('click',opts));}catch(e){}
-                try{if(typeof el.click==='function') el.click();}catch(e){}
-                return '1';
-            })();"""
-            wv.evaluateJavascript(js, null)
-            return true
-        }
-
         return c.performClick()
     }
 

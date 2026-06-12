@@ -280,6 +280,9 @@ class MainActivity : AppCompatActivity() {
         inputController  = buildInputController().also { it.setCursorController(cursorController) }
         setupListeners()
         window.decorView.setOnGenericMotionListener { _, event ->
+            if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {
+                cursorArmed = true
+            }
             keepCursorAlive()
             inputController.onGenericMotion(event)
         }
@@ -1688,9 +1691,10 @@ private fun savePersistentTabs() {
 
     private lateinit var inputController: InputController
     private lateinit var cursorController: CursorController
+    private var cursorArmed = false
 
     private fun keepCursorAlive() {
-        if (::cursorController.isInitialized) {
+        if (::cursorController.isInitialized && cursorArmed) {
             cursorController.keepVisible()
         }
     }
@@ -1814,6 +1818,9 @@ private fun savePersistentTabs() {
         if (event.keyCode == KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
 
         if (event.action == KeyEvent.ACTION_DOWN) {
+            if (event.isFromSource(InputDevice.SOURCE_GAMEPAD) || event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_DPAD)) {
+                cursorArmed = true
+            }
             // When an EditText (URL bar, find bar) owns focus, only intercept:
             //   • Escape   → dismiss overlay
             //   • Ctrl+*   → browser shortcuts still work while typing
@@ -1836,6 +1843,9 @@ private fun savePersistentTabs() {
     // ── dispatchGenericMotionEvent ────────────────────────────────────────────
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {
+            cursorArmed = true
+        }
         keepCursorAlive()
         if (inputController.onGenericMotion(event)) return true
         return super.dispatchGenericMotionEvent(event)
