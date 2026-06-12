@@ -2,25 +2,17 @@ package space.karrarnazim.ConsoleFlow
 
 import android.app.*
 import android.content.*
-import android.content.pm.PackageManager
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.*
 import android.provider.MediaStore
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import okhttp3.*
 import java.io.*
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Foreground service that downloads files via OkHttp.
- * Lives as long as there are active downloads, then stops itself.
- *
- * Design: one thread per download (max 3 concurrent), no blocking on main.
- */
 class DownloadService : Service() {
 
     companion object {
@@ -34,11 +26,9 @@ class DownloadService : Service() {
         const val EXTRA_COOKIES  = "cookies"
         const val EXTRA_DL_ID    = "dlid"
 
-        const val CHANNEL_ID      = "cf_downloads"
+        const val CHANNEL_ID        = "cf_downloads"
         private const val NOTIF_FOREGROUND = 999
         private const val NOTIF_BASE       = 1000
-
-        // Update notification at most every 500ms
         private const val NOTIF_INTERVAL_MS = 500L
     }
 
@@ -50,7 +40,6 @@ class DownloadService : Service() {
         getSystemService(NotificationManager::class.java)!!
     }
 
-    // Dedicated OkHttp client: no read timeout (large files), 30s connect
     private val okClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)
@@ -65,12 +54,12 @@ class DownloadService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIF_FOREGROUND, buildForegroundNotif())
+        startForeground(NOTIF_FOREGROUND, buildSummaryNotif("Starting…"))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> handleStart(intent)
+            ACTION_START  -> handleStart(intent)
             ACTION_CANCEL -> handleCancel(intent)
         }
         return START_STICKY
@@ -94,15 +83,16 @@ class DownloadService : Service() {
         val notifId = notifIdGen.getAndIncrement()
 
         DownloadTracker.add(DownloadItem(id = id, url = url, fileName = fileName, mimeType = mime))
-        activeCount.incrementAndGet()
+
+        val count = activeCount.incrementAndGet()
+        refreshSummaryNotif(count)
+
         executor.execute { doDownload(id, url, fileName, mime, ua, cookies, notifId) }
     }
 
     private fun handleCancel(intent: Intent) {
         val id = intent.getIntExtra(EXTRA_DL_ID, -1)
-        if (id != -1) {
-            DownloadTracker.update(id) { state = DownloadState.CANCELLED }
-        }
+        if (id != -1) DownloadTracker.update(id) { state = DownloadState.CANCELLED }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -139,22 +129,20 @@ class DownloadService : Service() {
             val (outputStream, filePath) = createOutputFile(fileName, mime)
 
             try {
-                val body  = response.body ?: throw IOException("Empty response body")
+                val body  = response.body ?: throw IOException("Empty body")
                 val buf   = ByteArray(16 * 1024)
                 val input = body.byteStream()
                 var done  = 0L
 
-                // Sliding window: last 10 samples for smooth speed/ETA
                 val winTime  = ArrayDeque<Long>()
                 val winBytes = ArrayDeque<Long>()
                 var lastNotifMs = 0L
 
                 loop@ while (true) {
-                    // Cancellation check before every read
                     if (DownloadTracker.getById(id)?.state == DownloadState.CANCELLED) {
-                        input.close()
-                        outputStream.close()
+                        input.close(); outputStream.close()
                         deletePartial(filePath)
+                        notifManager.cancel(notifId)
                         return
                     }
 
@@ -164,10 +152,8 @@ class DownloadService : Service() {
                     outputStream.write(buf, 0, n)
                     done += n
 
-                    // Sliding window for speed
                     val now = System.currentTimeMillis()
-                    winTime.addLast(now)
-                    winBytes.addLast(done)
+                    winTime.addLast(now);  winBytes.addLast(done)
                     if (winTime.size > 10) { winTime.removeFirst(); winBytes.removeFirst() }
 
                     val speed: Long = if (winTime.size >= 2) {
@@ -176,9 +162,7 @@ class DownloadService : Service() {
                         if (dt > 0) (db / dt).toLong() else 0L
                     } else 0L
 
-                    val eta = if (speed > 0 && totalBytes > 0)
-                        (totalBytes - done) / speed
-                    else -1L
+                    val eta = if (speed > 0 && totalBytes > 0) (totalBytes - done) / speed else -1L
 
                     DownloadTracker.update(id) {
                         downloadedBytes  = done
@@ -186,7 +170,6 @@ class DownloadService : Service() {
                         etaSeconds       = eta
                     }
 
-                    // Rate-limit notification updates
                     if (now - lastNotifMs >= NOTIF_INTERVAL_MS) {
                         lastNotifMs = now
                         val pct = if (totalBytes > 0) ((done * 100) / totalBytes).toInt() else -1
@@ -194,8 +177,7 @@ class DownloadService : Service() {
                     }
                 }
 
-                outputStream.close()
-                input.close()
+                outputStream.close(); input.close()
                 finalizeFile(filePath, fileName, mime)
 
                 DownloadTracker.update(id) {
@@ -217,13 +199,14 @@ class DownloadService : Service() {
             }
 
         } catch (e: Exception) {
-            if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED) {
+            if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED)
                 fail(id, notifId, fileName, e.message ?: "Network error")
-            } else {
+            else
                 notifManager.cancel(notifId)
-            }
         } finally {
-            if (activeCount.decrementAndGet() == 0) stopWhenIdle()
+            val remaining = activeCount.decrementAndGet()
+            refreshSummaryNotif(remaining)
+            if (remaining == 0) stopWhenIdle()
         }
     }
 
@@ -240,15 +223,9 @@ class DownloadService : Service() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // File I/O helpers
+    // File helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Returns (OutputStream, filePath-or-contentUri-string).
-     * API 29+: MediaStore content:// URI.
-     * API 24-28: public Downloads dir (WRITE_EXTERNAL_STORAGE permission
-     * already declared in manifest with maxSdkVersion="28").
-     */
     private fun createOutputFile(fileName: String, mime: String): Pair<OutputStream, String> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val cv = ContentValues().apply {
@@ -280,14 +257,12 @@ class DownloadService : Service() {
 
     private fun finalizeFile(path: String, fileName: String, mime: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val uri = Uri.parse(path)
-            contentResolver.update(uri, ContentValues().apply {
-                put(MediaStore.Downloads.IS_PENDING, 0)
-            }, null, null)
+            contentResolver.update(Uri.parse(path),
+                ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) },
+                null, null)
         } else {
-            try {
-                MediaScannerConnection.scanFile(this, arrayOf(path), arrayOf(mime), null)
-            } catch (_: Exception) {}
+            try { MediaScannerConnection.scanFile(this, arrayOf(path), arrayOf(mime), null) }
+            catch (_: Exception) {}
         }
     }
 
@@ -301,27 +276,45 @@ class DownloadService : Service() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Notification builders
+    // Notifications
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID, "Downloads",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "ConsoleFlow download progress"
-                setShowBadge(false)
-            }
-            notifManager.createNotificationChannel(channel)
+            notifManager.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "Downloads", NotificationManager.IMPORTANCE_LOW)
+                    .apply {
+                        description = "ConsoleFlow download progress"
+                        setShowBadge(false)
+                    }
+            )
         }
     }
 
-    private fun buildForegroundNotif(): Notification =
+    /** Tap-to-open downloads page intent — reused in several notifications */
+    private fun openDownloadsPagePi(): PendingIntent = PendingIntent.getActivity(
+        this, 0,
+        Intent(this, DownloadsActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    /** Updates (or creates) the persistent foreground notification with download count. */
+    private fun refreshSummaryNotif(activeNow: Int) {
+        val text = when {
+            activeNow > 1 -> "$activeNow downloads in progress"
+            activeNow == 1 -> "1 download in progress"
+            else -> "Downloads complete"
+        }
+        notifManager.notify(NOTIF_FOREGROUND, buildSummaryNotif(text))
+    }
+
+    private fun buildSummaryNotif(text: String): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("ConsoleFlow Downloads")
-            .setContentText("Preparing…")
+            .setContentText(text)
+            .setContentIntent(openDownloadsPagePi())
             .setOngoing(true)
             .build()
 
@@ -343,13 +336,6 @@ class DownloadService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val openPagePi = PendingIntent.getActivity(
-            this, notifId,
-            Intent(this, DownloadsActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         val statusText = buildString {
             append(formatBytes(done))
             if (total > 0) append(" / ${formatBytes(total)}")
@@ -360,57 +346,41 @@ class DownloadService : Service() {
             }
         }
 
-        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+        notifManager.notify(notifId, NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(fileName)
             .setContentText(statusText)
             .setProgress(100, if (pct >= 0) pct else 0, pct < 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(openPagePi)
+            .setContentIntent(openDownloadsPagePi())
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPi)
-            .build()
-
-        notifManager.notify(notifId, notif)
+            .build())
     }
 
-    private fun showCompletedNotif(
-        notifId: Int,
-        fileName: String,
-        filePath: String,
-        mime: String
-    ) {
-        val openFilePi: PendingIntent? = try {
-            val uri = if (filePath.startsWith("content://")) Uri.parse(filePath) else null
-            if (uri != null) {
+    private fun showCompletedNotif(notifId: Int, fileName: String, filePath: String, mime: String) {
+        val tapPi: PendingIntent? = if (filePath.startsWith("content://")) {
+            runCatching {
                 PendingIntent.getActivity(
                     this, notifId,
                     Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, mime)
+                        setDataAndType(Uri.parse(filePath), mime)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                     },
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
-            } else {
-                // Pre-Q: open Downloads page instead of file directly
-                PendingIntent.getActivity(
-                    this, notifId,
-                    Intent(this, DownloadsActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-            }
-        } catch (_: Exception) { null }
+            }.getOrNull()
+        } else {
+            openDownloadsPagePi()
+        }
 
-        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+        notifManager.notify(notifId, NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("Download complete")
             .setContentText(fileName)
             .setAutoCancel(true)
-            .apply { if (openFilePi != null) setContentIntent(openFilePi) }
-            .build()
-
-        notifManager.notify(notifId, notif)
+            .apply { if (tapPi != null) setContentIntent(tapPi) }
+            .build())
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -418,24 +388,24 @@ class DownloadService : Service() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun stopWhenIdle() {
-        @Suppress("DEPRECATION")
-        stopForeground(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        else
+            @Suppress("DEPRECATION") stopForeground(true)
         stopSelf()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Formatters (used in progress notifications and activity)
+    // Formatters
     // ─────────────────────────────────────────────────────────────────────────
 
-    private fun formatBytes(bytes: Long): String = when {
-        bytes < 1_024L         -> "$bytes B"
-        bytes < 1_048_576L     -> "${"%.1f".format(bytes / 1_024.0)} KB"
-        bytes < 1_073_741_824L -> "${"%.1f".format(bytes / 1_048_576.0)} MB"
-        else                   -> "${"%.2f".format(bytes / 1_073_741_824.0)} GB"
+    private fun formatBytes(b: Long): String = when {
+        b < 1_024L         -> "$b B"
+        b < 1_048_576L     -> "${"%.1f".format(b / 1_024.0)} KB"
+        b < 1_073_741_824L -> "${"%.1f".format(b / 1_048_576.0)} MB"
+        else               -> "${"%.2f".format(b / 1_073_741_824.0)} GB"
     }
-
-    private fun formatSpeed(bps: Long): String = "${formatBytes(bps)}/s"
-
+    private fun formatSpeed(bps: Long) = "${formatBytes(bps)}/s"
     private fun formatEta(sec: Long): String = when {
         sec < 60   -> "${sec}s"
         sec < 3600 -> "${sec / 60}m ${sec % 60}s"

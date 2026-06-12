@@ -4,11 +4,16 @@ import androidx.lifecycle.MutableLiveData
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Singleton state for all downloads. Thread-safe.
- * Service posts updates; Activities observe.
+ * Singleton state for all downloads.
+ *
+ * KEY FIX: We maintain _list as the private source of truth.
+ * LiveData.getValue() is NOT safe from background threads — it can return
+ * stale data between postValue() calls. Reading from _list (under lock)
+ * guarantees we always see the latest state.
  */
 object DownloadTracker {
 
+    private val _list = mutableListOf<DownloadItem>()
     val downloads: MutableLiveData<List<DownloadItem>> = MutableLiveData(emptyList())
 
     private val idGen = AtomicInteger(1)
@@ -17,35 +22,36 @@ object DownloadTracker {
     fun nextId(): Int = idGen.getAndIncrement()
 
     fun add(item: DownloadItem) = synchronized(lock) {
-        downloads.postValue(downloads.value.orEmpty() + item)
+        _list.add(item)
+        downloads.postValue(_list.toList())
     }
 
-    /**
-     * Mutate a single item in-place. [block] runs on a fresh copy;
-     * the result replaces the old entry atomically.
-     */
     fun update(id: Int, block: DownloadItem.() -> Unit) = synchronized(lock) {
-        val list = downloads.value.orEmpty().map { item ->
-            if (item.id == id) item.copy().also(block) else item
+        val idx = _list.indexOfFirst { it.id == id }
+        if (idx >= 0) {
+            _list[idx] = _list[idx].copy().also(block)
+            downloads.postValue(_list.toList())
         }
-        downloads.postValue(list)
     }
 
     fun remove(id: Int) = synchronized(lock) {
-        downloads.postValue(downloads.value.orEmpty().filter { it.id != id })
+        _list.removeAll { it.id == id }
+        downloads.postValue(_list.toList())
     }
 
     fun clearFinished() = synchronized(lock) {
-        downloads.postValue(downloads.value.orEmpty().filter {
-            it.state == DownloadState.RUNNING || it.state == DownloadState.QUEUED
-        })
+        _list.removeAll {
+            it.state != DownloadState.RUNNING && it.state != DownloadState.QUEUED
+        }
+        downloads.postValue(_list.toList())
     }
 
-    fun getById(id: Int): DownloadItem? =
-        downloads.value?.find { it.id == id }
+    // Safe to call from any thread
+    fun getById(id: Int): DownloadItem? = synchronized(lock) {
+        _list.find { it.id == id }
+    }
 
-    fun hasActive(): Boolean =
-        downloads.value?.any {
-            it.state == DownloadState.RUNNING || it.state == DownloadState.QUEUED
-        } == true
+    fun hasActive(): Boolean = synchronized(lock) {
+        _list.any { it.state == DownloadState.RUNNING || it.state == DownloadState.QUEUED }
+    }
 }
