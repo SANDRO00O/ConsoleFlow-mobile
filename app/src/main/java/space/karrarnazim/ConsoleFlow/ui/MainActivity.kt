@@ -205,6 +205,7 @@ class MainActivity : AppCompatActivity() {
             onNavigate = { navigateTo(it) },
             onSetSwipeRefresh = { enabled -> swipeRefresh.isEnabled = enabled },
             onPageStartedUi = { _, _, url ->
+                keepCursorAlive()
                 progressBar.visibility = View.VISIBLE
                 textUrl.setText(if (isHomeUrl(url)) "" else url)
                 updateBookmarkIcon(url ?: "")
@@ -229,6 +230,7 @@ class MainActivity : AppCompatActivity() {
                 webPermissionRequest = request
             },
             onPageFinishedUi = { tabId, view, url ->
+                keepCursorAlive()
                 swipeRefresh.isRefreshing = false
                 progressBar.visibility = View.INVISIBLE
 
@@ -277,6 +279,10 @@ class MainActivity : AppCompatActivity() {
         cursorController = CursorController(this).also { it.attach() }
         inputController  = buildInputController().also { it.setCursorController(cursorController) }
         setupListeners()
+        window.decorView.setOnGenericMotionListener { _, event ->
+            keepCursorAlive()
+            inputController.onGenericMotion(event)
+        }
         setTopBarVisible(false, immediate = true)
 
         val intentUrl = intent?.data?.toString()
@@ -313,13 +319,14 @@ class MainActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this) {
             when {
-                tabsOverlay.visibility == View.VISIBLE -> tabsOverlay.visibility = View.GONE
+                tabsOverlay.visibility == View.VISIBLE -> { tabsOverlay.visibility = View.GONE; keepCursorAlive() }
                 nativeOverlayContainer.visibility == View.VISIBLE -> hideNativeOverlays()
                 topBar.visibility == View.VISIBLE && isHomeUrl(currentWebView?.url) -> setTopBarVisible(false)
                 customView != null -> hideCustomView()
                 findBar.visibility == View.VISIBLE -> {
                     findBar.visibility = View.GONE
                     currentWebView?.clearMatches()
+                    keepCursorAlive()
                 }
                 currentWebView?.canGoBack() == true -> currentWebView?.goBack()
                 else -> finish()
@@ -354,6 +361,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateSearchEngineIcon()
+        keepCursorAlive()
 
         val root = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
@@ -552,6 +560,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setTopBarVisible(visible: Boolean, immediate: Boolean = false) {
+        keepCursorAlive()
         if (immediate) {
             topBar.alpha      = if (visible) 1f else 0f
             topBar.visibility = if (visible) View.VISIBLE else View.GONE
@@ -922,6 +931,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideNativeOverlays(immediate: Boolean = false) {
+        keepCursorAlive()
         nativeHomeOverlay?.let  { fadeOverlay(it, false, immediate) }
         nativeErrorOverlay?.let { fadeOverlay(it, false, immediate) }
         nativeOverlayContainer.visibility = View.GONE
@@ -931,6 +941,7 @@ class MainActivity : AppCompatActivity() {
 
     // FIX #7 — showHomeOverlay تتحقق من dirty flag وتُعيد البناء عند الحاجة فقط
     private fun showHomeOverlay() {
+        keepCursorAlive()
         if (homeOverlayDirty) {
             buildNativeOverlays()
             homeOverlayDirty = false
@@ -951,6 +962,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showErrorOverlay(url: String?) {
+        keepCursorAlive()
         lastErrorUrl = url
         setTopBarVisible(false)
         nativeHomeOverlay?.let  { fadeOverlay(it, false) }
@@ -1086,6 +1098,7 @@ private fun savePersistentTabs() {
     }
 
     private fun showTabsOverlay() {
+        keepCursorAlive()
         sanitizeActiveTabSelection()
         captureAndStoreThumbnail {
             refreshTabsRecycler()
@@ -1094,6 +1107,7 @@ private fun savePersistentTabs() {
     }
 
     private fun openNewTab(url: String = HOME_URL) {
+        keepCursorAlive()
         captureAndStoreThumbnail {
             val id     = nextTabId++
             val newTab = TabState(id = id, title = "New Tab", url = url)
@@ -1115,6 +1129,7 @@ private fun savePersistentTabs() {
     }
 
     private fun switchToTab(tab: TabState) {
+        keepCursorAlive()
         hideKeyboard()
 
         val shouldAnimateOverlay = tabsOverlay.visibility == View.VISIBLE
@@ -1122,10 +1137,12 @@ private fun savePersistentTabs() {
         val executeSwitch = {
             val targetWebView = ensureWebViewForTab(tab)
             activeTabId = tab.id
+            keepCursorAlive()
 
             webViewContainer.removeAllViews()
             webViewContainer.addView(targetWebView)
             targetWebView.requestFocus()   // keyboard / TV-remote / gamepad focus
+            if (::inputController.isInitialized) inputController.stopScrollLoop()
             updateUIForCurrentWebView(targetWebView)
 
             if (isHomeUrl(tab.url)) showHomeOverlay()
@@ -1155,6 +1172,7 @@ private fun savePersistentTabs() {
 
     // FIX #6 — حذف notifyItemRemoved اليدوي، نستخدم refreshTabsRecycler مع DiffUtil
     private fun closeTab(tab: TabState) {
+        keepCursorAlive()
         val group = currentGroup ?: return
         val idx   = group.tabs.indexOfFirst { it.id == tab.id }
         if (idx < 0) return
@@ -1236,6 +1254,7 @@ private fun savePersistentTabs() {
     }
 
     private fun updateUIForCurrentWebView(wv: WebView) {
+        keepCursorAlive()
         val url = wv.url ?: HOME_URL
         textUrl.setText(if (isHomeUrl(url)) "" else url)
         updateBookmarkIcon(url)
@@ -1456,8 +1475,12 @@ private fun savePersistentTabs() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun showMenuSheet() {
+        keepCursorAlive()
         if (cachedMenuSheet == null) {
-            cachedMenuSheet     = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme)
+            cachedMenuSheet     = BottomSheetDialog(this, R.style.AppBottomSheetDialogTheme).apply {
+                setOnShowListener { keepCursorAlive() }
+                setOnDismissListener { keepCursorAlive() }
+            }
             cachedMenuSheetView = layoutInflater.inflate(R.layout.layout_main_menu, null)
             cachedMenuSheet?.setContentView(cachedMenuSheetView!!)
 
@@ -1595,6 +1618,7 @@ private fun savePersistentTabs() {
     }
 
     private fun hideCustomView() {
+        keepCursorAlive()
         customViewCallback?.onCustomViewHidden()
         fullscreenContainer.visibility = View.GONE
         webViewContainer.visibility    = View.VISIBLE
@@ -1665,6 +1689,12 @@ private fun savePersistentTabs() {
     private lateinit var inputController: InputController
     private lateinit var cursorController: CursorController
 
+    private fun keepCursorAlive() {
+        if (::cursorController.isInitialized) {
+            cursorController.keepVisible()
+        }
+    }
+
     /**
      * Builds the InputController, wiring all browser actions via lambdas.
      * Called once from onCreate() after initViews().
@@ -1734,7 +1764,9 @@ private fun savePersistentTabs() {
             override fun dismissTopOverlay(): Boolean {
                 return when {
                     tabsOverlay.visibility == View.VISIBLE -> {
-                        tabsOverlay.visibility = View.GONE; true
+                        tabsOverlay.visibility = View.GONE
+                        keepCursorAlive()
+                        true
                     }
                     nativeOverlayContainer.visibility == View.VISIBLE -> {
                         hideNativeOverlays(); true
@@ -1745,7 +1777,9 @@ private fun savePersistentTabs() {
                     findBar.visibility == View.VISIBLE -> {
                         findBar.visibility = View.GONE
                         currentWebView?.clearMatches()
-                        hideKeyboard(); true
+                        hideKeyboard()
+                        keepCursorAlive()
+                        true
                     }
                     else -> false
                 }
@@ -1755,6 +1789,8 @@ private fun savePersistentTabs() {
 
     /** Cycle to the next tab in the active group (wraps around). */
     private fun nextTab() {
+        keepCursorAlive()
+        if (::inputController.isInitialized) inputController.stopScrollLoop()
         val tabs = currentGroup?.tabs ?: return
         if (tabs.size < 2) return
         val idx  = tabs.indexOfFirst { it.id == activeTabId }
@@ -1763,6 +1799,8 @@ private fun savePersistentTabs() {
 
     /** Cycle to the previous tab in the active group (wraps around). */
     private fun prevTab() {
+        keepCursorAlive()
+        if (::inputController.isInitialized) inputController.stopScrollLoop()
         val tabs = currentGroup?.tabs ?: return
         if (tabs.size < 2) return
         val idx  = tabs.indexOfFirst { it.id == activeTabId }
@@ -1795,10 +1833,11 @@ private fun savePersistentTabs() {
         return super.dispatchKeyEvent(event)
     }
 
-    // ── onGenericMotionEvent ──────────────────────────────────────────────────
+    // ── dispatchGenericMotionEvent ────────────────────────────────────────────
 
-    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        keepCursorAlive()
         if (inputController.onGenericMotion(event)) return true
-        return super.onGenericMotionEvent(event)
+        return super.dispatchGenericMotionEvent(event)
     }
 }

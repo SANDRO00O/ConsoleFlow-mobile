@@ -90,7 +90,19 @@ class CursorController(private val activity: Activity) {
     /** يُرسل نقرة حقيقية على موضع المؤشر. يُعيد false إن كان المؤشر مخفياً. */
     fun performClick(): Boolean {
         if (!isVisible) return false
-        view.animateClick()
+
+        // المؤشر موجود فوق المشهد، لذلك يجب إخفاؤه لحظة النقر حتى لا يصبح
+        // هو الهدف الفعلي للّمس. بهذه الطريقة يصل الحدث إلى العنصر الحقيقي
+        // الموجود تحته عبر المسار النظامي نفسه.
+        hideHandler.removeCallbacks(hideTask)
+        view.animate().cancel()
+
+        val wasVisible = view.visibility == View.VISIBLE
+        if (wasVisible) {
+            view.alpha = 0f
+            view.visibility = View.INVISIBLE
+        }
+
         val t  = SystemClock.uptimeMillis()
         val dn = MotionEvent.obtain(t, t,        MotionEvent.ACTION_DOWN, posX, posY, 0)
         val up = MotionEvent.obtain(t, t + 80L,  MotionEvent.ACTION_UP,   posX, posY, 0)
@@ -98,8 +110,24 @@ class CursorController(private val activity: Activity) {
         activity.dispatchTouchEvent(up)
         dn.recycle()
         up.recycle()
+
+        // ارجع المؤشر فورًا وبشفافية كاملة بعد اكتمال النقر.
+        if (wasVisible) {
+            view.visibility = View.VISIBLE
+            view.alpha = 1f
+        }
+        view.animateClick()
+        hideHandler.postDelayed(hideTask, HIDE_DELAY_MS)
         return true
     }
+
+    /** ينعش المؤشر ويمنعه من الاختفاء عند تبديل التبويبات أو القوائم. */
+    fun keepVisible() {
+        revealCursor()
+    }
+
+    /** مركز المؤشر الحالي على الشاشة، بوحدة البكسل. */
+    fun screenPosition(): Pair<Float, Float> = posX to posY
 
     val isVisible: Boolean
         get() = view.visibility == View.VISIBLE && view.alpha > 0.05f

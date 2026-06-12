@@ -97,9 +97,16 @@ class InputController(private val h: Handlers) {
 
     /** يُستدعى من Activity.onDestroy(). */
     fun release() {
+        stopScrollLoop()
+        cursor = null
+    }
+
+    /** يوقف تمرير العصا اليمنى فورًا حتى لا يظل عالقًا بعد نقرة أو تبديل واجهة. */
+    fun stopScrollLoop() {
         scrollJob?.let { handler.removeCallbacks(it) }
         scrollJob = null
-        cursor = null
+        scrollX = 0f
+        scrollY = 0f
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -111,10 +118,18 @@ class InputController(private val h: Handlers) {
         KeyEvent.KEYCODE_BUTTON_A -> {
             // إن كان المؤشر ظاهراً → انقر عنده. وإلا → نشّط عنصر الصفحة.
             when {
-                cursor?.isVisible == true -> cursor!!.performClick()
-                !overlayActive()          -> activateWebElement()
+                cursor?.isVisible == true -> {
+                    val handled = performCursorClick()
+                    cursor?.keepVisible()
+                    handled
+                }
+                !overlayActive()          -> {
+                    activateWebElement()
+                    cursor?.keepVisible()
+                    true
+                }
+                else -> true
             }
-            true
         }
 
         // BUTTON_B → لا يُستهلَك. يصل إلى onBackPressedDispatcher.
@@ -235,6 +250,9 @@ class InputController(private val h: Handlers) {
         val ly = getCenteredAxis(event, device, MotionEvent.AXIS_Y,  histPos)
         cursor?.updateStick(lx, ly)
 
+        // أي حركة من الجويستيك تبقي المؤشر حياً أثناء التنقّل بين الواجهات.
+        cursor?.keepVisible()
+
         // عصا يمين → تمرير الصفحة؛ الاحتياط بـ HAT axes إن كانت عصا اليمين في مركزها
         var rx = getCenteredAxis(event, device, MotionEvent.AXIS_Z,      histPos)
         var ry = getCenteredAxis(event, device, MotionEvent.AXIS_RZ,     histPos)
@@ -273,12 +291,16 @@ class InputController(private val h: Handlers) {
     private fun startScrollLoop() {
         scrollJob = object : Runnable {
             override fun run() {
-                val wv = h.getWebView()
-                if (scrollX == 0f && scrollY == 0f || wv == null) {
+                if (scrollX == 0f && scrollY == 0f) {
                     scrollJob = null
                     return
                 }
-                wv.scrollBy((scrollX * SCROLL_SPEED).toInt(), (scrollY * SCROLL_SPEED).toInt())
+
+                h.getWebView()?.scrollBy(
+                    (scrollX * SCROLL_SPEED).toInt(),
+                    (scrollY * SCROLL_SPEED).toInt()
+                )
+
                 handler.postDelayed(this, SCROLL_TICK_MS)
             }
         }
@@ -301,8 +323,49 @@ class InputController(private val h: Handlers) {
     //  تنشيط عنصر الصفحة (زر OK / A)
     // ─────────────────────────────────────────────────────────────────────
 
+    private fun performCursorClick(): Boolean {
+        val c = cursor ?: return false
+        val wv = h.getWebView() ?: return c.performClick()
+        if (!c.isVisible) return false
+
+        val (screenX, screenY) = c.screenPosition()
+        val loc = IntArray(2)
+        wv.getLocationOnScreen(loc)
+        val left = loc[0].toFloat()
+        val top = loc[1].toFloat()
+        val right = left + wv.width.toFloat()
+        val bottom = top + wv.height.toFloat()
+
+        stopScrollLoop()
+        wv.requestFocus()
+
+        // داخل الـ WebView: استخدم نقرة JS داخل الصفحة لتفادي تبديل وضع اللمس/التركيز.
+        if (screenX in left..right && screenY in top..bottom) {
+            val x = (screenX - left).coerceIn(0f, (wv.width - 1).coerceAtLeast(0).toFloat())
+            val y = (screenY - top).coerceIn(0f, (wv.height - 1).coerceAtLeast(0).toFloat())
+            val js = """(function(){
+                var x=$x, y=$y;
+                var el=document.elementFromPoint(x,y);
+                if(!el) return '0';
+                var opts={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y};
+                try{el.dispatchEvent(new MouseEvent('mousemove',opts));}catch(e){}
+                try{el.dispatchEvent(new MouseEvent('mousedown',opts));}catch(e){}
+                try{el.dispatchEvent(new MouseEvent('mouseup',opts));}catch(e){}
+                try{el.dispatchEvent(new MouseEvent('click',opts));}catch(e){}
+                try{if(typeof el.click==='function') el.click();}catch(e){}
+                return '1';
+            })();"""
+            wv.evaluateJavascript(js, null)
+            return true
+        }
+
+        return c.performClick()
+    }
+
     private fun activateWebElement() {
         val wv = h.getWebView() ?: return
+        stopScrollLoop()
+        wv.requestFocus()
         val t  = SystemClock.uptimeMillis()
         wv.dispatchKeyEvent(KeyEvent(t, t,       KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER, 0))
         wv.dispatchKeyEvent(KeyEvent(t, t + 50L, KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_DPAD_CENTER, 0))
