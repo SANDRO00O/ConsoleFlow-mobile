@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Section Headers -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <style name="SectionHeader">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">@dimen/spacing_8</item>
+        <item name="android:paddingHorizontal">@dimen/spacing_6</item>
+        <item name="android:text">SECTION</item>
+        <item name="android:textColor">@color/dark_text_tertiary</item>
+        <item name="android:textSize">@dimen/text_size_label_small</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+    
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Rounded Thumbnail (Tab Card) -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <style name="RoundedThumbnail" parent="ShapeAppearance.MaterialComponents.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/tab_card_corner_radius</item>
+    </style>
+    
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Switch Theme -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <style name="SwitchTheme" parent="Theme.AppCompat.Light">
+        <item name="colorControlActivated">@color/primary</item>
+        <item name="colorSwitchThumbNormal">@color/dark_surface_variant</item>
+    </style>
+    
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Material 3 Text Styles -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    
+    <!-- Display Large -->
+    <style name="TextAppearance.DisplayLarge">
+        <item name="android:textSize">@dimen/text_size_display_large</item>
+        <item name="android:textColor">@color/dark_text_primary</item>
+        <item name="android:fontFamily">@font/roboto_medium</item>
+    </style>
+    
+    <!-- Headline Medium -->
+    <style name="TextAppearance.HeadlineMedium">
+        <item name="android:textSize">@dimen/text_size_headline_medium</item>
+        <item name="android:textColor">@color/dark_text_primary</item>
+        <item name="android:fontFamily">@font/roboto_bold</item>
+    </style>
+    
+    <!-- Title Large -->
+    <style name="TextAppearance.TitleLarge">
+        <item name="android:textSize">@dimen/text_size_title_large</item>
+        <item name="android:textColor">@color/dark_text_primary</item>
+        <item name="android:fontFamily">@font/roboto_medium</item>
+    </style>
+    
+    <!-- Body Large -->
+    <style name="TextAppearance.BodyLarge">
+        <item name="android:textSize">@dimen/text_size_body_large</item>
+        <item name="android:textColor">@color/dark_text_primary</item>
+        <item name="android:fontFamily">@font/roboto_regular</item>
+    </style>
+    
+    <!-- Body Medium -->
+    <style name="TextAppearance.BodyMedium">
+        <item name="android:textSize">@dimen/text_size_body_medium</item>
+        <item name="android:textColor">@color/dark_text_secondary</item>
+        <item name="android:fontFamily">@font/roboto_regular</item>
+    </style>
+    
+    <!-- Label Small -->
+    <style name="TextAppearance.LabelSmall">
+        <item name="android:textSize">@dimen/text_size_label_small</item>
+        <item name="android:textColor">@color/dark_text_secondary</item>
+        <item name="android:fontFamily">@font/roboto_medium</item>
+    </style>
+    
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Button Styles -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    
+    <!-- Filled Button -->
+    <style name="Button.Filled">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/button_height</item>
+        <item name="android:background">@color/primary</item>
+        <item name="android:textColor">@color/text_on_primary</item>
+        <item name="android:textSize">@dimen/text_size_label_large</item>
+        <item name="android:gravity">center</item>
+    </style>
+    
+    <!-- Outlined Button -->
+    <style name="Button.Outlined">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/button_height</item>
+        <item name="android:background">@drawable/menu_item_ripple</item>
+        <item name="android:textColor">@color/primary</item>
+        <item name="android:textSize">@dimen/text_size_label_large</item>
+        <item name="android:gravity">center</item>
+    </style>
+    
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Card Styles -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    
+    <!-- Elevated Card -->
+    <style name="Card.Elevated">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/bg_menu_item</item>
+        <item name="android:padding">@dimen/spacing_16</item>
+    </style>
+    
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Divider Styles -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    
+    <!-- Horizontal Divider -->
+    <style name="Divider.Horizontal">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/divider_height</item>
+        <item name="android:background">@color/card_border</item>
+    </style>
+    
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Spacer Styles -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    
+    <!-- Vertical Spacer 16dp -->
+    <style name="Spacer.Vertical.16">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/spacing_16</item>
+    </style>
+    
+    <!-- Vertical Spacer 24dp -->
+    <style name="Spacer.Vertical.24">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/spacing_24</item>
+    </style>
+    
+</resources>

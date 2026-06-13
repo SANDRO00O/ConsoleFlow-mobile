@@ -29,7 +29,6 @@ class DownloadService : Service() {
         const val CHANNEL_ID        = "cf_downloads"
         private const val NOTIF_FOREGROUND = 999
         private const val NOTIF_BASE       = 1000
-        private const val NOTIF_INTERVAL_MS = 500L
     }
 
     private val executor    = Executors.newFixedThreadPool(3)
@@ -134,9 +133,21 @@ class DownloadService : Service() {
                 val input = body.byteStream()
                 var done  = 0L
 
+                // Time-based sliding window — keeps samples from the last WINDOW_MS
+                val WINDOW_MS   = 5_000L   // look back 5 seconds for raw speed
+                val UPDATE_MS   = 800L     // update UI / notification every 800 ms
+
+                // EMA constants: low alpha = very stable display, slow to react
+                // alpha=0.20 for speed:  ~5 updates (~4s) to fully reflect a change
+                // alpha=0.10 for ETA:    ~10 updates (~8s) — barely flickers
+                val SPEED_ALPHA = 0.20
+                val ETA_ALPHA   = 0.10
+
                 val winTime  = ArrayDeque<Long>()
                 val winBytes = ArrayDeque<Long>()
-                var lastNotifMs = 0L
+                var smoothedSpeed = 0L
+                var smoothedEta   = -1L
+                var lastUpdateMs  = 0L
 
                 loop@ while (true) {
                     if (DownloadTracker.getById(id)?.state == DownloadState.CANCELLED) {
@@ -153,28 +164,45 @@ class DownloadService : Service() {
                     done += n
 
                     val now = System.currentTimeMillis()
-                    winTime.addLast(now);  winBytes.addLast(done)
-                    if (winTime.size > 10) { winTime.removeFirst(); winBytes.removeFirst() }
 
-                    val speed: Long = if (winTime.size >= 2) {
-                        val dt = (winTime.last() - winTime.first()) / 1000.0
-                        val db = winBytes.last() - winBytes.first()
-                        if (dt > 0) (db / dt).toLong() else 0L
-                    } else 0L
+                    // ── Only compute + update every UPDATE_MS ─────────────────
+                    if (now - lastUpdateMs < UPDATE_MS) continue@loop
+                    lastUpdateMs = now
 
-                    val eta = if (speed > 0 && totalBytes > 0) (totalBytes - done) / speed else -1L
+                    // Time-based window: discard samples older than WINDOW_MS
+                    winTime.addLast(now); winBytes.addLast(done)
+                    while (winTime.size > 1 && (now - winTime.first()) > WINDOW_MS) {
+                        winTime.removeFirst(); winBytes.removeFirst()
+                    }
+
+                    // Raw speed over the window
+                    val rawSpeed: Long = if (winTime.size >= 2) {
+                        val dtSec = (winTime.last() - winTime.first()) / 1000.0
+                        val db    = winBytes.last() - winBytes.first()
+                        if (dtSec > 0) (db / dtSec).toLong() else smoothedSpeed
+                    } else smoothedSpeed
+
+                    // EMA on speed — damps short spikes completely
+                    smoothedSpeed = if (smoothedSpeed == 0L) rawSpeed
+                                    else ((SPEED_ALPHA * rawSpeed) + ((1 - SPEED_ALPHA) * smoothedSpeed)).toLong()
+
+                    // Raw ETA from smoothed speed, then EMA on ETA
+                    val rawEta = if (smoothedSpeed > 0 && totalBytes > 0)
+                                     (totalBytes - done) / smoothedSpeed else -1L
+                    smoothedEta = when {
+                        rawEta < 0         -> -1L
+                        smoothedEta <= 0   -> rawEta
+                        else -> ((ETA_ALPHA * rawEta) + ((1 - ETA_ALPHA) * smoothedEta)).toLong()
+                    }
 
                     DownloadTracker.update(id) {
                         downloadedBytes  = done
-                        speedBytesPerSec = speed
-                        etaSeconds       = eta
+                        speedBytesPerSec = smoothedSpeed
+                        etaSeconds       = smoothedEta
                     }
 
-                    if (now - lastNotifMs >= NOTIF_INTERVAL_MS) {
-                        lastNotifMs = now
-                        val pct = if (totalBytes > 0) ((done * 100) / totalBytes).toInt() else -1
-                        updateProgressNotif(notifId, fileName, pct, done, totalBytes, speed, id)
-                    }
+                    val pct = if (totalBytes > 0) ((done * 100) / totalBytes).toInt() else -1
+                    updateProgressNotif(notifId, fileName, pct, done, totalBytes, smoothedSpeed, id)
                 }
 
                 outputStream.close(); input.close()
