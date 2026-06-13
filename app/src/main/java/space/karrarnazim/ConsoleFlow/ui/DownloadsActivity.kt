@@ -14,25 +14,26 @@ import androidx.appcompat.app.AppCompatActivity
 
 class DownloadsActivity : AppCompatActivity() {
 
-    // ── M3 Dark colour tokens ─────────────────────────────────────────────
-    private val cBg            = Color.parseColor("#1C1B1F")
-    private val cSurface       = Color.parseColor("#2B2930")
-    private val cSurfaceHigh   = Color.parseColor("#36343B")
-    private val cOnBg          = Color.parseColor("#E6E1E5")
-    private val cOnSurfaceVar  = Color.parseColor("#CAC4D0")
-    private val cPrimary       = Color.parseColor("#6EA8DC")   // app blue
-    private val cPrimaryDim    = Color.parseColor("#1A3A5C")   // tonal container
-    private val cError         = Color.parseColor("#F2B8B5")
-    private val cSuccess       = Color.parseColor("#5DB075")
-    private val cOutline       = Color.parseColor("#49454F")
+    // ── Colour palette — black base like main UI ──────────────────────────
+    private val cBg           = Color.BLACK
+    private val cSurface      = Color.parseColor("#111111")
+    private val cSurfaceHigh  = Color.parseColor("#1C1C1C")
+    private val cOnBg         = Color.parseColor("#E6E1E5")
+    private val cOnSurfaceVar = Color.parseColor("#AAAAAA")
+    private val cPrimary      = Color.parseColor("#6EA8DC")
+    private val cPrimaryDim   = Color.parseColor("#0D2033")
+    private val cError        = Color.parseColor("#F2B8B5")
+    private val cSuccess      = Color.parseColor("#5DB075")
+    private val cOutline      = Color.parseColor("#333333")
 
     private lateinit var container: LinearLayout
     private lateinit var emptyLayout: LinearLayout
     private lateinit var scrollView: ScrollView
+    private lateinit var clearBtn: TextView   // shown/hidden dynamically
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = cBg
+        window.statusBarColor     = cBg
         window.navigationBarColor = cBg
         setContentView(buildRoot())
         DownloadTracker.downloads.observe(this) { render(it) }
@@ -50,11 +51,9 @@ class DownloadsActivity : AppCompatActivity() {
         root.addView(buildTopBar())
         root.addView(buildDivider())
 
-        // Scroll area + empty state share the same space
         val frame = android.widget.FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
         }
-
         scrollView = ScrollView(this).apply {
             layoutParams = android.widget.FrameLayout.LayoutParams(MATCH, MATCH)
             visibility = View.GONE
@@ -64,7 +63,6 @@ class DownloadsActivity : AppCompatActivity() {
             setPadding(0, dp(8), 0, dp(32))
         }
         scrollView.addView(container)
-
         emptyLayout = buildEmptyState()
 
         frame.addView(scrollView)
@@ -102,12 +100,14 @@ class DownloadsActivity : AppCompatActivity() {
             }
         }
 
-        val clearBtn = TextView(this).apply {
+        // Hidden by default — shown only when there's something to clear
+        clearBtn = TextView(this).apply {
             text = "Clear done"
             textSize = 13f
             setTextColor(cPrimary)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = roundedBg(cSurface, 20f)
+            visibility = View.GONE
             setOnClickListener { DownloadTracker.clearFinished() }
         }
 
@@ -130,34 +130,26 @@ class DownloadsActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             layoutParams = android.widget.FrameLayout.LayoutParams(MATCH, MATCH)
 
-            val icon = ImageView(this@DownloadsActivity).apply {
+            addView(ImageView(this@DownloadsActivity).apply {
                 setImageResource(R.drawable.ic_download)
-                setColorFilter(cOutline)
+                setColorFilter(Color.parseColor("#333333"))
                 layoutParams = LinearLayout.LayoutParams(dp(64), dp(64))
-                alpha = 0.5f
-            }
-
-            val title = TextView(this@DownloadsActivity).apply {
+                alpha = 0.6f
+            })
+            addView(TextView(this@DownloadsActivity).apply {
                 text = "No downloads yet"
                 textSize = 18f
-                setTextColor(cOnSurfaceVar)
+                setTextColor(Color.parseColor("#666666"))
                 gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                    topMargin = dp(20)
-                }
-            }
-
-            val sub = TextView(this@DownloadsActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(20) }
+            })
+            addView(TextView(this@DownloadsActivity).apply {
                 text = "Files you download will appear here"
                 textSize = 13f
-                setTextColor(cOutline)
+                setTextColor(Color.parseColor("#444444"))
                 gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                    topMargin = dp(8)
-                }
-            }
-
-            addView(icon); addView(title); addView(sub)
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) }
+            })
         }
     }
 
@@ -169,16 +161,27 @@ class DownloadsActivity : AppCompatActivity() {
         if (items.isEmpty()) {
             scrollView.visibility  = View.GONE
             emptyLayout.visibility = View.VISIBLE
+            clearBtn.visibility    = View.GONE
             return
         }
+
         scrollView.visibility  = View.VISIBLE
         emptyLayout.visibility = View.GONE
+
+        // Show "Clear done" only when there's at least one finished item
+        val hasFinished = items.any {
+            it.state == DownloadState.COMPLETED ||
+            it.state == DownloadState.FAILED    ||
+            it.state == DownloadState.CANCELLED
+        }
+        clearBtn.visibility = if (hasFinished) View.VISIBLE else View.GONE
+
         container.removeAllViews()
         items.reversed().forEach { container.addView(buildCard(it)) }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // M3 download card
+    // M3-style card on black background
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun buildCard(item: DownloadItem): View {
@@ -191,32 +194,27 @@ class DownloadsActivity : AppCompatActivity() {
             }
         }
 
-        // ── Row 1: tonal icon · info column · action ──────────────────────
+        // ── Row 1: tonal icon · info column · action chip ─────────────────
         val row1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity     = Gravity.CENTER_VERTICAL
         }
 
-        // Tonal icon container (M3 style)
-        val iconContainer = android.widget.FrameLayout(this).apply {
+        val iconWrap = android.widget.FrameLayout(this).apply {
             background = roundedBg(cPrimaryDim, 12f)
-            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
-                marginEnd = dp(14)
-            }
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(14) }
         }
-        val icon = ImageView(this).apply {
+        iconWrap.addView(ImageView(this).apply {
             setImageResource(iconForMime(item.mimeType))
             setColorFilter(stateColor(item.state))
             layoutParams = android.widget.FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER)
-        }
-        iconContainer.addView(icon)
+        })
 
-        // Info column
-        val infoCol = LinearLayout(this).apply {
+        val info = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
         }
-        infoCol.addView(TextView(this).apply {
+        info.addView(TextView(this).apply {
             text = item.fileName
             textSize = 14f
             setTextColor(cOnBg)
@@ -224,71 +222,56 @@ class DownloadsActivity : AppCompatActivity() {
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
-        // State badge
-        val badgeText = when (item.state) {
-            DownloadState.QUEUED   -> "Waiting"
-            DownloadState.RUNNING  -> null   // replaced by progress bar
-            DownloadState.COMPLETED -> "Complete  •  ${formatBytes(item.downloadedBytes)}"
-            DownloadState.FAILED   -> "Failed: ${item.error ?: "Unknown error"}"
-            DownloadState.CANCELLED -> "Cancelled"
+
+        // Badge line for non-running states
+        val badge = when (item.state) {
+            DownloadState.QUEUED    -> "Waiting…" to cOnSurfaceVar
+            DownloadState.COMPLETED -> "Complete  ·  ${formatBytes(item.downloadedBytes)}" to cSuccess
+            DownloadState.FAILED    -> "Failed: ${item.error ?: "Unknown error"}" to cError
+            DownloadState.CANCELLED -> "Cancelled" to cOnSurfaceVar
+            DownloadState.RUNNING   -> null
         }
-        val badgeColor = when (item.state) {
-            DownloadState.COMPLETED -> cSuccess
-            DownloadState.FAILED    -> cError
-            else                    -> cOnSurfaceVar
-        }
-        if (badgeText != null) {
-            infoCol.addView(TextView(this).apply {
-                text = badgeText
+        if (badge != null) {
+            info.addView(TextView(this).apply {
+                text = badge.first
                 textSize = 12f
-                setTextColor(badgeColor)
-                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(2) }
+                setTextColor(badge.second)
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(3) }
             })
         }
 
-        // Action button (right side)
-        val action = buildActionChip(item)
-
-        row1.addView(iconContainer)
-        row1.addView(infoCol)
-        if (action != null) row1.addView(action)
+        row1.addView(iconWrap)
+        row1.addView(info)
+        buildActionChip(item)?.let { row1.addView(it) }
         card.addView(row1)
 
-        // ── Progress section (RUNNING only) ────────────────────────────────
+        // ── Progress section (RUNNING) ─────────────────────────────────────
         if (item.state == DownloadState.RUNNING) {
-            // Progress bar — M3 style (4dp height, rounded, primary color)
             val pb = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-                layoutParams = LinearLayout.LayoutParams(MATCH, dp(4)).apply {
-                    topMargin = dp(12)
-                }
+                layoutParams = LinearLayout.LayoutParams(MATCH, dp(4)).apply { topMargin = dp(12) }
                 max = 100
                 if (item.totalBytes > 0) {
                     isIndeterminate = false
                     progress = ((item.downloadedBytes * 100) / item.totalBytes).toInt()
-                    progressTintList =
-                        android.content.res.ColorStateList.valueOf(cPrimary)
-                    progressBackgroundTintList =
-                        android.content.res.ColorStateList.valueOf(cSurfaceHigh)
+                    progressTintList           = android.content.res.ColorStateList.valueOf(cPrimary)
+                    progressBackgroundTintList = android.content.res.ColorStateList.valueOf(cSurfaceHigh)
                 } else {
                     isIndeterminate = true
-                    indeterminateTintList =
-                        android.content.res.ColorStateList.valueOf(cPrimary)
+                    indeterminateTintList = android.content.res.ColorStateList.valueOf(cPrimary)
                 }
             }
             card.addView(pb)
 
-            // Speed / ETA row
-            val statsText = buildString {
-                append(formatBytes(item.downloadedBytes))
-                if (item.totalBytes > 0) {
-                    val pct = (item.downloadedBytes * 100 / item.totalBytes).toInt()
-                    append(" of ${formatBytes(item.totalBytes)}  ($pct%)")
-                }
-                if (item.speedBytesPerSec > 0) append("   ${formatSpeed(item.speedBytesPerSec)}")
-                if (item.etaSeconds > 0)        append("  •  ${formatEta(item.etaSeconds)} left")
-            }
             card.addView(TextView(this).apply {
-                text = statsText
+                text = buildString {
+                    append(formatBytes(item.downloadedBytes))
+                    if (item.totalBytes > 0) {
+                        append(" of ${formatBytes(item.totalBytes)}")
+                        append("  (${(item.downloadedBytes * 100 / item.totalBytes).toInt()}%)")
+                    }
+                    if (item.speedBytesPerSec > 0) append("   ${formatSpeed(item.speedBytesPerSec)}")
+                    if (item.etaSeconds > 0)        append("  ·  ${formatEta(item.etaSeconds)} left")
+                }
                 textSize = 11f
                 setTextColor(cOnSurfaceVar)
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(6) }
@@ -302,7 +285,6 @@ class DownloadsActivity : AppCompatActivity() {
 
     private fun buildActionChip(item: DownloadItem): View? {
         val lp = LinearLayout.LayoutParams(WRAP, dp(32)).apply { marginStart = dp(10) }
-
         fun chip(label: String, fg: Int, bg: Int, action: () -> Unit) =
             TextView(this).apply {
                 text = label; textSize = 12f; setTextColor(fg)
@@ -312,10 +294,9 @@ class DownloadsActivity : AppCompatActivity() {
                 layoutParams = lp
                 setOnClickListener { action() }
             }
-
         return when (item.state) {
             DownloadState.RUNNING, DownloadState.QUEUED ->
-                chip("Cancel", cError, Color.parseColor("#3B1F1F")) {
+                chip("Cancel", cError, Color.parseColor("#2A0A0A")) {
                     DownloadTracker.update(item.id) { state = DownloadState.CANCELLED }
                     startService(Intent(this, DownloadService::class.java).apply {
                         action = DownloadService.ACTION_CANCEL
@@ -323,13 +304,9 @@ class DownloadsActivity : AppCompatActivity() {
                     })
                 }
             DownloadState.COMPLETED ->
-                chip("Open", cSuccess, Color.parseColor("#1A3B26")) {
-                    openFile(item)
-                }
+                chip("Open", cSuccess, Color.parseColor("#0A2010")) { openFile(item) }
             DownloadState.FAILED, DownloadState.CANCELLED ->
-                chip("Remove", cOnSurfaceVar, cSurfaceHigh) {
-                    DownloadTracker.remove(item.id)
-                }
+                chip("Remove", cOnSurfaceVar, cSurfaceHigh) { DownloadTracker.remove(item.id) }
         }
     }
 
@@ -374,9 +351,9 @@ class DownloadsActivity : AppCompatActivity() {
 
     private fun roundedBg(color: Int, cornerDp: Float): GradientDrawable =
         GradientDrawable().apply {
-            shape         = GradientDrawable.RECTANGLE
+            shape        = GradientDrawable.RECTANGLE
             setColor(color)
-            cornerRadius  = cornerDp * resources.displayMetrics.density
+            cornerRadius = cornerDp * resources.displayMetrics.density
         }
 
     private fun iconForMime(mime: String): Int = when {
@@ -385,14 +362,14 @@ class DownloadsActivity : AppCompatActivity() {
         mime.startsWith("audio/")  -> android.R.drawable.ic_media_play
         mime == "application/pdf"  -> android.R.drawable.ic_menu_view
         mime.contains("zip") || mime.contains("archive") -> android.R.drawable.ic_menu_save
-        else -> android.R.drawable.ic_menu_save
+        else                       -> android.R.drawable.ic_menu_save
     }
 
     private fun stateColor(s: DownloadState): Int = when (s) {
         DownloadState.RUNNING    -> cPrimary
         DownloadState.COMPLETED  -> cSuccess
         DownloadState.FAILED     -> cError
-        DownloadState.CANCELLED  -> cOutline
+        DownloadState.CANCELLED,
         DownloadState.QUEUED     -> cOnSurfaceVar
     }
 

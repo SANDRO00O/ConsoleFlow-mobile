@@ -28,11 +28,15 @@ object BrowserDialogHelpers {
         }
 
         val handle = View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(100, 12).apply {
+            val dp = context.resources.displayMetrics.density
+            layoutParams = LinearLayout.LayoutParams(
+                (40 * dp).toInt(), (4 * dp).toInt()
+            ).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                bottomMargin = 24
+                bottomMargin = (16 * dp).toInt()
+                topMargin = (4 * dp).toInt()
             }
-            setBackgroundColor(Color.parseColor("#666666"))
+            setBackgroundColor(Color.parseColor("#444444"))
         }
 
         val titleView = TextView(context).apply {
@@ -84,11 +88,14 @@ object BrowserDialogHelpers {
         scrollView.addView(container)
 
         val handle = View(context).apply {
-            layoutParams = LinearLayout.LayoutParams((100 * dp).toInt(), (12 * dp).toInt()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                (40 * dp).toInt(), (4 * dp).toInt()
+            ).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                bottomMargin = (24 * dp).toInt()
+                bottomMargin = (16 * dp).toInt()
+                topMargin = (4 * dp).toInt()
             }
-            setBackgroundColor(Color.parseColor("#666666"))
+            setBackgroundColor(Color.parseColor("#444444"))
         }
 
         val titleView = TextView(context).apply {
