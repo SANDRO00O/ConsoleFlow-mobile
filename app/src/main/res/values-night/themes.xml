@@ -1,67 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Material 3 Night Theme - Modern & Professional -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    
     <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Font Family -->
         <item name="android:fontFamily">@font/app_font_family</item>
         <item name="fontFamily">@font/app_font_family</item>
-        
-        <!-- Status & Navigation Bar -->
+
         <item name="android:statusBarColor">@color/background</item>
         <item name="android:navigationBarColor">@color/background</item>
         <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
-        
-        <!-- Primary Colors -->
-        <item name="colorPrimary">@color/primary</item>
-        <item name="colorPrimaryVariant">@color/primary_variant</item>
-        <item name="colorOnPrimary">@color/text_on_primary</item>
-        
-        <!-- Secondary Colors -->
-        <item name="colorSecondary">@color/secondary</item>
-        <item name="colorSecondaryVariant">@color/secondary_variant</item>
-        <item name="colorOnSecondary">@color/text_on_secondary</item>
-        
-        <!-- Tertiary Colors -->
-        <item name="colorTertiary">@color/tertiary</item>
-        <item name="colorOnTertiary">@color/text_on_tertiary</item>
-        
-        <!-- Background & Surface -->
-        <item name="android:colorBackground">@color/background</item>
-        <item name="colorSurface">@color/dark_surface</item>
-        <item name="colorOnSurface">@color/dark_text_primary</item>
-        <item name="colorSurfaceVariant">@color/dark_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/dark_text_secondary</item>
-        
-        <!-- Error Colors -->
-        <item name="colorError">@color/error</item>
-        <item name="colorOnError">@color/text_on_primary</item>
-        
-        <!-- Text Appearance -->
-        <item name="android:textColorPrimary">@color/dark_text_primary</item>
-        <item name="android:textColorSecondary">@color/dark_text_secondary</item>
-        <item name="android:textColorTertiary">@color/dark_text_tertiary</item>
-        <item name="android:textColorHint">@color/dark_text_tertiary</item>
-        
-        <!-- Material Components -->
-        <item name="materialButtonStyle">@style/ButtonPrimary</item>
-        <item name="materialCardViewStyle">@style/Card.Elevated</item>
-        <item name="switchStyle">@style/SwitchTheme</item>
-        
-        <!-- Bottom Sheet -->
-        <item name="bottomSheetDialogTheme">@style/AppBottomSheetDialogTheme</item>
-        
-        <!-- Dialog -->
-        <item name="alertDialogTheme">@style/DarkDialog</item>
+        <item name="colorPrimary">@color/background</item>
+        <item name="colorPrimaryVariant">@color/background</item>
+        <item name="colorOnPrimary">@color/white</item>
     </style>
-    
-    <style name="AppTheme.SplashScreen" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/splash_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splashscreen</item>
-        <item name="windowSplashScreenAnimationDuration">300</item>
-        <item name="postSplashScreenTheme">@style/AppTheme</item>
-    </style>
-    
 </resources>

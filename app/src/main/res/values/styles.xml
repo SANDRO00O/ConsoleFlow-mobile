@@ -1,121 +1,31 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Material 3 Base Styles - Modern & Professional -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    
-    <!-- ════ Text Styles ════ -->
-    
-    <style name="TextDisplayLarge">
-        <item name="android:textSize">@dimen/text_size_display_large</item>
-        <item name="android:textColor">@color/text_primary</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-    
-    <style name="TextHeadlineLarge">
-        <item name="android:textSize">@dimen/text_size_headline_large</item>
-        <item name="android:textColor">@color/text_primary</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-    
-    <style name="TextTitleLarge">
-        <item name="android:textSize">@dimen/text_size_title_large</item>
-        <item name="android:textColor">@color/text_primary</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-    
-    <style name="TextTitleMedium">
-        <item name="android:textSize">@dimen/text_size_title_medium</item>
-        <item name="android:textColor">@color/text_primary</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-    
-    <style name="TextBodyLarge">
-        <item name="android:textSize">@dimen/text_size_body_large</item>
-        <item name="android:textColor">@color/text_primary</item>
-    </style>
-    
-    <style name="TextBodyMedium">
-        <item name="android:textSize">@dimen/text_size_body_medium</item>
-        <item name="android:textColor">@color/text_primary</item>
-    </style>
-    
-    <style name="TextBodySmall">
-        <item name="android:textSize">@dimen/text_size_body_small</item>
-        <item name="android:textColor">@color/text_secondary</item>
-    </style>
-    
-    <style name="TextLabelMedium">
-        <item name="android:textSize">@dimen/text_size_label_medium</item>
-        <item name="android:textColor">@color/text_primary</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-    
-    <!-- ════ Material 3 Text Appearance Styles ════ -->
-    
-    <style name="TextAppearance.DisplayLarge">
-        <item name="android:textSize">@dimen/text_size_display_large</item>
-        <item name="android:textColor">@color/dark_text_primary</item>
-    </style>
-    
-    <style name="TextAppearance.HeadlineMedium">
-        <item name="android:textSize">@dimen/text_size_headline_medium</item>
-        <item name="android:textColor">@color/dark_text_primary</item>
-    </style>
-    
-    <style name="TextAppearance.TitleLarge">
-        <item name="android:textSize">@dimen/text_size_title_large</item>
-        <item name="android:textColor">@color/dark_text_primary</item>
-    </style>
-    
-    <style name="TextAppearance.BodyLarge">
-        <item name="android:textSize">@dimen/text_size_body_large</item>
-        <item name="android:textColor">@color/dark_text_primary</item>
-    </style>
-    
-    <style name="TextAppearance.BodyMedium">
-        <item name="android:textSize">@dimen/text_size_body_medium</item>
-        <item name="android:textColor">@color/dark_text_secondary</item>
-    </style>
-    
-    <style name="TextAppearance.LabelSmall">
-        <item name="android:textSize">@dimen/text_size_label_small</item>
-        <item name="android:textColor">@color/dark_text_secondary</item>
-    </style>
-    
-    <!-- ════ Navigation Styles ════ -->
-    
+
     <style name="NavItem">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:layout_height">@dimen/bottom_bar_height</item>
-        <item name="android:background">@color/bottom_bar_bg</item>
-        <item name="android:gravity">center</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:background">@color/background</item>
     </style>
-    
+
     <style name="NavIcon">
-        <item name="android:layout_width">@dimen/icon_size</item>
-        <item name="android:layout_height">@dimen/icon_size</item>
-        <item name="android:scaleType">fitCenter</item>
-        <item name="android:tint">@color/bottom_bar_icon_inactive</item>
+        <item name="android:layout_width">20dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_centerInParent">true</item>
     </style>
-    
-    <!-- ════ Switch Styles ════ -->
-    
-    <style name="SwitchTheme" parent="Widget.MaterialComponents.CompoundButton.MaterialSwitch">
-        <item name="android:textColorPrimary">@color/dark_text_primary</item>
-        <item name="colorControlActivated">@color/primary</item>
-        <item name="colorSwitchThumbNormal">@color/neutral_600</item>
+
+    <style name="SwitchTheme" parent="Theme.AppCompat">
+        <item name="colorControlActivated">#FFFFFF</item>
+        <item name="colorSwitchThumbNormal">#888888</item>
+        <item name="android:colorForeground">#FFFFFF</item>
     </style>
-    
-    <!-- ════ Dialog Styles ════ -->
-    
+
+    <!-- Dark styled alert dialog matching app theme -->
     <style name="DarkDialog" parent="Theme.MaterialComponents.Dialog.Alert">
-        <item name="android:colorBackground">@color/dark_bg_tertiary</item>
-        <item name="android:textColorPrimary">@color/dark_text_primary</item>
-        <item name="android:textColorSecondary">@color/dark_text_secondary</item>
-        <item name="colorAccent">@color/primary</item>
-        <item name="colorPrimary">@color/primary</item>
+        <item name="android:colorBackground">#111111</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:textColorSecondary">#AAAAAA</item>
+        <item name="colorAccent">#FFFFFF</item>
+        <item name="colorPrimary">#FFFFFF</item>
         <item name="android:windowBackground">@drawable/dark_dialog_bg</item>
         <item name="android:windowMinWidthMajor">80%</item>
         <item name="android:windowMinWidthMinor">80%</item>
@@ -123,127 +33,34 @@
         <item name="buttonBarNegativeButtonStyle">@style/DarkDialogButton</item>
         <item name="buttonBarNeutralButtonStyle">@style/DarkDialogButton</item>
     </style>
-    
+
     <style name="DarkDialogButton" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
-        <item name="android:textColor">@color/primary</item>
+        <item name="android:textColor">#AAAAAA</item>
     </style>
-    
-    <!-- ════ Bottom Sheet Styles ════ -->
-    
+
+    <!-- Bottom sheet menu style -->
     <style name="AppBottomSheetDialogTheme" parent="Theme.MaterialComponents.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/AppBottomSheet</item>
         <item name="android:windowIsFloating">false</item>
     </style>
-    
+
     <style name="AppBottomSheet" parent="Widget.MaterialComponents.BottomSheet.Modal">
-        <item name="backgroundTint">@color/dark_bg_secondary</item>
+        <item name="backgroundTint">#111111</item>
         <item name="shapeAppearanceOverlay">@style/AppBottomSheetShape</item>
     </style>
-    
+
     <style name="AppBottomSheetShape" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSizeTopLeft">@dimen/bottom_sheet_corner_radius</item>
-        <item name="cornerSizeTopRight">@dimen/bottom_sheet_corner_radius</item>
+        <item name="cornerSizeTopLeft">20dp</item>
+        <item name="cornerSizeTopRight">20dp</item>
         <item name="cornerSizeBottomLeft">0dp</item>
         <item name="cornerSizeBottomRight">0dp</item>
     </style>
-    
-    <!-- ════ Card Styles ════ -->
-    
+
+
     <style name="RoundedThumbnail" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">@dimen/tab_card_corner_radius</item>
-    </style>
-    
-    <style name="Card.Elevated">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">@drawable/bg_menu_item</item>
-        <item name="android:padding">@dimen/spacing_16</item>
-    </style>
-    
-    <!-- ════ Button Styles ════ -->
-    
-    <style name="ButtonPrimary" parent="Widget.MaterialComponents.Button">
-        <item name="android:textColor">@color/text_on_primary</item>
-        <item name="android:textSize">@dimen/text_size_label_large</item>
-        <item name="android:textStyle">bold</item>
-        <item name="cornerRadius">@dimen/button_corner_radius</item>
-        <item name="backgroundTint">@color/primary</item>
-    </style>
-    
-    <style name="ButtonSecondary" parent="Widget.MaterialComponents.Button.OutlinedButton">
-        <item name="android:textColor">@color/primary</item>
-        <item name="android:textSize">@dimen/text_size_label_large</item>
-        <item name="cornerRadius">@dimen/button_corner_radius</item>
-        <item name="strokeColor">@color/primary</item>
-        <item name="strokeWidth">2dp</item>
-    </style>
-    
-    <style name="Button.Filled">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">@dimen/button_height</item>
-        <item name="android:background">@color/primary</item>
-        <item name="android:textColor">@color/text_on_primary</item>
-        <item name="android:textSize">@dimen/text_size_label_large</item>
-        <item name="android:gravity">center</item>
-    </style>
-    
-    <style name="Button.Outlined">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">@dimen/button_height</item>
-        <item name="android:background">@drawable/menu_item_ripple</item>
-        <item name="android:textColor">@color/primary</item>
-        <item name="android:textSize">@dimen/text_size_label_large</item>
-        <item name="android:gravity">center</item>
-    </style>
-    
-    <!-- ════ Divider Styles ════ -->
-    
-    <style name="Divider">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">@dimen/divider_height</item>
-        <item name="android:background">@color/card_border</item>
-    </style>
-    
-    <style name="Divider.Horizontal">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">@dimen/divider_height</item>
-        <item name="android:background">@color/card_border</item>
-    </style>
-    
-    <!-- ════ Section Header Styles ════ -->
-    
-    <style name="SectionHeader">
-        <item name="android:textSize">@dimen/text_size_label_medium</item>
-        <item name="android:textColor">@color/text_secondary</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:paddingLeft">@dimen/spacing_16</item>
-        <item name="android:paddingRight">@dimen/spacing_16</item>
-        <item name="android:paddingTop">@dimen/spacing_16</item>
-        <item name="android:paddingBottom">@dimen/spacing_8</item>
-    </style>
-    
-    <!-- ════ Spacer Styles ════ -->
-    
-    <style name="Spacer.Vertical.16">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">@dimen/spacing_16</item>
-    </style>
-    
-    <style name="Spacer.Vertical.24">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">@dimen/spacing_24</item>
-    </style>
-    
-    <!-- ════ Ripple Effects ════ -->
-    
-    <style name="RippleEffect">
-        <item name="android:foreground">?attr/selectableItemBackground</item>
-    </style>
-    
-    <style name="RippleEffectBounded">
-        <item name="android:foreground">?android:attr/selectableItemBackgroundBounded</item>
+        <item name="cornerSize">16dp</item>
     </style>
 
 </resources>

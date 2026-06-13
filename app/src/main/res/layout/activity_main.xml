@@ -1,393 +1,105 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/background">
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000">
     
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Top Bar - Search & Navigation -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <LinearLayout
-        android:id="@+id/topBar"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/top_bar_height"
-        android:background="@color/dark_bg_secondary"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/top_bar_padding_horizontal"
-        android:paddingVertical="@dimen/top_bar_padding_vertical"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent">
+    <!-- Top Bar -->
+    <LinearLayout android:id="@+id/topBar" android:layout_width="match_parent" android:layout_height="56dp" android:background="#000000" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="8dp" android:visibility="gone" app:layout_constraintTop_toTopOf="parent">
         
-        <!-- Search Engine Icon -->
-        <ImageView
-            android:id="@+id/imgSearchEngine"
-            android:layout_width="@dimen/icon_size"
-            android:layout_height="@dimen/icon_size"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_find"
-            android:tint="@color/dark_text_secondary" />
+        <!-- Search engine icon (acts as engine switcher) -->
+        <ImageView android:id="@+id/imgSearchEngine" android:layout_width="26dp" android:layout_height="26dp" android:scaleType="fitCenter" android:src="@drawable/ic_find" />
         
-        <!-- URL / Search Bar -->
-        <EditText
-            android:id="@+id/textUrl"
-            android:layout_width="0dp"
-            android:layout_height="@dimen/search_bar_height"
-            android:layout_marginHorizontal="@dimen/spacing_12"
-            android:layout_weight="1"
-            android:background="@drawable/bg_search"
-            android:hint="Search or type URL"
-            android:imeOptions="actionGo"
-            android:inputType="textUri"
-            android:paddingHorizontal="@dimen/spacing_16"
-            android:selectAllOnFocus="true"
-            android:singleLine="true"
-            android:textColor="@color/search_text"
-            android:textColorHint="@color/search_hint"
-            android:textSize="@dimen/text_size_body_medium" />
+        <!-- URL / Search bar -->
+        <EditText android:id="@+id/textUrl" android:layout_width="0dp" android:layout_height="40dp" android:layout_marginHorizontal="8dp" android:layout_weight="1" android:background="@drawable/bg_search" android:hint="Search or type URL" android:imeOptions="actionGo" android:inputType="textUri" android:paddingHorizontal="16dp" android:selectAllOnFocus="true" android:singleLine="true" android:textColor="#FFFFFF" android:textColorHint="#555555" />
         
-        <!-- Bookmark Button -->
-        <ImageView
-            android:id="@+id/btnBookmark"
-            android:layout_width="@dimen/icon_button_size_small"
-            android:layout_height="@dimen/icon_button_size_small"
-            android:padding="@dimen/spacing_8"
-            android:src="@drawable/ic_bookmarks"
-            android:tint="@color/dark_text_secondary"
-            android:focusable="true"
-            android:background="?android:attr/selectableItemBackgroundBounded" />
+        <!-- Bookmark toggle (same icon as bottom bar) -->
+        <ImageView android:id="@+id/btnBookmark" android:layout_width="34dp" android:layout_height="34dp" android:padding="6dp" android:src="@drawable/ic_bookmarks" android:tint="#FFFFFF" android:focusable="true" />
         
-        <!-- QR Scanner Button -->
-        <ImageView
-            android:id="@+id/btnQr"
-            android:layout_width="@dimen/icon_button_size_small"
-            android:layout_height="@dimen/icon_button_size_small"
-            android:layout_marginStart="@dimen/spacing_4"
-            android:padding="@dimen/spacing_8"
-            android:src="@drawable/ic_qr"
-            android:tint="@color/dark_text_secondary"
-            android:focusable="true"
-            android:background="?android:attr/selectableItemBackgroundBounded" />
+        <!-- QR Scanner (replaces old 3-dot menu) -->
+        <ImageView android:id="@+id/btnQr" android:layout_width="34dp" android:layout_height="34dp" android:layout_marginStart="2dp" android:padding="7dp" android:src="@drawable/ic_qr" android:tint="#AAAAAA" android:focusable="true" />
     </LinearLayout>
     
-    <!-- ════════════════════════════════════════════════════════════ -->
     <!-- Page Load Progress Bar -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <ProgressBar
-        android:id="@+id/progressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/progress_bar_height"
-        android:progressDrawable="@drawable/progress_bar"
-        app:layout_constraintTop_toBottomOf="@id/topBar" />
+    <ProgressBar android:id="@+id/progressBar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="2dp" android:progressDrawable="@drawable/progress_bar" app:layout_constraintTop_toBottomOf="@id/topBar" />
     
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Web Content Container -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-        android:id="@+id/swipeRefresh"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        app:layout_constraintBottom_toTopOf="@id/bottomBar"
-        app:layout_constraintTop_toBottomOf="@id/progressBar">
+    <!-- Web Content (تم تحويله إلى Container ليحمل عدة تبويبات) -->
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout android:id="@+id/swipeRefresh" android:layout_width="match_parent" android:layout_height="0dp" app:layout_constraintBottom_toTopOf="@id/bottomBar" app:layout_constraintTop_toBottomOf="@id/progressBar">
         
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
+        <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent">
             
-            <!-- WebView Container -->
-            <FrameLayout
-                android:id="@+id/webViewContainer"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/webViewContainer" android:layout_width="match_parent" android:layout_height="match_parent" />
             
-            <!-- Native Overlay Container (Home, Error States) -->
-            <FrameLayout
-                android:id="@+id/nativeOverlayContainer"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clickable="true"
-                android:focusable="true"
-                android:visibility="gone" />
+            <FrameLayout android:id="@+id/nativeOverlayContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:visibility="gone" />
             
         </FrameLayout>
         
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
     
-    <!-- ════════════════════════════════════════════════════════════ -->
     <!-- Fullscreen Video Container -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <FrameLayout
-        android:id="@+id/fullscreenContainer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/background"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+    <FrameLayout android:id="@+id/fullscreenContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000" android:visibility="gone" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintTop_toTopOf="parent" />
     
-    <!-- ════════════════════════════════════════════════════════════ -->
     <!-- Find In Page Bar -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <LinearLayout
-        android:id="@+id/findBar"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/find_bar_height"
-        android:background="@color/dark_bg_secondary"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:padding="@dimen/find_bar_padding"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/bottomBar">
+    <LinearLayout android:id="@+id/findBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#0D0D0D" android:gravity="center_vertical" android:orientation="horizontal" android:padding="8dp" android:visibility="gone" app:layout_constraintBottom_toTopOf="@id/bottomBar">
         
-        <!-- Find Input -->
-        <EditText
-            android:id="@+id/findInput"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="Find in page..."
-            android:textColor="@color/dark_text_primary"
-            android:textColorHint="@color/dark_text_tertiary"
-            android:textSize="@dimen/text_size_body_medium" />
+        <EditText android:id="@+id/findInput" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="Find in page..." android:textColor="#FFF" android:textColorHint="#555" />
         
-        <!-- Match Counter -->
-        <TextView
-            android:id="@+id/findMatches"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="@dimen/spacing_12"
-            android:text="0/0"
-            android:textColor="@color/dark_text_secondary"
-            android:textSize="@dimen/text_size_body_small" />
+        <TextView android:id="@+id/findMatches" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginHorizontal="8dp" android:text="0/0" android:textColor="#888" />
         
-        <!-- Previous Button -->
-        <ImageView
-            android:id="@+id/btnFindPrev"
-            android:layout_width="@dimen/icon_button_size_small"
-            android:layout_height="@dimen/icon_button_size_small"
-            android:padding="@dimen/spacing_8"
-            android:src="@drawable/arrow_left"
-            android:tint="@color/dark_text_secondary"
-            android:background="?android:attr/selectableItemBackgroundBounded" />
+        <ImageView android:id="@+id/btnFindPrev" android:layout_width="32dp" android:layout_height="32dp" android:padding="6dp" android:src="@drawable/arrow_left" android:tint="#CCCCCC" />
         
-        <!-- Next Button -->
-        <ImageView
-            android:id="@+id/btnFindNext"
-            android:layout_width="@dimen/icon_button_size_small"
-            android:layout_height="@dimen/icon_button_size_small"
-            android:padding="@dimen/spacing_8"
-            android:src="@drawable/arrow_right"
-            android:tint="@color/dark_text_secondary"
-            android:background="?android:attr/selectableItemBackgroundBounded" />
+        <ImageView android:id="@+id/btnFindNext" android:layout_width="32dp" android:layout_height="32dp" android:padding="6dp" android:src="@drawable/arrow_right" android:tint="#CCCCCC" />
         
-        <!-- Close Button -->
-        <ImageView
-            android:id="@+id/btnFindClose"
-            android:layout_width="@dimen/icon_button_size_small"
-            android:layout_height="@dimen/icon_button_size_small"
-            android:padding="@dimen/spacing_8"
-            android:src="@drawable/close"
-            android:tint="@color/dark_text_primary"
-            android:background="?android:attr/selectableItemBackgroundBounded" />
+        <ImageView android:id="@+id/btnFindClose" android:layout_width="32dp" android:layout_height="32dp" android:padding="6dp" android:src="@drawable/close" android:tint="#FFFFFF" />
     </LinearLayout>
     
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Tabs Overlay (Chrome-style Tab Manager) -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <FrameLayout
-        android:id="@+id/tabsOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:background="@color/background"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/bottomBar"
-        app:layout_constraintTop_toBottomOf="@id/progressBar">
+    <!-- Tabs Overlay (Chrome-style full-screen tab manager) -->
+    <FrameLayout android:id="@+id/tabsOverlay" android:layout_width="match_parent" android:layout_height="0dp" android:background="#000000" android:visibility="gone" app:layout_constraintBottom_toTopOf="@id/bottomBar" app:layout_constraintTop_toBottomOf="@id/topBar">
         
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
             
-            <!-- Tab Groups Header -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="@dimen/tab_height"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="@dimen/spacing_12"
-                android:paddingVertical="@dimen/spacing_8"
-                android:background="@color/dark_bg_secondary">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="52dp" android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="8dp" android:background="#000000">
                 
-                <!-- Tab Groups Scroll View -->
-                <HorizontalScrollView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:scrollbars="none">
-                    <LinearLayout
-                        android:id="@+id/tabGroupsContainer"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical" />
+                <!-- شريط التمرير للمجموعات -->
+                <HorizontalScrollView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:scrollbars="none">
+                    <LinearLayout android:id="@+id/tabGroupsContainer" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" />
                 </HorizontalScrollView>
                 
-                <!-- New Group Button -->
-                <ImageView
-                    android:id="@+id/btnNewGroup"
-                    android:layout_width="@dimen/icon_button_size_small"
-                    android:layout_height="@dimen/icon_button_size_small"
-                    android:padding="@dimen/spacing_6"
-                    android:src="@drawable/ic_add_group"
-                    android:tint="@color/dark_text_secondary"
-                    android:layout_marginEnd="@dimen/spacing_8"
-                    android:background="?android:attr/selectableItemBackgroundBounded" />
+                <ImageView android:id="@+id/btnNewGroup" android:layout_width="36dp" android:layout_height="36dp" android:padding="6dp" android:src="@drawable/ic_add_group" android:tint="#AAAAAA" android:layout_marginEnd="8dp" />
                 
-                <!-- New Tab Button -->
-                <ImageView
-                    android:id="@+id/btnNewTab"
-                    android:layout_width="@dimen/icon_button_size"
-                    android:layout_height="@dimen/icon_button_size"
-                    android:padding="@dimen/spacing_10"
-                    android:src="@drawable/ic_new_tab"
-                    android:tint="@color/text_on_primary"
-                    android:background="@drawable/bottom_btn_ripple"
-                    android:scaleType="centerInside" />
+                <ImageView android:id="@+id/btnNewTab" android:layout_width="40dp" android:layout_height="40dp" android:padding="9dp" android:src="@drawable/ic_new_tab" android:tint="#FFFFFF" android:background="@drawable/bottom_btn_ripple" />
             </LinearLayout>
             
-            <!-- Tabs Grid -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/tabsRecycler"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:clipToPadding="false"
-                android:padding="@dimen/spacing_16" />
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/tabsRecycler" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:padding="8dp" />
         </LinearLayout>
     </FrameLayout>
     
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Bottom Navigation Bar -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <LinearLayout
-        android:id="@+id/bottomBar"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/bottom_bar_height"
-        android:background="@color/bottom_bar_bg"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        app:layout_constraintBottom_toBottomOf="parent">
+    <!-- ══ Bottom Navigation Bar: Back │ Forward │ Home │ Tabs │ Menu ══ -->
+    <LinearLayout android:id="@+id/bottomBar" android:layout_width="match_parent" android:layout_height="56dp" android:background="#000000" android:orientation="horizontal" android:gravity="center_vertical" app:layout_constraintBottom_toBottomOf="parent">
         
-        <!-- Back Button -->
-        <FrameLayout
-            android:id="@+id/btnBackArea"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bottom_btn_ripple"
-            android:focusable="true"
-            android:nextFocusRight="@id/btnForwardArea">
-            <ImageView
-                android:id="@+id/goBack"
-                android:layout_width="@dimen/bottom_bar_icon_size"
-                android:layout_height="@dimen/bottom_bar_icon_size"
-                android:layout_gravity="center"
-                android:src="@drawable/arrow_left"
-                android:tint="@color/bottom_bar_icon_inactive"
-                android:scaleType="fitCenter" />
+        <!-- Back -->
+        <FrameLayout android:id="@+id/btnBackArea" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/bottom_btn_ripple" android:focusable="true" android:nextFocusRight="@id/btnForwardArea">
+            <ImageView android:id="@+id/goBack" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/arrow_left" android:tint="#888888" />
         </FrameLayout>
         
-        <!-- Forward Button -->
-        <FrameLayout
-            android:id="@+id/btnForwardArea"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bottom_btn_ripple"
-            android:focusable="true"
-            android:nextFocusLeft="@id/btnBackArea"
-            android:nextFocusRight="@id/btnHomeArea">
-            <ImageView
-                android:id="@+id/goForward"
-                android:layout_width="@dimen/bottom_bar_icon_size"
-                android:layout_height="@dimen/bottom_bar_icon_size"
-                android:layout_gravity="center"
-                android:src="@drawable/arrow_right"
-                android:tint="@color/bottom_bar_icon_inactive"
-                android:scaleType="fitCenter" />
+        <!-- Forward -->
+        <FrameLayout android:id="@+id/btnForwardArea" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/bottom_btn_ripple" android:focusable="true" android:nextFocusLeft="@id/btnBackArea" android:nextFocusRight="@id/btnHomeArea">
+            <ImageView android:id="@+id/goForward" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/arrow_right" android:tint="#888888" />
         </FrameLayout>
         
-        <!-- Home Button -->
-        <FrameLayout
-            android:id="@+id/btnHomeArea"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bottom_btn_ripple"
-            android:focusable="true"
-            android:nextFocusLeft="@id/btnForwardArea"
-            android:nextFocusRight="@id/btnTabsArea">
-            <ImageView
-                android:id="@+id/goHome"
-                android:layout_width="@dimen/bottom_bar_icon_size"
-                android:layout_height="@dimen/bottom_bar_icon_size"
-                android:layout_gravity="center"
-                android:src="@drawable/home"
-                android:tint="@color/bottom_bar_icon_inactive"
-                android:scaleType="fitCenter" />
+        <!-- Home (center) -->
+        <FrameLayout android:id="@+id/btnHomeArea" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/bottom_btn_ripple" android:focusable="true" android:nextFocusLeft="@id/btnForwardArea" android:nextFocusRight="@id/btnTabsArea">
+            <ImageView android:id="@+id/goHome" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/home" android:tint="#888888" />
         </FrameLayout>
         
         <!-- Tabs Counter -->
-        <FrameLayout
-            android:id="@+id/btnTabsArea"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bottom_btn_ripple"
-            android:focusable="true"
-            android:nextFocusLeft="@id/btnHomeArea"
-            android:nextFocusRight="@id/btnMenuArea">
-            <FrameLayout
-                android:id="@+id/btnTabs"
-                android:layout_width="@dimen/bottom_bar_icon_size"
-                android:layout_height="@dimen/bottom_bar_icon_size"
-                android:layout_gravity="center">
-                <ImageView
-                    android:layout_width="@dimen/bottom_bar_icon_size"
-                    android:layout_height="@dimen/bottom_bar_icon_size"
-                    android:src="@drawable/ic_tab_bg"
-                    android:tint="@color/bottom_bar_icon_inactive" />
-                <TextView
-                    android:id="@+id/tabCount"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="1"
-                    android:textColor="@color/bottom_bar_icon_inactive"
-                    android:textSize="@dimen/text_size_label_small"
-                    android:textStyle="bold" />
+        <FrameLayout android:id="@+id/btnTabsArea" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/bottom_btn_ripple" android:focusable="true" android:nextFocusLeft="@id/btnHomeArea" android:nextFocusRight="@id/btnMenuArea">
+            <FrameLayout android:id="@+id/btnTabs" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center">
+                <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_tab_bg" />
+                <TextView android:id="@+id/tabCount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="1" android:textColor="#BBBBBB" android:textSize="10sp" android:textStyle="bold" />
             </FrameLayout>
         </FrameLayout>
         
-        <!-- Menu Button -->
-        <FrameLayout
-            android:id="@+id/btnMenuArea"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bottom_btn_ripple"
-            android:focusable="true"
-            android:nextFocusLeft="@id/btnTabsArea">
-            <ImageView
-                android:id="@+id/btnMenu"
-                android:layout_width="@dimen/bottom_bar_icon_size"
-                android:layout_height="@dimen/bottom_bar_icon_size"
-                android:layout_gravity="center"
-                android:src="@drawable/menu"
-                android:tint="@color/bottom_bar_icon_inactive"
-                android:scaleType="fitCenter" />
+        <!-- Menu (bottom sheet) -->
+        <FrameLayout android:id="@+id/btnMenuArea" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@drawable/bottom_btn_ripple" android:focusable="true" android:nextFocusLeft="@id/btnTabsArea">
+            <ImageView android:id="@+id/btnMenu" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/menu" android:tint="#888888" />
         </FrameLayout>
         
     </LinearLayout>

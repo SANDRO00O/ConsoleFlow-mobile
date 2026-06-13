@@ -2,7 +2,7 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape>
-            <solid android:color="@color/dark_bg_secondary" />
+            <solid android:color="@color/background" />
         </shape>
     </item>
     <item
@@ -11,9 +11,9 @@
         android:bottom="@dimen/top_bar_bg_gap"
         android:left="@dimen/top_bar_bg_gap">
         <shape>
-            <solid android:color="@color/search_bg" />
-            <corners android:radius="@dimen/search_bar_corner_radius"/>
-            <stroke android:width="1dp" android:color="@color/search_border"/>
+            <solid android:color="@color/input_background" />
+            <corners android:radius="8dp"/>
+            <stroke android:width="1dp" android:color="#1a1a1a"/>
         </shape>
     </item>
 </layer-list>

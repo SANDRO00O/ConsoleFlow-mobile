@@ -1,58 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Night Theme Colors - Material 3 -->
-    
-    <!-- Primary Colors - Deep Blue -->
-    <color name="primary">@color/primary_light</color>
-    <color name="primary_variant">@color/primary</color>
-    
-    <!-- Secondary Colors - Teal -->
-    <color name="secondary">@color/secondary_light</color>
-    <color name="secondary_variant">@color/secondary</color>
-    
-    <!-- Tertiary Colors - Amber -->
-    <color name="tertiary">@color/tertiary_light</color>
-    <color name="tertiary_variant">@color/tertiary</color>
-    
-    <!-- Backgrounds -->
-    <color name="background">@color/dark_bg_primary</color>
-    <color name="input_background">@color/dark_surface_variant</color>
-    <color name="input_color">@color/dark_text_primary</color>
-    <color name="progress_color">@color/primary_light</color>
-    <color name="splash_background">@color/dark_bg_primary</color>
-    <color name="splash_icon_bg">@color/dark_bg_primary</color>
-    
-    <!-- Search Bar -->
-    <color name="search_bg">@color/dark_surface_variant</color>
-    <color name="search_text">@color/dark_text_primary</color>
-    <color name="search_hint">@color/dark_text_tertiary</color>
-    <color name="search_border">@color/neutral_700</color>
-    
-    <!-- Tab Colors -->
-    <color name="tab_active_bg">@color/primary_light</color>
-    <color name="tab_inactive_bg">@color/dark_surface_variant</color>
-    <color name="tab_text_active">@color/dark_bg_primary</color>
-    <color name="tab_text_inactive">@color/dark_text_secondary</color>
-    
-    <!-- Bottom Bar -->
-    <color name="bottom_bar_bg">@color/dark_bg_secondary</color>
-    <color name="bottom_bar_icon_active">@color/primary_light</color>
-    <color name="bottom_bar_icon_inactive">@color/dark_text_secondary</color>
-    
-    <!-- Menu -->
-    <color name="menu_bg">@color/dark_bg_secondary</color>
-    <color name="menu_item_bg">@color/dark_surface_variant</color>
-    <color name="menu_item_text">@color/dark_text_primary</color>
-    <color name="menu_item_hover">@color/neutral_700</color>
-    
-    <!-- Cards -->
-    <color name="card_bg">@color/dark_surface</color>
-    <color name="card_border">@color/neutral_700</color>
-    <color name="card_shadow">@color/scrim_dark</color>
-    
-    <!-- Bookmarks -->
-    <color name="bookmark_bg">@color/dark_surface_variant</color>
-    <color name="bookmark_text">@color/dark_text_primary</color>
-    <color name="bookmark_icon_bg">@color/neutral_700</color>
-    
+    <color name="background">#000000</color>
+    <color name="input_background">#0d0d0d</color>
+    <color name="input_color">#e0e0e0</color>
+    <color name="progress_color">#333333</color>
 </resources>

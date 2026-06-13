@@ -1,71 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="@dimen/tab_card_width"
-    android:layout_height="@dimen/tab_card_height"
-    android:layout_margin="@dimen/spacing_8"
-    android:background="@drawable/tab_card_bg"
+    android:layout_width="match_parent"
+    android:layout_height="240dp"
+    android:layout_margin="6dp"
     android:orientation="vertical"
-    android:padding="@dimen/spacing_12">
-    
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Tab Header (Favicon, Title, Close Button) -->
-    <!-- ════════════════════════════════════════════════════════════ -->
+    android:padding="12dp">
+
+    <!-- Header: favicon + title + close -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:marginBottom="@dimen/spacing_12">
-        
-        <!-- Favicon -->
+        android:orientation="horizontal"
+        android:paddingBottom="10dp">
+
         <ImageView
             android:id="@+id/tabFavicon"
-            android:layout_width="@dimen/icon_size"
-            android:layout_height="@dimen/icon_size"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_favicon_fallback"
-            android:tint="@color/dark_text_secondary" />
-        
-        <!-- Title -->
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/home"
+            android:scaleType="fitCenter" />
+
         <TextView
             android:id="@+id/tabTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginHorizontal="@dimen/spacing_12"
-            android:text="Tab Title"
-            android:textColor="@color/dark_text_primary"
-            android:textSize="@dimen/text_size_body_medium"
-            android:textStyle="bold"
-            android:singleLine="true"
-            android:ellipsize="end" />
-        
-        <!-- Close Button -->
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="New Tab"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
         <ImageView
             android:id="@+id/tabClose"
-            android:layout_width="@dimen/icon_button_size_small"
-            android:layout_height="@dimen/icon_button_size_small"
-            android:padding="@dimen/spacing_6"
-            android:src="@drawable/ic_tab_close"
-            android:tint="@color/dark_text_secondary"
-            android:scaleType="fitCenter"
-            android:background="?android:attr/selectableItemBackgroundBounded" />
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="2dp"
+            android:src="@drawable/ic_tab_close" />
     </LinearLayout>
-    
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Tab Thumbnail -->
-    <!-- ════════════════════════════════════════════════════════════ -->
+
+    <!-- Thumbnail with rounded corners via ShapeableImageView -->
     <com.google.android.material.imageview.ShapeableImageView
         android:id="@+id/tabThumbnail"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="match_parent"
         android:scaleType="centerCrop"
-        android:src="@drawable/ic_favicon_fallback"
-        android:background="@color/dark_surface_variant"
-        app:strokeColor="@color/card_border"
-        app:strokeWidth="1dp"
+        android:background="#1A1A1A"
         app:shapeAppearanceOverlay="@style/RoundedThumbnail" />
-    
+
 </LinearLayout>

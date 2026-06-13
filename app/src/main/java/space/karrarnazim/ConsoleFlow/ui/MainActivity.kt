@@ -286,6 +286,14 @@ class MainActivity : AppCompatActivity() {
         initViews()
         cursorController = CursorController(this).also { it.attach() }
         inputController  = buildInputController().also { it.setCursorController(cursorController) }
+
+        // Refresh menu mini-list while Downloads tab is open
+        DownloadTracker.downloads.observe(this) {
+            if (cachedMenuSheet?.isShowing == true) {
+                val pageDl = cachedMenuSheetView?.findViewById<View>(R.id.menuPageDownloads)
+                if (pageDl?.visibility == View.VISIBLE) populateMenuDownloadsList()
+            }
+        }
         setupListeners()
         window.decorView.setOnGenericMotionListener { _, event ->
             if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {
@@ -1542,11 +1550,6 @@ private fun savePersistentTabs() {
             cachedMenuSheetView?.findViewById<View>(R.id.menuSettings)?.setOnClickListener {
                 cachedMenuSheet?.dismiss(); startSettingsActivity()
             }
-            cachedMenuSheetView?.findViewById<View>(R.id.menuDownloads)?.setOnClickListener {
-                cachedMenuSheet?.dismiss()
-                startActivity(Intent(this, DownloadsActivity::class.java))
-                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-            }
             cachedMenuSheetView?.findViewById<View>(R.id.menuClearData)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 AlertDialog.Builder(this, R.style.DarkDialog)
@@ -1556,7 +1559,25 @@ private fun savePersistentTabs() {
                     .setNegativeButton("Cancel", null)
                     .show()
             }
+
+            // ── Menu page tab chips ──────────────────────────────────────
+            cachedMenuSheetView?.findViewById<View>(R.id.menuTabTools)?.setOnClickListener {
+                activateMenuTab(isTools = true)
+            }
+            cachedMenuSheetView?.findViewById<View>(R.id.menuTabDownloads)?.setOnClickListener {
+                activateMenuTab(isTools = false)
+            }
+
+            // ── Downloads mini page: open full activity ──────────────────
+            cachedMenuSheetView?.findViewById<View>(R.id.menuDlOpenPage)?.setOnClickListener {
+                cachedMenuSheet?.dismiss()
+                startActivity(Intent(this, DownloadsActivity::class.java))
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+            }
         }
+
+        // Always reset to Tools tab on open
+        activateMenuTab(isTools = true)
 
         val desktopLabel = cachedMenuSheetView?.findViewById<TextView>(R.id.menuDesktopModeLabel)
         if (prefsManager.desktopMode) {
@@ -1568,6 +1589,155 @@ private fun savePersistentTabs() {
         }
         updateMenuConsoleState()
         cachedMenuSheet?.show()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Menu page switching
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun activateMenuTab(isTools: Boolean) {
+        val v = cachedMenuSheetView ?: return
+        val tabTools   = v.findViewById<TextView>(R.id.menuTabTools)
+        val tabDl      = v.findViewById<TextView>(R.id.menuTabDownloads)
+        val pageTools  = v.findViewById<View>(R.id.menuPageTools)
+        val pageDl     = v.findViewById<View>(R.id.menuPageDownloads)
+        val density    = resources.displayMetrics.density
+
+        val activeChip = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            setColor(Color.parseColor("#2B2930"))
+            cornerRadius = 10 * density
+        }
+
+        if (isTools) {
+            tabTools.setTextColor(Color.WHITE)
+            tabTools.setTypeface(null, android.graphics.Typeface.BOLD)
+            tabTools.background = activeChip
+            tabDl.setTextColor(Color.parseColor("#888888"))
+            tabDl.setTypeface(null, android.graphics.Typeface.NORMAL)
+            tabDl.background = null
+            pageTools.visibility = View.VISIBLE
+            pageDl.visibility   = View.GONE
+        } else {
+            tabDl.setTextColor(Color.WHITE)
+            tabDl.setTypeface(null, android.graphics.Typeface.BOLD)
+            tabDl.background = activeChip
+            tabTools.setTextColor(Color.parseColor("#888888"))
+            tabTools.setTypeface(null, android.graphics.Typeface.NORMAL)
+            tabTools.background = null
+            pageTools.visibility = View.GONE
+            pageDl.visibility   = View.VISIBLE
+            populateMenuDownloadsList()
+        }
+    }
+
+    private fun populateMenuDownloadsList() {
+        val listContainer = cachedMenuSheetView
+            ?.findViewById<LinearLayout>(R.id.menuDlList) ?: return
+        listContainer.removeAllViews()
+
+        val items = DownloadTracker.downloads.value.orEmpty()
+
+        if (items.isEmpty()) {
+            listContainer.addView(TextView(this).apply {
+                text = "No downloads yet"
+                textSize = 14f
+                setTextColor(Color.parseColor("#555555"))
+                gravity = android.view.Gravity.CENTER
+                setPadding(0, menuDp(24), 0, menuDp(8))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            })
+            return
+        }
+
+        // Show last 4 downloads, newest first
+        items.reversed().take(4).forEach { item ->
+            listContainer.addView(buildMenuDlRow(item))
+        }
+    }
+
+    private fun buildMenuDlRow(item: DownloadItem): View {
+        val density = resources.displayMetrics.density
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(menuDp(12), menuDp(10), menuDp(12), menuDp(10))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = menuDp(2) }
+        }
+
+        // Coloured state dot
+        val dot = View(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(menuStateColor(item.state))
+            }
+            layoutParams = LinearLayout.LayoutParams(menuDp(8), menuDp(8)).apply {
+                marginEnd = menuDp(12)
+            }
+        }
+
+        // Text column: filename + status
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            )
+        }
+        col.addView(TextView(this).apply {
+            text = item.fileName
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+
+        val stateText = when (item.state) {
+            DownloadState.RUNNING   -> {
+                val pct = if (item.totalBytes > 0)
+                    " · ${(item.downloadedBytes * 100 / item.totalBytes).toInt()}%" else ""
+                "Downloading$pct"
+            }
+            DownloadState.QUEUED    -> "Waiting…"
+            DownloadState.COMPLETED -> "Complete  ·  ${menuFmtBytes(item.downloadedBytes)}"
+            DownloadState.FAILED    -> "Failed"
+            DownloadState.CANCELLED -> "Cancelled"
+        }
+        col.addView(TextView(this).apply {
+            text = stateText
+            textSize = 11f
+            setTextColor(menuStateColor(item.state))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = menuDp(2) }
+        })
+
+        row.addView(dot)
+        row.addView(col)
+        return row
+    }
+
+    private fun menuDp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
+
+    private fun menuStateColor(state: DownloadState): Int = Color.parseColor(when (state) {
+        DownloadState.RUNNING   -> "#6EA8DC"
+        DownloadState.COMPLETED -> "#5DB075"
+        DownloadState.FAILED    -> "#F2B8B5"
+        DownloadState.CANCELLED -> "#555555"
+        DownloadState.QUEUED    -> "#888888"
+    })
+
+    private fun menuFmtBytes(b: Long): String = when {
+        b < 1_024L         -> "$b B"
+        b < 1_048_576L     -> "${"%.1f".format(b / 1_024.0)} KB"
+        b < 1_073_741_824L -> "${"%.1f".format(b / 1_048_576.0)} MB"
+        else               -> "${"%.2f".format(b / 1_073_741_824.0)} GB"
     }
 
 

@@ -2,364 +2,254 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/dark_bg_secondary"
+    android:background="@drawable/bg_bottom_sheet"
     android:orientation="vertical"
-    android:paddingHorizontal="@dimen/spacing_16"
-    android:paddingVertical="@dimen/spacing_16">
-    
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Drag Handle -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <FrameLayout
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="16dp">
+
+    <!-- Drag handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/bg_menu_item" />
+
+    <!-- Page selector chips -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="@dimen/spacing_24"
-        android:gravity="center"
-        android:layout_marginBottom="@dimen/spacing_12">
-        <View
-            android:layout_width="@dimen/bottom_sheet_handle_width"
-            android:layout_height="@dimen/bottom_sheet_handle_height"
-            android:layout_gravity="center"
-            android:background="@color/card_border"
-            android:alpha="0.4" />
-    </FrameLayout>
-    
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Menu Items Grid (4 columns) -->
-    <!-- ════════════════════════════════════════════════════════════ -->
+        android:layout_height="40dp"
+        android:layout_marginBottom="14dp"
+        android:background="@drawable/bg_menu_item"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <TextView
+            android:id="@+id/menuTabTools"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Tools"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/menuTabDownloads"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Downloads"
+            android:textColor="#888888"
+            android:textSize="13sp" />
+
+    </LinearLayout>
+
+    <!-- ── Page 1: Tools grid ─────────────────────────────────────────────── -->
     <GridLayout
+        android:id="@+id/menuPageTools"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:alignmentMode="alignMargins"
         android:columnCount="4"
-        android:rowCount="3"
-        android:columnOrderPreserved="false">
-        
-        <!-- Night Mode -->
+        android:rowCount="2"
+        android:useDefaultMargins="true">
+
         <LinearLayout
             android:id="@+id/menuNightMode"
             android:layout_width="0dp"
-            android:layout_height="@dimen/menu_item_height"
-            android:layout_row="0"
-            android:layout_column="0"
+            android:layout_height="80dp"
             android:layout_columnWeight="1"
-            android:layout_margin="@dimen/spacing_6"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/menu_item_ripple"
-            android:paddingHorizontal="@dimen/spacing_12"
-            android:paddingVertical="@dimen/spacing_12"
+            android:background="@drawable/bg_menu_item"
             android:clickable="true"
-            android:focusable="true">
-            
-            <ImageView
-                android:layout_width="@dimen/menu_item_icon_size"
-                android:layout_height="@dimen/menu_item_icon_size"
-                android:src="@drawable/ic_moon"
-                android:tint="@color/tertiary_light"
-                android:scaleType="fitCenter" />
-            
-            <TextView
-                android:id="@+id/menuNightModeLabel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Night Mode"
-                android:textColor="@color/menu_item_text"
-                android:textSize="@dimen/menu_item_text_size"
-                android:textAlignment="center"
-                android:layout_marginTop="@dimen/spacing_8"
-                android:singleLine="true"
-                android:ellipsize="end" />
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                android:src="@drawable/ic_night" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Night Mode"
+                android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-        
-        <!-- Bookmarks -->
+
         <LinearLayout
             android:id="@+id/menuBookmarks"
             android:layout_width="0dp"
-            android:layout_height="@dimen/menu_item_height"
-            android:layout_row="0"
-            android:layout_column="1"
+            android:layout_height="80dp"
             android:layout_columnWeight="1"
-            android:layout_margin="@dimen/spacing_6"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/menu_item_ripple"
-            android:paddingHorizontal="@dimen/spacing_12"
-            android:paddingVertical="@dimen/spacing_12"
+            android:background="@drawable/bg_menu_item"
             android:clickable="true"
-            android:focusable="true">
-            
-            <ImageView
-                android:layout_width="@dimen/menu_item_icon_size"
-                android:layout_height="@dimen/menu_item_icon_size"
-                android:src="@drawable/ic_bookmarks"
-                android:tint="@color/secondary_light"
-                android:scaleType="fitCenter" />
-            
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Bookmarks"
-                android:textColor="@color/menu_item_text"
-                android:textSize="@dimen/menu_item_text_size"
-                android:textAlignment="center"
-                android:layout_marginTop="@dimen/spacing_8"
-                android:singleLine="true"
-                android:ellipsize="end" />
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                android:src="@drawable/ic_bookmarks" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Bookmarks"
+                android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-        
-        <!-- History -->
+
         <LinearLayout
             android:id="@+id/menuHistory"
             android:layout_width="0dp"
-            android:layout_height="@dimen/menu_item_height"
-            android:layout_row="0"
-            android:layout_column="2"
+            android:layout_height="80dp"
             android:layout_columnWeight="1"
-            android:layout_margin="@dimen/spacing_6"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/menu_item_ripple"
-            android:paddingHorizontal="@dimen/spacing_12"
-            android:paddingVertical="@dimen/spacing_12"
+            android:background="@drawable/bg_menu_item"
             android:clickable="true"
-            android:focusable="true">
-            
-            <ImageView
-                android:layout_width="@dimen/menu_item_icon_size"
-                android:layout_height="@dimen/menu_item_icon_size"
-                android:src="@drawable/ic_history"
-                android:tint="@color/primary_light"
-                android:scaleType="fitCenter" />
-            
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="History"
-                android:textColor="@color/menu_item_text"
-                android:textSize="@dimen/menu_item_text_size"
-                android:textAlignment="center"
-                android:layout_marginTop="@dimen/spacing_8"
-                android:singleLine="true"
-                android:ellipsize="end" />
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                android:src="@drawable/ic_history" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="History"
+                android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-        
-        <!-- Console Toggle -->
+
         <LinearLayout
             android:id="@+id/menuConsoleToggle"
             android:layout_width="0dp"
-            android:layout_height="@dimen/menu_item_height"
-            android:layout_row="0"
-            android:layout_column="3"
+            android:layout_height="80dp"
             android:layout_columnWeight="1"
-            android:layout_margin="@dimen/spacing_6"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/menu_item_ripple"
-            android:paddingHorizontal="@dimen/spacing_12"
-            android:paddingVertical="@dimen/spacing_12"
+            android:background="@drawable/bg_menu_item"
             android:clickable="true"
-            android:focusable="true">
-            
-            <ImageView
-                android:layout_width="@dimen/menu_item_icon_size"
-                android:layout_height="@dimen/menu_item_icon_size"
-                android:src="@drawable/ic_code"
-                android:tint="@color/error"
-                android:scaleType="fitCenter" />
-            
-            <TextView
-                android:id="@+id/menuConsoleLabel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Console Off"
-                android:textColor="@color/menu_item_text"
-                android:textSize="@dimen/menu_item_text_size"
-                android:textAlignment="center"
-                android:layout_marginTop="@dimen/spacing_8"
-                android:singleLine="true"
-                android:ellipsize="end" />
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                android:src="@drawable/ic_code" android:tint="#FFFFFF" />
+            <TextView android:id="@+id/menuConsoleLabel" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:text="Open Console" android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-        
-        <!-- Find in Page -->
+
         <LinearLayout
             android:id="@+id/menuFindInPage"
             android:layout_width="0dp"
-            android:layout_height="@dimen/menu_item_height"
-            android:layout_row="1"
-            android:layout_column="0"
+            android:layout_height="80dp"
             android:layout_columnWeight="1"
-            android:layout_margin="@dimen/spacing_6"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/menu_item_ripple"
-            android:paddingHorizontal="@dimen/spacing_12"
-            android:paddingVertical="@dimen/spacing_12"
+            android:background="@drawable/bg_menu_item"
             android:clickable="true"
-            android:focusable="true">
-            
-            <ImageView
-                android:layout_width="@dimen/menu_item_icon_size"
-                android:layout_height="@dimen/menu_item_icon_size"
-                android:src="@drawable/ic_find"
-                android:tint="@color/secondary_light"
-                android:scaleType="fitCenter" />
-            
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Find in Page"
-                android:textColor="@color/menu_item_text"
-                android:textSize="@dimen/menu_item_text_size"
-                android:textAlignment="center"
-                android:layout_marginTop="@dimen/spacing_8"
-                android:singleLine="true"
-                android:ellipsize="end" />
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                android:src="@drawable/ic_find" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Find in Page"
+                android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-        
-        <!-- Desktop Mode -->
+
         <LinearLayout
             android:id="@+id/menuDesktopMode"
             android:layout_width="0dp"
-            android:layout_height="@dimen/menu_item_height"
-            android:layout_row="1"
-            android:layout_column="1"
+            android:layout_height="80dp"
             android:layout_columnWeight="1"
-            android:layout_margin="@dimen/spacing_6"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/menu_item_ripple"
-            android:paddingHorizontal="@dimen/spacing_12"
-            android:paddingVertical="@dimen/spacing_12"
+            android:background="@drawable/bg_menu_item"
             android:clickable="true"
-            android:focusable="true">
-            
-            <ImageView
-                android:layout_width="@dimen/menu_item_icon_size"
-                android:layout_height="@dimen/menu_item_icon_size"
-                android:src="@drawable/ic_desktop"
-                android:tint="@color/primary_light"
-                android:scaleType="fitCenter" />
-            
-            <TextView
-                android:id="@+id/menuDesktopModeLabel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Desktop"
-                android:textColor="@color/menu_item_text"
-                android:textSize="@dimen/menu_item_text_size"
-                android:textAlignment="center"
-                android:layout_marginTop="@dimen/spacing_8"
-                android:singleLine="true"
-                android:ellipsize="end" />
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                android:src="@drawable/ic_desktop" android:tint="#FFFFFF" />
+            <TextView android:id="@+id/menuDesktopModeLabel" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:text="Desktop" android:textColor="#CCCCCC" android:textSize="12sp" />
         </LinearLayout>
-        
-        <!-- Settings -->
+
         <LinearLayout
             android:id="@+id/menuSettings"
             android:layout_width="0dp"
-            android:layout_height="@dimen/menu_item_height"
-            android:layout_row="1"
-            android:layout_column="2"
+            android:layout_height="80dp"
             android:layout_columnWeight="1"
-            android:layout_margin="@dimen/spacing_6"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/menu_item_ripple"
-            android:paddingHorizontal="@dimen/spacing_12"
-            android:paddingVertical="@dimen/spacing_12"
+            android:background="@drawable/bg_menu_item"
             android:clickable="true"
-            android:focusable="true">
-            
-            <ImageView
-                android:layout_width="@dimen/menu_item_icon_size"
-                android:layout_height="@dimen/menu_item_icon_size"
-                android:src="@drawable/ic_settings"
-                android:tint="@color/secondary_light"
-                android:scaleType="fitCenter" />
-            
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Settings"
-                android:textColor="@color/menu_item_text"
-                android:textSize="@dimen/menu_item_text_size"
-                android:textAlignment="center"
-                android:layout_marginTop="@dimen/spacing_8"
-                android:singleLine="true"
-                android:ellipsize="end" />
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                android:src="@drawable/ic_settings" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Settings"
+                android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
-        
-        <!-- Clear Data -->
+
         <LinearLayout
             android:id="@+id/menuClearData"
             android:layout_width="0dp"
-            android:layout_height="@dimen/menu_item_height"
-            android:layout_row="1"
-            android:layout_column="3"
+            android:layout_height="80dp"
             android:layout_columnWeight="1"
-            android:layout_margin="@dimen/spacing_6"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@drawable/menu_item_ripple"
-            android:paddingHorizontal="@dimen/spacing_12"
-            android:paddingVertical="@dimen/spacing_12"
+            android:background="@drawable/bg_menu_item"
             android:clickable="true"
-            android:focusable="true">
-            
-            <ImageView
-                android:layout_width="@dimen/menu_item_icon_size"
-                android:layout_height="@dimen/menu_item_icon_size"
-                android:src="@drawable/ic_download"
-                android:tint="@color/error"
-                android:scaleType="fitCenter" />
-            
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Clear Data"
-                android:textColor="@color/menu_item_text"
-                android:textSize="@dimen/menu_item_text_size"
-                android:textAlignment="center"
-                android:layout_marginTop="@dimen/spacing_8"
-                android:singleLine="true"
-                android:ellipsize="end" />
-        </LinearLayout>
-        
-        <!-- Downloads -->
-        <LinearLayout
-            android:id="@+id/menuDownloads"
-            android:layout_width="0dp"
-            android:layout_height="@dimen/menu_item_height"
-            android:layout_row="2"
-            android:layout_column="0"
-            android:layout_columnWeight="1"
-            android:layout_margin="@dimen/spacing_6"
-            android:orientation="vertical"
+            android:focusable="true"
             android:gravity="center"
-            android:background="@drawable/menu_item_ripple"
-            android:paddingHorizontal="@dimen/spacing_12"
-            android:paddingVertical="@dimen/spacing_12"
-            android:clickable="true"
-            android:focusable="true">
-
-            <ImageView
-                android:layout_width="@dimen/menu_item_icon_size"
-                android:layout_height="@dimen/menu_item_icon_size"
-                android:src="@drawable/ic_download"
-                android:tint="@color/primary_light"
-                android:scaleType="fitCenter" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Downloads"
-                android:textColor="@color/menu_item_text"
-                android:textSize="@dimen/menu_item_text_size"
-                android:textAlignment="center"
-                android:layout_marginTop="@dimen/spacing_8"
-                android:singleLine="true"
-                android:ellipsize="end" />
+            android:orientation="vertical">
+            <ImageView android:layout_width="24dp" android:layout_height="24dp"
+                android:src="@drawable/ic_clear" android:tint="#FFFFFF" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Clear Data"
+                android:textColor="#FFFFFF" android:textSize="12sp" />
         </LinearLayout>
 
     </GridLayout>
-    
+
+    <!-- ── Page 2: Downloads mini panel ──────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/menuPageDownloads"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="180dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <!-- Mini list — populated programmatically -->
+        <LinearLayout
+            android:id="@+id/menuDlList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <!-- "Open full page" row -->
+        <LinearLayout
+            android:id="@+id/menuDlOpenPage"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_menu_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_download"
+                android:tint="#4A90D9" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:text="Open Downloads page"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/arrow_right"
+                android:tint="#888888" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
 </LinearLayout>

@@ -1,92 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ════════════════════════════════════════════════════════════ -->
-    <!-- Material 3 Color Palette - Modern & Professional -->
-    <!-- ════════════════════════════════════════════════════════════ -->
-    
-    <!-- Primary Colors - Deep Blue (Modern & Professional) -->
-    <color name="primary">#2563EB</color>
-    <color name="primary_variant">#1E40AF</color>
-    <color name="primary_light">#3B82F6</color>
-    <color name="primary_lighter">#60A5FA</color>
-    <color name="primary_lightest">#DBEAFE</color>
-    
-    <!-- Secondary Colors - Teal (Accent) -->
-    <color name="secondary">#0891B2</color>
-    <color name="secondary_variant">#0E7490</color>
-    <color name="secondary_light">#06B6D4</color>
-    <color name="secondary_lighter">#22D3EE</color>
-    <color name="secondary_lightest">#CFFAFE</color>
-    
-    <!-- Tertiary Colors - Amber (Warm Accent) -->
-    <color name="tertiary">#D97706</color>
-    <color name="tertiary_variant">#B45309</color>
-    <color name="tertiary_light">#F59E0B</color>
-    <color name="tertiary_lighter">#FBBF24</color>
-    <color name="tertiary_lightest">#FEF3C7</color>
-    
-    <!-- Neutral Colors - Grayscale -->
-    <color name="neutral_0">#FFFFFF</color>
-    <color name="neutral_50">#F9FAFB</color>
-    <color name="neutral_100">#F3F4F6</color>
-    <color name="neutral_150">#E5E7EB</color>
-    <color name="neutral_200">#D1D5DB</color>
-    <color name="neutral_300">#B4B8C1</color>
-    <color name="neutral_400">#9CA3AF</color>
-    <color name="neutral_500">#6B7280</color>
-    <color name="neutral_600">#4B5563</color>
-    <color name="neutral_700">#374151</color>
-    <color name="neutral_800">#1F2937</color>
-    <color name="neutral_850">#151B28</color>
-    <color name="neutral_900">#0F1419</color>
-    <color name="neutral_950">#050609</color>
-    
-    <!-- Dark Mode Backgrounds -->
-    <color name="dark_bg_primary">#0F1419</color>
-    <color name="dark_bg_secondary">#151B28</color>
-    <color name="dark_bg_tertiary">#1F2937</color>
-    <color name="dark_surface">#1F2937</color>
-    <color name="dark_surface_variant">#374151</color>
-    
-    <!-- Light Mode Backgrounds -->
-    <color name="light_bg_primary">#FFFFFF</color>
-    <color name="light_bg_secondary">#F9FAFB</color>
-    <color name="light_bg_tertiary">#F3F4F6</color>
-    <color name="light_surface">#FFFFFF</color>
-    <color name="light_surface_variant">#F3F4F6</color>
-    
-    <!-- Status Colors -->
-    <color name="success">#10B981</color>
-    <color name="success_light">#D1FAE5</color>
-    <color name="warning">#F59E0B</color>
-    <color name="warning_light">#FEF3C7</color>
-    <color name="error">#EF4444</color>
-    <color name="error_light">#FEE2E2</color>
-    <color name="info">#3B82F6</color>
-    <color name="info_light">#DBEAFE</color>
-    
-    <!-- Text Colors -->
-    <color name="text_primary">#0F1419</color>
-    <color name="text_secondary">#4B5563</color>
-    <color name="text_tertiary">#9CA3AF</color>
-    <color name="text_disabled">#B4B8C1</color>
-    <color name="text_on_primary">#FFFFFF</color>
-    <color name="text_on_secondary">#FFFFFF</color>
-    <color name="text_on_tertiary">#FFFFFF</color>
-    
-    <!-- Dark Mode Text -->
-    <color name="dark_text_primary">#F3F4F6</color>
-    <color name="dark_text_secondary">#B4B8C1</color>
-    <color name="dark_text_tertiary">#6B7280</color>
-    <color name="dark_text_disabled">#4B5563</color>
-    
-    <!-- Overlay & Scrim -->
-    <color name="scrim">#000000</color>
-    <color name="scrim_light">#00000033</color>
-    <color name="scrim_medium">#00000066</color>
-    <color name="scrim_dark">#000000CC</color>
-    
-    <!-- Legacy Support (for compatibility) -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
@@ -94,46 +7,11 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    
-    <!-- App-specific Colors -->
-    <color name="splash_background">@color/dark_bg_primary</color>
-    <color name="background">@color/dark_bg_primary</color>
-    <color name="input_background">#1F2937</color>
-    <color name="input_color">@color/dark_text_primary</color>
-    <color name="progress_color">@color/primary</color>
-    <color name="splash_icon_bg">@color/dark_bg_primary</color>
-    
-    <!-- Search Bar Colors -->
-    <color name="search_bg">#374151</color>
-    <color name="search_text">@color/dark_text_primary</color>
-    <color name="search_hint">@color/dark_text_tertiary</color>
-    <color name="search_border">#4B5563</color>
-    
-    <!-- Tab Colors -->
-    <color name="tab_active_bg">@color/primary</color>
-    <color name="tab_inactive_bg">#374151</color>
-    <color name="tab_text_active">@color/text_on_primary</color>
-    <color name="tab_text_inactive">@color/dark_text_secondary</color>
-    
-    <!-- Bottom Bar Colors -->
-    <color name="bottom_bar_bg">#151B28</color>
-    <color name="bottom_bar_icon_active">@color/primary</color>
-    <color name="bottom_bar_icon_inactive">@color/dark_text_secondary</color>
-    
-    <!-- Menu Colors -->
-    <color name="menu_bg">#1F2937</color>
-    <color name="menu_item_bg">#374151</color>
-    <color name="menu_item_text">@color/dark_text_primary</color>
-    <color name="menu_item_hover">#4B5563</color>
-    
-    <!-- Card Colors -->
-    <color name="card_bg">#1F2937</color>
-    <color name="card_border">#374151</color>
-    <color name="card_shadow">@color/scrim_dark</color>
-    
-    <!-- Bookmark Colors -->
-    <color name="bookmark_bg">#374151</color>
-    <color name="bookmark_text">@color/dark_text_primary</color>
-    <color name="bookmark_icon_bg">#4B5563</color>
-    
+
+    <color name="splash_background">#000000</color>
+    <color name="background">#000000</color>
+    <color name="input_background">#0d0d0d</color>
+    <color name="input_color">#e0e0e0</color>
+    <color name="progress_color">#333333</color>
+    <color name="splash_icon_bg">#000000</color>
 </resources>
