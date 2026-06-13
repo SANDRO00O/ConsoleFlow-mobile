@@ -56,7 +56,7 @@
             android:src="@drawable/ic_bookmarks"
             android:tint="@color/dark_text_secondary"
             android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBounded" />
+            android:background="?android:attr/selectableItemBackgroundBounded" />
         
         <!-- QR Scanner Button -->
         <ImageView
@@ -68,7 +68,7 @@
             android:src="@drawable/ic_qr"
             android:tint="@color/dark_text_secondary"
             android:focusable="true"
-            android:background="?attr/selectableItemBackgroundBounded" />
+            android:background="?android:attr/selectableItemBackgroundBounded" />
     </LinearLayout>
     
     <!-- ════════════════════════════════════════════════════════════ -->
@@ -170,7 +170,7 @@
             android:padding="@dimen/spacing_8"
             android:src="@drawable/arrow_left"
             android:tint="@color/dark_text_secondary"
-            android:background="?attr/selectableItemBackgroundBounded" />
+            android:background="?android:attr/selectableItemBackgroundBounded" />
         
         <!-- Next Button -->
         <ImageView
@@ -180,7 +180,7 @@
             android:padding="@dimen/spacing_8"
             android:src="@drawable/arrow_right"
             android:tint="@color/dark_text_secondary"
-            android:background="?attr/selectableItemBackgroundBounded" />
+            android:background="?android:attr/selectableItemBackgroundBounded" />
         
         <!-- Close Button -->
         <ImageView
@@ -190,7 +190,7 @@
             android:padding="@dimen/spacing_8"
             android:src="@drawable/close"
             android:tint="@color/dark_text_primary"
-            android:background="?attr/selectableItemBackgroundBounded" />
+            android:background="?android:attr/selectableItemBackgroundBounded" />
     </LinearLayout>
     
     <!-- ════════════════════════════════════════════════════════════ -->
@@ -243,7 +243,7 @@
                     android:src="@drawable/ic_add_group"
                     android:tint="@color/dark_text_secondary"
                     android:layout_marginEnd="@dimen/spacing_8"
-                    android:background="?attr/selectableItemBackgroundBounded" />
+                    android:background="?android:attr/selectableItemBackgroundBounded" />
                 
                 <!-- New Tab Button -->
                 <ImageView

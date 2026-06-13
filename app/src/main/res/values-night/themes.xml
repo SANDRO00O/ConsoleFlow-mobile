@@ -4,7 +4,7 @@
     <!-- Material 3 Night Theme - Modern & Professional -->
     <!-- ════════════════════════════════════════════════════════════ -->
     
-    <style name="AppTheme" parent="Theme.MaterialComponents.NoActionBar">
+    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Font Family -->
         <item name="android:fontFamily">@font/app_font_family</item>
         <item name="fontFamily">@font/app_font_family</item>

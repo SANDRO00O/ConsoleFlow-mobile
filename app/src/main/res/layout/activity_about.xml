@@ -410,7 +410,72 @@
                     android:layout_marginHorizontal="@dimen/settings_row_padding"
                     android:background="@color/card_border" />
                 
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/divider_height"
+                    android:layout_marginHorizontal="@dimen/settings_row_padding"
+                    android:background="@color/card_border" />
+
+                <!-- Privacy Policy -->
+                <LinearLayout
+                    android:id="@+id/linkPrivacy"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="@dimen/settings_row_padding"
+                    android:paddingVertical="@dimen/spacing_12"
+                    android:background="@drawable/menu_item_ripple">
+
+                    <ImageView
+                        android:layout_width="@dimen/icon_size"
+                        android:layout_height="@dimen/icon_size"
+                        android:src="@drawable/ic_settings"
+                        android:tint="@color/primary_light"
+                        android:scaleType="fitCenter" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="@dimen/spacing_16"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Privacy Policy"
+                            android:textColor="@color/dark_text_primary"
+                            android:textSize="@dimen/text_size_body_large"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="consoleflow.karrarnazim.space/privacy"
+                            android:textColor="@color/dark_text_secondary"
+                            android:textSize="@dimen/text_size_body_small"
+                            android:layout_marginTop="@dimen/spacing_4" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:layout_width="@dimen/icon_size_small"
+                        android:layout_height="@dimen/icon_size_small"
+                        android:src="@drawable/arrow_right"
+                        android:tint="@color/dark_text_tertiary"
+                        android:scaleType="fitCenter" />
+                </LinearLayout>
+
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/divider_height"
+                    android:layout_marginHorizontal="@dimen/settings_row_padding"
+                    android:background="@color/card_border" />
+
                 <!-- GitHub -->
+
                 <LinearLayout
                     android:id="@+id/linkGithub"
                     android:layout_width="match_parent"
