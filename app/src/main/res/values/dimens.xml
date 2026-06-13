@@ -72,6 +72,7 @@
     <dimen name="tab_corner_radius">12dp</dimen>
     <dimen name="tab_card_height">280dp</dimen>
     <dimen name="tab_card_width">240dp</dimen>
+    <dimen name="tab_card_corner_radius">16dp</dimen>
     
     <!-- Menu -->
     <dimen name="menu_margin">@dimen/spacing_16</dimen>
@@ -93,11 +94,17 @@
     <dimen name="find_bar_padding">@dimen/spacing_12</dimen>
     
     <!-- Settings Screen -->
-    <dimen name="settings_top_bar_height">64dp</dimen>
+    <dimen name="settings_top_bar_height">72dp</dimen>
     <dimen name="settings_padding">@dimen/spacing_16</dimen>
     <dimen name="settings_section_margin_top">@dimen/spacing_24</dimen>
     <dimen name="settings_row_height">56dp</dimen>
     <dimen name="settings_row_padding">@dimen/spacing_16</dimen>
+    
+    <!-- Status Indicators -->
+    <dimen name="status_dot_size">10dp</dimen>
+    
+    <!-- About Page -->
+    <dimen name="about_banner_height">64dp</dimen>
     
     <!-- Text Sizes -->
     <dimen name="text_size_display_large">32sp</dimen>
@@ -147,4 +154,12 @@
     <dimen name="bottom_sheet_handle_height">4dp</dimen>
     <dimen name="bottom_sheet_padding">@dimen/spacing_16</dimen>
     
+    <!-- Corner Radius System -->
+    <dimen name="corner_radius_none">0dp</dimen>
+    <dimen name="corner_radius_extra_small">4dp</dimen>
+    <dimen name="corner_radius_small">8dp</dimen>
+    <dimen name="corner_radius_medium">12dp</dimen>
+    <dimen name="corner_radius_large">16dp</dimen>
+    <dimen name="corner_radius_extra_large">28dp</dimen>
+
 </resources>

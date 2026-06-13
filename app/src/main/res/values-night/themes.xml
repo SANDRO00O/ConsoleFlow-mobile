@@ -47,7 +47,7 @@
         
         <!-- Material Components -->
         <item name="materialButtonStyle">@style/ButtonPrimary</item>
-        <item name="materialCardViewStyle">@style/CardElevated</item>
+        <item name="materialCardViewStyle">@style/Card.Elevated</item>
         <item name="switchStyle">@style/SwitchTheme</item>
         
         <!-- Bottom Sheet -->
