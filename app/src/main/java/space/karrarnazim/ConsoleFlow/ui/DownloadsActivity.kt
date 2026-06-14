@@ -100,15 +100,45 @@ class DownloadsActivity : AppCompatActivity() {
             }
         }
 
+    // Pending reset job for the "Clear done" → "Clear" transition
+    private var clearResetRunnable: Runnable? = null
+    private val clearHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
         // Hidden by default — shown only when there's something to clear
         clearBtn = TextView(this).apply {
-            text = "Clear done"
+            text = "Clear"
             textSize = 13f
             setTextColor(cPrimary)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = roundedBg(cSurface, 20f)
             visibility = View.GONE
-            setOnClickListener { DownloadTracker.clearFinished() }
+            setOnClickListener {
+                // 1. Show "Clear done" immediately
+                this.text = "Clear done"
+                setTextColor(cSuccess)
+
+                // 2. Cancel any pending reset
+                clearResetRunnable?.let { clearHandler.removeCallbacks(it) }
+
+                // 3. Actually clear the list
+                DownloadTracker.clearFinished()
+
+                // 4. After 2s, fade back to "Clear" (or hide if nothing left)
+                clearResetRunnable = Runnable {
+                    animate()
+                        .alpha(0f)
+                        .setDuration(200)
+                        .withEndAction {
+                            text = "Clear"
+                            setTextColor(cPrimary)
+                            // visibility is controlled by render() — if nothing left it stays gone
+                            alpha = 1f
+                        }
+                        .start()
+                    clearResetRunnable = null
+                }
+                clearHandler.postDelayed(clearResetRunnable!!, 2000)
+            }
         }
 
         bar.addView(back)
@@ -168,13 +198,16 @@ class DownloadsActivity : AppCompatActivity() {
         scrollView.visibility  = View.VISIBLE
         emptyLayout.visibility = View.GONE
 
-        // Show "Clear done" only when there's at least one finished item
+        // Show "Clear" only when there's at least one finished item
+        // Don't override text if we're currently showing the "Clear done" feedback
         val hasFinished = items.any {
             it.state == DownloadState.COMPLETED ||
             it.state == DownloadState.FAILED    ||
             it.state == DownloadState.CANCELLED
         }
-        clearBtn.visibility = if (hasFinished) View.VISIBLE else View.GONE
+        if (clearBtn.visibility == View.GONE || clearBtn.text == "Clear") {
+            clearBtn.visibility = if (hasFinished) View.VISIBLE else View.GONE
+        }
 
         container.removeAllViews()
         items.reversed().forEach { container.addView(buildCard(it)) }

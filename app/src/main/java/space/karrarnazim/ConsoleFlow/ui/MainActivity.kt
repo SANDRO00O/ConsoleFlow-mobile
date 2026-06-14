@@ -696,10 +696,22 @@ class MainActivity : AppCompatActivity() {
         content.addView(topRow)
 
         val topAction = ImageView(this).apply {
+            setImageResource(R.drawable.logo_consoleflow)
+            layoutParams = LinearLayout.LayoutParams(
+                (180 * dp).toInt(),
+                (34 * dp).toInt()
+            ).apply { marginEnd = (8 * dp).toInt() }
+            scaleType = ImageView.ScaleType.FIT_START
+            alpha = 0.95f
+        }
+        topRow.addView(topAction)
+        topRow.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
+
+        val settingsBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
             setColorFilter(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams((40*dp).toInt(), (40*dp).toInt())
-            alpha = 0.95f
+            alpha = 0.85f
             setPadding((9*dp).toInt(), (9*dp).toInt(), (9*dp).toInt(), (9*dp).toInt())
             setBackgroundResource(R.drawable.bottom_btn_ripple)
             scaleType = ImageView.ScaleType.FIT_CENTER
@@ -708,8 +720,7 @@ class MainActivity : AppCompatActivity() {
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
         }
-        topRow.addView(topAction)
-        topRow.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) })
+        topRow.addView(settingsBtn)
 
         val searchBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
