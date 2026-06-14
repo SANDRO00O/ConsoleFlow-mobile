@@ -698,8 +698,8 @@ class MainActivity : AppCompatActivity() {
         val topAction = ImageView(this).apply {
             setImageResource(R.drawable.logo_consoleflow)
             layoutParams = LinearLayout.LayoutParams(
-                (180 * dp).toInt(),
-                (34 * dp).toInt()
+                (130 * dp).toInt(),
+                (25 * dp).toInt()
             ).apply { marginEnd = (8 * dp).toInt() }
             scaleType = ImageView.ScaleType.FIT_START
             alpha = 0.95f
