@@ -50,6 +50,7 @@
 - **Bookmarks & History:** Built-in local storage manager for your favorite sites and browsing history.
 - **Native Downloads:** Integrated with Android's native `DownloadManager` for stable file downloading.
 - **Sleek UI:** Custom dark-themed start page, error pages, menus, and Android 12+ Splash Screen support.
+- **Full TV Support:** Optimized for Android TV and TV remotes, with complete controller, keyboard, mouse, and remote navigation support.
 
 ## Tech Stack & Libraries
 

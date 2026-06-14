@@ -30,7 +30,6 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:hardwareAccelerated="true"
-        android:banner="@drawable/tv_banner"
         android:usesCleartextTraffic="true">
 
         <activity
