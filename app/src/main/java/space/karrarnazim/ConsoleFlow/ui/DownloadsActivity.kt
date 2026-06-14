@@ -30,6 +30,8 @@ class DownloadsActivity : AppCompatActivity() {
     private lateinit var emptyLayout: LinearLayout
     private lateinit var scrollView: ScrollView
     private lateinit var clearBtn: TextView   // shown/hidden dynamically
+    private var clearResetRunnable: Runnable? = null
+    private val clearHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,10 +101,6 @@ class DownloadsActivity : AppCompatActivity() {
                 marginStart = dp(4)
             }
         }
-
-    // Pending reset job for the "Clear done" → "Clear" transition
-    private var clearResetRunnable: Runnable? = null
-    private val clearHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
         // Hidden by default — shown only when there's something to clear
         clearBtn = TextView(this).apply {
