@@ -241,12 +241,13 @@ class MainActivity : AppCompatActivity() {
                 // new navigation was overwriting the visible address bar text,
                 // bookmark icon, and topBar visibility — even while the user was
                 // looking at (or typing in) a completely different tab.
-                if (tabId != activeTabId) return@onPageStartedUi
-                keepCursorAlive()
-                progressBar.visibility = View.VISIBLE
-                textUrl.setText(if (isHomeUrl(url)) "" else url)
-                updateBookmarkIcon(url ?: "")
-                if (isHomeUrl(url)) setTopBarVisible(false) else setTopBarVisible(true)
+                if (tabId == activeTabId) {
+                    keepCursorAlive()
+                    progressBar.visibility = View.VISIBLE
+                    textUrl.setText(if (isHomeUrl(url)) "" else url)
+                    updateBookmarkIcon(url ?: "")
+                    if (isHomeUrl(url)) setTopBarVisible(false) else setTopBarVisible(true)
+                }
             },
             onProgressChangedUi = { tabId, progress ->
                 // BUG-K FIX: a background tab loading must not update the active
