@@ -64,13 +64,30 @@ class CursorController(private val activity: Activity) {
         val decor = activity.window.decorView as ViewGroup
         decor.addView(view, FrameLayout.LayoutParams(SIZE, SIZE))
         // نُحدّد أبعاد الشاشة بعد انتهاء layout pass
-        decor.post {
-            screenW = decor.width.toFloat()
-            screenH = decor.height.toFloat()
-            posX    = screenW / 2f
-            posY    = screenH / 2f
-            applyPosition()
-        }
+        decor.post { refreshScreenBounds(centerCursor = true) }
+    }
+
+    /**
+     * يُعاد قياس أبعاد الشاشة وتحديث حدود حركة المؤشر.
+     *
+     * BUG-Q FIX: MainActivity يُعلن configChanges لـ orientation/screenSize
+     * (لتجنّب إعادة إنشاء الـ Activity وفقدان حالة WebView عند الدوران)،
+     * لكن screenW/screenH كانا يُضبطان مرة واحدة فقط في attach() ولا
+     * يُحدَّثان أبداً بعد ذلك. نتيجة الدوران: المؤشر يبقى محصوراً بأبعاد
+     * الاتجاه القديم — قد يخرج فعلياً عن حدود الشاشة الجديدة أو يُحرَم من
+     * الوصول لمساحة الشاشة الجديدة. هذه الدالة تُستدعى من
+     * onConfigurationChanged في MainActivity.
+     */
+    fun refreshScreenBounds(centerCursor: Boolean = false) {
+        val decor = activity.window.decorView as? ViewGroup ?: return
+        val w = decor.width.toFloat()
+        val h = decor.height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        screenW = w
+        screenH = h
+        posX = if (centerCursor) screenW / 2f else posX.coerceIn(RADIUS, screenW - RADIUS)
+        posY = if (centerCursor) screenH / 2f else posY.coerceIn(RADIUS, screenH - RADIUS)
+        applyPosition()
     }
 
     fun detach() {

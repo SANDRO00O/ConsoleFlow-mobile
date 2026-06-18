@@ -1,7 +1,6 @@
 package space.karrarnazim.ConsoleFlow
 
 import android.net.Uri
-import android.util.Patterns
 import android.webkit.URLUtil
 import androidx.annotation.DrawableRes
 import java.net.URLEncoder
@@ -26,22 +25,6 @@ fun isLocalhostUrl(input: String?): Boolean {
     }.getOrDefault("")
     return host in LOCALHOST_HOSTS
 }
-
-fun normalizeNavigationInput(input: String): String {
-    val trimmed = input.trim()
-    if (trimmed.isEmpty()) return trimmed
-    return when {
-        trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("file:") -> trimmed
-        isLocalhostUrl(trimmed) -> if (trimmed.startsWith("localhost") || trimmed.startsWith("127.") || trimmed.startsWith("10.0.2.2") || trimmed.startsWith("::1")) {
-            "http://$trimmed"
-        } else {
-            trimmed
-        }
-        Patterns.WEB_URL.matcher(trimmed).matches() -> "https://$trimmed"
-        else -> trimmed
-    }
-}
-
 
 fun resolveSearchEngineKind(engineUrl: String?): SearchEngineKind {
     val url = engineUrl.orEmpty().lowercase()

@@ -123,6 +123,9 @@ class SettingsActivity : AppCompatActivity() {
                     .remove("ACTIVE_TAB")
                     .remove("NEXT_TAB_ID")
                     .remove("NEXT_GROUP_ID")
+                    // BUG-5 FIX: signal MainActivity.onResume() to also clear the
+                    // in-memory WebView cache/history that we can't reach from here.
+                    .putBoolean("pending_full_clear", true)
                     .apply()
                 cacheDir.listFiles()?.forEach { file ->
                     if (file.name.startsWith("thumb_") && file.name.endsWith(".webp"))       file.delete()
