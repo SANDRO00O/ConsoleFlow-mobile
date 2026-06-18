@@ -33,6 +33,7 @@ open class SettingsRepository(context: Context) {
         return prefs.getBoolean(key, defaultValue)
     }
 
+    @Synchronized
     fun addHistory(title: String, url: String) {
         if (url == "about:blank" || url == "error://page" || url.startsWith("error://")) return
         val historyArray = getList("history")

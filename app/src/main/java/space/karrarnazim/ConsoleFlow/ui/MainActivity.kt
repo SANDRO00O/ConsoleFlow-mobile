@@ -52,7 +52,16 @@ class MainActivity : AppCompatActivity() {
 
     // ── واجهة المستخدم ──────────────────────────────────────────────────────
     private lateinit var webViewContainer: FrameLayout
-    private val webViews = mutableMapOf<Int, WebView>()
+    // BUG-AA FIX: ensureWebViewForTab's eviction picks
+    // `webViews.keys.firstOrNull { it != activeTabId }` and the comment there
+    // calls it "LRU eviction" — but a plain mutableMapOf() (insertion-order
+    // LinkedHashMap) made that pick the OLDEST-CREATED tab, not the least
+    // recently used one. A tab opened early but revisited constantly was the
+    // first eviction candidate, while one opened recently and never touched
+    // again stayed alive forever. accessOrder=true bumps an entry to the end
+    // on every get()/put(), so the entry actually at the front is genuinely
+    // the least-recently-used one — matching what the eviction code assumes.
+    private val webViews = LinkedHashMap<Int, WebView>(16, 0.75f, true)
     private val currentWebView: WebView? get() = webViews[activeTabId]
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
@@ -101,6 +110,8 @@ class MainActivity : AppCompatActivity() {
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPermissionRequest: PermissionRequest? = null
+    // BUG-N FIX: holds the pending callback while the system file picker is open
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
 
     // ── القائمة السفلية المخزنة مؤقتاً ─────────────────────────────────────
     private var cachedMenuSheet: BottomSheetDialog? = null
@@ -176,6 +187,21 @@ class MainActivity : AppCompatActivity() {
         transcript?.let { query -> if (query.isNotBlank()) navigateTo(query) }
     }
 
+    // BUG-N FIX: completes the <input type="file"> flow started by onShowFileChooser
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        val uris: Array<Uri>? = when {
+            result.resultCode != RESULT_OK || data == null -> null
+            data.clipData != null -> Array(data.clipData!!.itemCount) { i -> data.clipData!!.getItemAt(i).uri }
+            data.data != null -> arrayOf(data.data!!)
+            else -> null
+        }
+        filePathCallback?.onReceiveValue(uris)
+        filePathCallback = null
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  دورة حياة النشاط
     // ─────────────────────────────────────────────────────────────────────────
@@ -209,15 +235,23 @@ class MainActivity : AppCompatActivity() {
             onInvalidateHomePreviewCache = { invalidateHomePreviewCache() },
             onNavigate = { navigateTo(it) },
             onSetSwipeRefresh = { enabled -> swipeRefresh.isEnabled = enabled },
-            onPageStartedUi = { _, _, url ->
+            onPageStartedUi = { tabId, _, url ->
+                // BUG-L FIX (critical): this callback fires for EVERY tab, including
+                // background ones. Without this guard, a background tab starting a
+                // new navigation was overwriting the visible address bar text,
+                // bookmark icon, and topBar visibility — even while the user was
+                // looking at (or typing in) a completely different tab.
+                if (tabId != activeTabId) return@onPageStartedUi
                 keepCursorAlive()
                 progressBar.visibility = View.VISIBLE
                 textUrl.setText(if (isHomeUrl(url)) "" else url)
                 updateBookmarkIcon(url ?: "")
                 if (isHomeUrl(url)) setTopBarVisible(false) else setTopBarVisible(true)
             },
-            onProgressChangedUi = { _, progress ->
-                progressBar.progress = progress
+            onProgressChangedUi = { tabId, progress ->
+                // BUG-K FIX: a background tab loading must not update the active
+                // tab's progress bar. Only apply when the tab is the current one.
+                if (tabId == activeTabId) progressBar.progress = progress
             },
             onShowCustomViewUi = { view, callback ->
                 customView = view
@@ -232,12 +266,44 @@ class MainActivity : AppCompatActivity() {
                 hideCustomView()
             },
             onPermissionRequestUi = { request ->
+                // BUG-V FIX (critical): this previously only did
+                // `webPermissionRequest = request` and stopped — the registered
+                // requestPermissionLauncher was never actually launched anywhere
+                // in the file. Every getUserMedia() call from a web page (camera/
+                // mic — video calls, WebRTC demos, voice input forms…) just hung
+                // forever: no system dialog, no grant, no deny, no error.
                 webPermissionRequest = request
+                val androidPerms = request?.resources?.mapNotNull {
+                    when (it) {
+                        PermissionRequest.RESOURCE_VIDEO_CAPTURE -> android.Manifest.permission.CAMERA
+                        PermissionRequest.RESOURCE_AUDIO_CAPTURE -> android.Manifest.permission.RECORD_AUDIO
+                        else -> null
+                    }
+                }?.distinct().orEmpty()
+
+                when {
+                    request == null -> Unit
+                    androidPerms.isEmpty() ->
+                        // No dangerous Android permission maps to this resource
+                        // (e.g. protected media ID, MIDI sysex) — safe to grant directly.
+                        request.grant(request.resources)
+                    androidPerms.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED } ->
+                        request.grant(request.resources)
+                    else ->
+                        requestPermissionLauncher.launch(androidPerms.toTypedArray())
+                }
             },
             onPageFinishedUi = { tabId, view, url ->
-                keepCursorAlive()
-                swipeRefresh.isRefreshing = false
-                progressBar.visibility = View.INVISIBLE
+                // BUG-2 FIX: only touch UI state for the currently visible tab.
+                // A background tab finishing load must not hide the active tab's
+                // progress bar or reset its pull-to-refresh indicator.
+                val isActiveTab = view == currentWebView
+
+                if (isActiveTab) {
+                    keepCursorAlive()
+                    swipeRefresh.isRefreshing = false
+                    progressBar.visibility = View.INVISIBLE
+                }
 
                 url?.let { pageUrl ->
                     if (!isHomeUrl(pageUrl)) {
@@ -254,11 +320,18 @@ class MainActivity : AppCompatActivity() {
                             tab.thumbnailUrl = HOME_URL
                         }
                     }
+
+                    // BUG-1 FIX: when goBack() (or any navigation) returns the active
+                    // WebView to about:blank, show the home overlay instead of leaving
+                    // a blank white WebView visible.
+                    if (isActiveTab && isHomeUrl(pageUrl)) showHomeOverlay()
+
                     refreshTabsRecycler()
                     savePersistentTabs()
                 }
 
-                if (prefsManager.desktopMode) {
+                // Desktop-mode viewport hack: only needed for the visible tab.
+                if (isActiveTab && prefsManager.desktopMode) {
                     view.evaluateJavascript(
                         "(function(){" +
                             "var meta=document.querySelector('meta[name=\"viewport\"]');" +
@@ -280,6 +353,23 @@ class MainActivity : AppCompatActivity() {
             onApplyConsoleTools = { view -> applyConsoleTools(view) },
             onDownloadStart = { url, userAgent, contentDisposition, mimeType, contentLength ->
                 handleDownloadRequest(url, userAgent, contentDisposition, mimeType, contentLength)
+            },
+            onShowFileChooserUi = { callback, params ->
+                // BUG-N FIX: launch the system file/image/camera picker so
+                // <input type="file"> actually works instead of doing nothing.
+                filePathCallback?.onReceiveValue(null)
+                filePathCallback = callback
+                val intent = params?.createIntent()
+                if (intent != null) {
+                    val launched = runCatching { fileChooserLauncher.launch(intent) }.isSuccess
+                    if (!launched) {
+                        filePathCallback = null
+                        Toast.makeText(this, "No file picker app available", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    filePathCallback = null
+                }
+                true
             }
         )
 
@@ -312,9 +402,19 @@ class MainActivity : AppCompatActivity() {
                 tabGroups.clear()
                 tabGroups.addAll(savedGroups)
                 activeGroupId = savedInstanceState.getInt("ACTIVE_GROUP_ID", tabGroups.first().id)
+                // BUG-W FIX: fall back to a real group if the saved id doesn't
+                // match any restored group (defensive — currentGroup would
+                // otherwise be null and the rest of this block silently no-ops).
+                if (tabGroups.none { it.id == activeGroupId }) activeGroupId = tabGroups.first().id
                 activeTabId   = savedInstanceState.getInt("ACTIVE_TAB_ID",   tabGroups.first().tabs.firstOrNull()?.id ?: 0)
                 nextTabId     = savedInstanceState.getInt("NEXT_TAB_ID", 100)
                 nextGroupId   = savedInstanceState.getInt("NEXT_GROUP_ID", 100)
+
+                // BUG-W FIX: mirrors loadPersistentTabs' self-heal (BUG-M) for a
+                // restored active group with zero tabs — without this, no
+                // WebView is ever created/attached below, leaving only the
+                // home overlay floating over an empty webViewContainer.
+                if (currentGroup?.tabs.isNullOrEmpty()) sessionManager.createNewTab(HOME_URL)
 
                 val activeTab = currentGroup?.tabs?.find { it.id == activeTabId }
                     ?: currentGroup?.tabs?.firstOrNull()
@@ -382,6 +482,23 @@ class MainActivity : AppCompatActivity() {
         updateSearchEngineIcon()
         keepCursorAlive()
 
+        // BUG-5 FIX: SettingsActivity's "Clear Data" can't access the live WebViews,
+        // so it sets a flag. We honour it here where we have full access.
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean("pending_full_clear", false)) {
+            prefs.edit().remove("pending_full_clear").apply()
+            clearData()
+        }
+
+        // BUG-R FIX: the user-agent / viewport settings are applied to a WebView
+        // once, at creation time (BrowserWebViewFactory). Toggling "Desktop Mode"
+        // from SettingsActivity only wrote a SharedPreferences value — any tab
+        // that was already open kept its old user-agent forever (the toggle
+        // looked like it simply didn't work). Re-sync every live WebView here;
+        // applyUserAgentToWebView is idempotent so this is a no-op when nothing
+        // changed.
+        webViews.values.forEach { WebViewSettingsHelper.applyUserAgentToWebView(this, it, prefsManager.desktopMode) }
+
         val root = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
@@ -432,6 +549,18 @@ class MainActivity : AppCompatActivity() {
         inputController.release()
         cursorController.detach()
         super.onDestroy()
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // BUG-Q FIX: MainActivity declares configChanges for orientation/screenSize
+        // so it is never recreated on rotation (intentional — avoids reloading
+        // every open WebView). But nothing was refreshing the virtual cursor's
+        // screen bounds, which were captured once in CursorController.attach().
+        // Wait for the new layout pass so decorView.width/height are accurate.
+        if (::cursorController.isInitialized) {
+            window.decorView.post { cursorController.refreshScreenBounds() }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -525,6 +654,11 @@ class MainActivity : AppCompatActivity() {
     // FIX #4 — invalidate يُستدعى عند تغيير البيانات (bookmarks / search engine)
     private fun invalidateHomePreviewCache() {
         homePreviewBitmapCache = null
+        // BUG-7 FIX: also clear stale home-preview bitmaps cached inside TabState
+        // objects so the tabs overlay shows the refreshed home preview immediately.
+        tabGroups.forEach { group ->
+            group.tabs.filter { isHomeUrl(it.url) }.forEach { it.ramThumbnail = null }
+        }
     }
 
     fun getHomePreviewBitmap(force: Boolean = false): Bitmap {
@@ -933,7 +1067,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         buttonRow.addView(makeButton("Retry") { hideNativeOverlays(); currentWebView?.reload() })
-        buttonRow.addView(makeButton("Home")  { showHomeOverlay() })
+        buttonRow.addView(makeButton("Home")  { goHome() })
         buttonRow.addView(makeButton("Close") { hideNativeOverlays() })
 
         val updateUrlText = {
@@ -1018,6 +1152,15 @@ private fun savePersistentTabs() {
 
     fun loadPersistentTabs(intentUrl: String?) {
         if (sessionManager.restoreFromStorage(this) && sessionManager.tabGroups.isNotEmpty()) {
+            // BUG-M FIX: self-heal a corrupted/stale save where the active
+            // group ended up with zero tabs (e.g. an old app version, or a
+            // manually edited prefs file). Without this, activeTab below is
+            // null, ensureWebViewForTab is never called, and the app boots
+            // into a fully blank screen — no WebView, no overlay, nothing.
+            if (currentGroup?.tabs.isNullOrEmpty()) {
+                sessionManager.createNewTab(HOME_URL)
+            }
+
             val activeGroupTabs = currentGroup?.tabs
             val preferredTabId = activeTabId
             val activeTab = activeGroupTabs?.find { it.id == preferredTabId } ?: activeGroupTabs?.firstOrNull()
@@ -1026,6 +1169,9 @@ private fun savePersistentTabs() {
             if (activeTab != null) {
                 val wv = ensureWebViewForTab(activeTab)
                 if (webViewContainer.indexOfChild(wv) == -1) webViewContainer.addView(wv)
+                // BUG-3 FIX: request focus so TV remote / keyboard / gamepad events
+                // are delivered to the WebView immediately on cold start.
+                wv.requestFocus()
             }
 
             updateGroupsUI()
@@ -1087,15 +1233,25 @@ private fun savePersistentTabs() {
                                     Toast.makeText(context, "Cannot delete the last group", Toast.LENGTH_SHORT).show()
                                     return@showModernPopup
                                 }
+                                val wasActiveGroup = activeGroupId == group.id
                                 group.tabs.forEach { t ->
                                     ioExecutor.execute { File(cacheDir, "thumb_${t.id}.webp").delete() }
                                     webViews[t.id]?.destroy()
                                     webViews.remove(t.id)
                                 }
                                 tabGroups.remove(group)
-                                if (activeGroupId == group.id) {
+
+                                if (wasActiveGroup) {
+                                    // BUG-H FIX: previously only activeGroupId/activeTabId
+                                    // were updated here. The just-destroyed WebView stayed
+                                    // attached as the visible child of webViewContainer —
+                                    // a frozen screen, and any later goBack()/loadUrl() on it
+                                    // throws "WebView cannot be used after destroy()".
+                                    // switchToTab() does the full job: creates/attaches the
+                                    // new tab's WebView and refreshes the whole UI.
                                     activeGroupId = tabGroups.first().id
-                                    activeTabId   = currentGroup?.tabs?.firstOrNull()?.id ?: 0
+                                    val newActiveTab = currentGroup?.tabs?.firstOrNull()
+                                    if (newActiveTab != null) switchToTab(newActiveTab) else openNewTab(HOME_URL)
                                 }
                                 sanitizeActiveTabSelection()
                                 updateGroupsUI(); refreshTabsRecycler(); savePersistentTabs()
@@ -1412,7 +1568,7 @@ private fun savePersistentTabs() {
 
         findViewById<View>(R.id.btnBackArea).setOnClickListener    { currentWebView?.let { if (it.canGoBack())    it.goBack()    } }
         findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward()) it.goForward() } }
-        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { showHomeOverlay() }
+        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { goHome() }
 
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
             if (tabsOverlay.visibility == View.VISIBLE) {
@@ -1480,11 +1636,25 @@ private fun savePersistentTabs() {
         loadUrlInstantly(finalUrl)
     }
 
+    /**
+     * BUG-Z FIX: single source of truth for "go home". Previously
+     * showHomeOverlay() was called directly from btnHomeArea and the
+     * gamepad/remote Home shortcut WITHOUT navigating the underlying
+     * WebView — the overlay appeared, but the old page stayed loaded
+     * underneath and reappeared unchanged on Back (and the tab's
+     * title/thumbnail never updated to reflect "home"). Only
+     * loadUrlInstantly's home branch paired the two correctly; this makes
+     * that the one place that defines what "home" actually means.
+     */
+    private fun goHome() {
+        showHomeOverlay()
+        currentWebView?.loadUrl(HOME_URL)
+        textUrl.setText("")
+    }
+
     private fun loadUrlInstantly(url: String) {
         if (isHomeUrl(url)) {
-            showHomeOverlay()
-            currentWebView?.loadUrl(HOME_URL)
-            textUrl.setText("")
+            goHome()
             return
         }
         setTopBarVisible(true)
@@ -1549,6 +1719,16 @@ private fun savePersistentTabs() {
                 currentWebView?.setFindListener { ord, total, _ ->
                     findViewById<TextView>(R.id.findMatches).text =
                         if (total > 0) "${ord + 1}/$total" else "0/0"
+                }
+                // BUG-O FIX: focus + show keyboard immediately, matching the
+                // behaviour of the keyboard/gamepad "find" shortcut
+                // (InputController.toggleFind) — previously this menu entry
+                // left the bar visible but required an extra manual tap.
+                val fi = findViewById<EditText>(R.id.findInput)
+                fi.requestFocus()
+                fi.post {
+                    (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                        .showSoftInput(fi, InputMethodManager.SHOW_IMPLICIT)
                 }
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuDesktopMode)?.setOnClickListener {
@@ -1908,20 +2088,6 @@ private fun savePersistentTabs() {
 
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  جسر JavaScript
-    // ─────────────────────────────────────────────────────────────────────────
-
-    inner class SearchBridge {
-        @JavascriptInterface
-        fun navigate(input: String) { runOnUiThread { navigateTo(input) } }
-
-        @JavascriptInterface
-        fun setSwipeRefresh(enabled: Boolean) {
-            mainHandler.post { swipeRefresh.isEnabled = enabled }
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
     //  Input Controller — TV remote · Gamepad · Keyboard · Mouse
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -1962,7 +2128,7 @@ private fun savePersistentTabs() {
                 currentWebView?.let { if (it.canGoForward()) it.goForward() }
             }
 
-            override fun navigateHome() = showHomeOverlay()
+            override fun navigateHome() = goHome()
 
             override fun openNewTab() = this@MainActivity.openNewTab()
 
