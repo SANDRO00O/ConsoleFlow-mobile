@@ -55,6 +55,16 @@ class SettingsActivity : AppCompatActivity() {
             switchDesktop.isChecked = !switchDesktop.isChecked
         }
 
+        // search suggestions
+        val switchSuggestions = findViewById<SwitchCompat>(R.id.switchSuggestions)
+        switchSuggestions.isChecked = prefsManager.suggestionsEnabled
+        switchSuggestions.setOnCheckedChangeListener { _, checked ->
+            prefsManager.suggestionsEnabled = checked
+        }
+        findViewById<View>(R.id.settingSearchSuggestions).setOnClickListener {
+            switchSuggestions.isChecked = !switchSuggestions.isChecked
+        }
+
         // custom JS
         findViewById<View>(R.id.settingCustomJs).setOnClickListener { showCustomJsDialog() }
 
