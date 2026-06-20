@@ -71,6 +71,20 @@
         </LinearLayout>
     </FrameLayout>
     
+    <!-- Search Suggestions — appears below topBar and overlays the WebView.
+         Placed last so ConstraintLayout paints it above all other children. -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/suggestionsRecycler"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_suggestions"
+        android:elevation="8dp"
+        android:nestedScrollingEnabled="false"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topBar" />
+
     <!-- ══ Bottom Navigation Bar: Back │ Forward │ Home │ Tabs │ Menu ══ -->
     <LinearLayout android:id="@+id/bottomBar" android:layout_width="match_parent" android:layout_height="56dp" android:background="#000000" android:orientation="horizontal" android:gravity="center_vertical" app:layout_constraintBottom_toBottomOf="parent">
         

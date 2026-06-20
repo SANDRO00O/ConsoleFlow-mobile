@@ -37,6 +37,7 @@ import androidx.core.content.*
 import androidx.core.view.*
 import androidx.recyclerview.widget.*
 import androidx.swiperefreshlayout.widget.*
+import space.karrarnazim.ConsoleFlow.ui.adapters.SuggestionsAdapter
 import com.google.android.material.bottomsheet.*
 import com.google.android.material.dialog.*
 import com.google.android.material.floatingactionbutton.*
@@ -73,6 +74,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var findBar: LinearLayout
     private lateinit var bottomBar: LinearLayout
     private lateinit var fullscreenContainer: FrameLayout
+
+    // ── Search Suggestions ───────────────────────────────────────────────────
+    private val suggestionsManager = SearchSuggestionsManager()
+    private lateinit var suggestionsAdapter: SuggestionsAdapter
+    private lateinit var suggestionsRecycler: RecyclerView
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
@@ -441,6 +447,11 @@ class MainActivity : AppCompatActivity() {
             when {
                 tabsOverlay.visibility == View.VISIBLE -> { tabsOverlay.visibility = View.GONE; keepCursorAlive() }
                 nativeOverlayContainer.visibility == View.VISIBLE -> hideNativeOverlays()
+                // Dismiss the suggestion dropdown before any deeper back action.
+                // Without this, Back while suggestions are open would skip them
+                // and trigger history-back or finish() instead.
+                ::suggestionsRecycler.isInitialized
+                    && suggestionsRecycler.visibility == View.VISIBLE -> hideSuggestions()
                 topBar.visibility == View.VISIBLE && isHomeUrl(currentWebView?.url) -> setTopBarVisible(false)
                 customView != null -> hideCustomView()
                 findBar.visibility == View.VISIBLE -> {
@@ -546,6 +557,9 @@ class MainActivity : AppCompatActivity() {
         }
         webViews.clear()
         ioExecutor.shutdown()
+        // Cancel any in-flight / debounced suggestion fetch so the OkHttp
+        // callback can't post to the main handler after the Activity is gone.
+        suggestionsManager.cancel()
         cachedMenuSheet?.dismiss()
         inputController.release()
         cursorController.detach()
@@ -585,6 +599,27 @@ class MainActivity : AppCompatActivity() {
         tabCount               = findViewById(R.id.tabCount)
         nativeOverlayContainer = findViewById(R.id.nativeOverlayContainer)
         tabGroupsContainer     = findViewById(R.id.tabGroupsContainer)
+        suggestionsRecycler    = findViewById(R.id.suggestionsRecycler)
+
+        // ── Search Suggestions setup ─────────────────────────────────────
+        suggestionsAdapter = SuggestionsAdapter(
+            context    = this,
+            onNavigate = { suggestion ->
+                hideSuggestions()
+                hideKeyboard()
+                navigateTo(suggestion)
+            },
+            onFill = { suggestion ->
+                // Fill bar without navigating — user can continue editing
+                textUrl.setText(suggestion)
+                textUrl.setSelection(suggestion.length)
+            }
+        )
+        suggestionsRecycler.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter       = suggestionsAdapter
+            itemAnimator  = null   // no flicker on fast typing
+        }
 
         buildNativeOverlays()
         setTopBarVisible(false, immediate = true)
@@ -715,6 +750,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun setTopBarVisible(visible: Boolean, immediate: Boolean = false) {
         keepCursorAlive()
+        // Suggestions belong to the topBar — dismiss them whenever it hides.
+        if (!visible && ::suggestionsRecycler.isInitialized) hideSuggestions()
         if (immediate) {
             topBar.alpha      = if (visible) 1f else 0f
             topBar.visibility = if (visible) View.VISIBLE else View.GONE
@@ -1545,7 +1582,34 @@ private fun savePersistentTabs() {
         swipeRefresh.setOnRefreshListener { currentWebView?.reload() }
 
         textUrl.setOnEditorActionListener { _, _, _ ->
-            navigateTo(textUrl.text.toString().trim()); hideKeyboard(); true
+            hideSuggestions()
+            navigateTo(textUrl.text.toString().trim())
+            hideKeyboard()
+            true
+        }
+
+        // ── Search Suggestions — TextWatcher ─────────────────────────────
+        textUrl.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int)      = Unit
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val query = s?.toString()?.trim() ?: ""
+                if (!prefsManager.suggestionsEnabled || !textUrl.hasFocus()) {
+                    hideSuggestions(); return
+                }
+                if (query.length < 2) { hideSuggestions(); return }
+                val engineKind = resolveSearchEngineKind(prefsManager.searchEngine)
+                suggestionsManager.fetchDebounced(query, engineKind) { list ->
+                    if (list.isEmpty()) { hideSuggestions(); return@fetchDebounced }
+                    suggestionsAdapter.items = list
+                    suggestionsRecycler.visibility = View.VISIBLE
+                }
+            }
+        })
+
+        // Hide suggestions when the bar loses focus
+        textUrl.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) hideSuggestions()
         }
 
         textUrl.setOnLongClickListener {
@@ -1992,6 +2056,14 @@ private fun savePersistentTabs() {
         if (token != null) {
             (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
                 .hideSoftInputFromWindow(token, 0)
+        }
+    }
+
+    /** Dismiss the suggestions dropdown and cancel any in-flight fetch. */
+    private fun hideSuggestions() {
+        suggestionsManager.cancel()
+        if (::suggestionsRecycler.isInitialized && suggestionsRecycler.visibility != View.GONE) {
+            suggestionsRecycler.visibility = View.GONE
         }
     }
 

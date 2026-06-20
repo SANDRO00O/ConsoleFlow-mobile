@@ -28,6 +28,10 @@ open class SettingsRepository(context: Context) {
         get() = prefs.getBoolean("console_enabled", false)
         set(value) = prefs.edit().putBoolean("console_enabled", value).apply()
 
+    var suggestionsEnabled: Boolean
+        get() = prefs.getBoolean("suggestions_enabled", true)   // on by default
+        set(value) = prefs.edit().putBoolean("suggestions_enabled", value).apply()
+
     // ✅ الدالة المضافة حديثًا لحل خطأ "Unresolved reference: getBoolean"
     fun getBoolean(key: String, defaultValue: Boolean): Boolean {
         return prefs.getBoolean(key, defaultValue)
