@@ -26,9 +26,9 @@ import space.karrarnazim.ConsoleFlow.R
 class SuggestionsAdapter(
     private val context: Context,
     /** Called when the user taps a row — should navigate immediately. */
-    private val onNavigate: (String) -> Unit,
+    var onNavigate: (String) -> Unit,
     /** Called when the user taps the fill arrow — paste into bar only. */
-    private val onFill: (String) -> Unit
+    var onFill: (String) -> Unit
 ) : RecyclerView.Adapter<SuggestionsAdapter.VH>() {
 
     var items: List<String> = emptyList()

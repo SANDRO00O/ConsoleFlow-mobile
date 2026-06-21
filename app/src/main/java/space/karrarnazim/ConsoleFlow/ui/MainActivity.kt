@@ -78,7 +78,10 @@ class MainActivity : AppCompatActivity() {
     // ── Search Suggestions ───────────────────────────────────────────────────
     private val suggestionsManager = SearchSuggestionsManager()
     private lateinit var suggestionsAdapter: SuggestionsAdapter
-    private lateinit var suggestionsRecycler: RecyclerView
+    private lateinit var suggestionsRecycler: RecyclerView   // lives INSIDE suggestionsPopup
+    private var suggestionsPopup: android.widget.PopupWindow? = null
+    /** Reference to the home-overlay search bar so we can anchor suggestions to it. */
+    private var homeSearchInput: EditText? = null
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
@@ -448,10 +451,7 @@ class MainActivity : AppCompatActivity() {
                 tabsOverlay.visibility == View.VISIBLE -> { tabsOverlay.visibility = View.GONE; keepCursorAlive() }
                 nativeOverlayContainer.visibility == View.VISIBLE -> hideNativeOverlays()
                 // Dismiss the suggestion dropdown before any deeper back action.
-                // Without this, Back while suggestions are open would skip them
-                // and trigger history-back or finish() instead.
-                ::suggestionsRecycler.isInitialized
-                    && suggestionsRecycler.visibility == View.VISIBLE -> hideSuggestions()
+                suggestionsPopup?.isShowing == true -> hideSuggestions()
                 topBar.visibility == View.VISIBLE && isHomeUrl(currentWebView?.url) -> setTopBarVisible(false)
                 customView != null -> hideCustomView()
                 findBar.visibility == View.VISIBLE -> {
@@ -599,7 +599,42 @@ class MainActivity : AppCompatActivity() {
         tabCount               = findViewById(R.id.tabCount)
         nativeOverlayContainer = findViewById(R.id.nativeOverlayContainer)
         tabGroupsContainer     = findViewById(R.id.tabGroupsContainer)
-        suggestionsRecycler    = findViewById(R.id.suggestionsRecycler)
+
+        // ── Search Suggestions: create adapter + PopupWindow ─────────────
+        // The RecyclerView lives INSIDE the PopupWindow so it can anchor to
+        // ANY input — the top-bar textUrl OR the home-overlay search bar —
+        // without being constrained to a fixed position in the layout XML.
+        suggestionsAdapter = SuggestionsAdapter(
+            context    = this,
+            onNavigate = { suggestion ->
+                hideSuggestions()
+                hideKeyboard()
+                navigateTo(suggestion)
+            },
+            onFill = { suggestion ->
+                // Fill whichever input is currently focused without navigating
+                val active = currentFocus as? EditText ?: textUrl
+                active.setText(suggestion)
+                active.setSelection(suggestion.length)
+            }
+        )
+        suggestionsRecycler = RecyclerView(this).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter       = suggestionsAdapter
+            itemAnimator  = null
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        suggestionsPopup = android.widget.PopupWindow(
+            suggestionsRecycler,
+            android.view.WindowManager.LayoutParams.MATCH_PARENT,
+            android.view.WindowManager.LayoutParams.WRAP_CONTENT,
+            false          // isFocusable=false → the EditText keeps focus while popup is open
+        ).apply {
+            setBackgroundDrawable(ContextCompat.getDrawable(this@MainActivity, R.drawable.bg_suggestions))
+            elevation      = 8f
+            isTouchable    = true
+            isOutsideTouchable = false  // outside taps pass through to views below
+        }
 
         // ── Search Suggestions setup ─────────────────────────────────────
         suggestionsAdapter = SuggestionsAdapter(
@@ -620,7 +655,6 @@ class MainActivity : AppCompatActivity() {
             adapter       = suggestionsAdapter
             itemAnimator  = null   // no flicker on fast typing
         }
-
         buildNativeOverlays()
         setTopBarVisible(false, immediate = true)
 
@@ -751,7 +785,7 @@ class MainActivity : AppCompatActivity() {
     private fun setTopBarVisible(visible: Boolean, immediate: Boolean = false) {
         keepCursorAlive()
         // Suggestions belong to the topBar — dismiss them whenever it hides.
-        if (!visible && ::suggestionsRecycler.isInitialized) hideSuggestions()
+        if (!visible) hideSuggestions()
         if (immediate) {
             topBar.alpha      = if (visible) 1f else 0f
             topBar.visibility = if (visible) View.VISIBLE else View.GONE
@@ -935,7 +969,37 @@ class MainActivity : AppCompatActivity() {
                 } else false
             }
         }
+        // Keep a reference so the TextWatcher below can anchor the popup to it
+        homeSearchInput = searchInput
         searchBar.addView(searchInput)
+
+        // ── Suggestions for the home-page search bar ──────────────────────
+        // Before showing, we swap the adapter's onFill to paste into searchInput
+        // (the top-bar TextWatcher swaps it back to textUrl before its own show).
+        searchInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int)      = Unit
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val query = s?.toString()?.trim() ?: ""
+                if (!prefsManager.suggestionsEnabled || !searchInput.hasFocus()) {
+                    hideSuggestions(); return
+                }
+                if (query.length < 2) { hideSuggestions(); return }
+                val engineKind = resolveSearchEngineKind(prefsManager.searchEngine)
+                suggestionsManager.fetchDebounced(query, engineKind) { list ->
+                    if (list.isEmpty()) { hideSuggestions(); return@fetchDebounced }
+                    suggestionsAdapter.onFill = { suggestion ->
+                        searchInput.setText(suggestion)
+                        searchInput.setSelection(suggestion.length)
+                    }
+                    suggestionsAdapter.items = list
+                    showSuggestionsFor(searchInput)
+                }
+            }
+        })
+        searchInput.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) hideSuggestions()
+        }
 
         fun searchActionButton(iconRes: Int? = null, bitmap: Bitmap? = null,
                                 sizeDp: Int = 40, onClick: () -> Unit): ImageView {
@@ -1601,13 +1665,17 @@ private fun savePersistentTabs() {
                 val engineKind = resolveSearchEngineKind(prefsManager.searchEngine)
                 suggestionsManager.fetchDebounced(query, engineKind) { list ->
                     if (list.isEmpty()) { hideSuggestions(); return@fetchDebounced }
+                    suggestionsAdapter.onFill = { suggestion ->
+                        textUrl.setText(suggestion)
+                        textUrl.setSelection(suggestion.length)
+                    }
                     suggestionsAdapter.items = list
-                    suggestionsRecycler.visibility = View.VISIBLE
+                    showSuggestionsFor(textUrl)
                 }
             }
         })
 
-        // Hide suggestions when the bar loses focus
+        // Hide suggestions when the top-bar loses focus
         textUrl.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) hideSuggestions()
         }
@@ -2062,9 +2130,22 @@ private fun savePersistentTabs() {
     /** Dismiss the suggestions dropdown and cancel any in-flight fetch. */
     private fun hideSuggestions() {
         suggestionsManager.cancel()
-        if (::suggestionsRecycler.isInitialized && suggestionsRecycler.visibility != View.GONE) {
-            suggestionsRecycler.visibility = View.GONE
+        suggestionsPopup?.dismiss()
+    }
+
+    /**
+     * Show the suggestions dropdown anchored below [anchor].
+     * The PopupWindow's MATCH_PARENT width fills the full screen width,
+     * and showAsDropDown() positions it immediately below the anchor view.
+     * Works for both the top-bar URL field and the home-overlay search bar.
+     */
+    private fun showSuggestionsFor(anchor: View) {
+        suggestionsAdapter.items.let { if (it.isEmpty()) return }
+        if (suggestionsPopup?.isShowing == true) {
+            suggestionsPopup?.update()   // refresh position/size only
+            return
         }
+        suggestionsPopup?.showAsDropDown(anchor, 0, 0)
     }
 
     private fun hideCustomView() {
