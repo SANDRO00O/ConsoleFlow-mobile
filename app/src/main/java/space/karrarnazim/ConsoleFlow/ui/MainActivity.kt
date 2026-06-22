@@ -75,13 +75,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bottomBar: LinearLayout
     private lateinit var fullscreenContainer: FrameLayout
 
-    // ── Search Suggestions ───────────────────────────────────────────────────
+    // ── Search Overlay (full-screen, shown on URL bar tap) ──────────────────
     private val suggestionsManager = SearchSuggestionsManager()
     private lateinit var suggestionsAdapter: SuggestionsAdapter
-    private lateinit var suggestionsRecycler: RecyclerView   // lives INSIDE suggestionsPopup
-    private var suggestionsPopup: android.widget.PopupWindow? = null
-    /** Reference to the home-overlay search bar so we can anchor suggestions to it. */
-    private var homeSearchInput: EditText? = null
+    private lateinit var suggestionsRecycler: RecyclerView
+    /** Root container of the full-screen search overlay, added programmatically. */
+    private var searchOverlayContainer: FrameLayout? = null
+    private lateinit var overlaySearchInput: EditText
+    private lateinit var overlayClearBtn: ImageView
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
@@ -450,8 +451,8 @@ class MainActivity : AppCompatActivity() {
             when {
                 tabsOverlay.visibility == View.VISIBLE -> { tabsOverlay.visibility = View.GONE; keepCursorAlive() }
                 nativeOverlayContainer.visibility == View.VISIBLE -> hideNativeOverlays()
-                // Dismiss the suggestion dropdown before any deeper back action.
-                suggestionsPopup?.isShowing == true -> hideSuggestions()
+                // Dismiss the search overlay before any deeper back action.
+                searchOverlayContainer?.visibility == View.VISIBLE -> hideSearchOverlay()
                 topBar.visibility == View.VISIBLE && isHomeUrl(currentWebView?.url) -> setTopBarVisible(false)
                 customView != null -> hideCustomView()
                 findBar.visibility == View.VISIBLE -> {
@@ -600,61 +601,21 @@ class MainActivity : AppCompatActivity() {
         nativeOverlayContainer = findViewById(R.id.nativeOverlayContainer)
         tabGroupsContainer     = findViewById(R.id.tabGroupsContainer)
 
-        // ── Search Suggestions: create adapter + PopupWindow ─────────────
-        // The RecyclerView lives INSIDE the PopupWindow so it can anchor to
-        // ANY input — the top-bar textUrl OR the home-overlay search bar —
-        // without being constrained to a fixed position in the layout XML.
+        // ── Search Overlay: adapter initialised here; the View tree is built
+        //    lazily in buildSearchOverlay() the first time showSearchOverlay() fires,
+        //    because at this point the root ConstraintLayout isn't fully measured yet.
         suggestionsAdapter = SuggestionsAdapter(
             context    = this,
             onNavigate = { suggestion ->
-                hideSuggestions()
-                hideKeyboard()
+                hideSearchOverlay()
                 navigateTo(suggestion)
             },
             onFill = { suggestion ->
-                // Fill whichever input is currently focused without navigating
-                val active = currentFocus as? EditText ?: textUrl
-                active.setText(suggestion)
-                active.setSelection(suggestion.length)
+                overlaySearchInput.setText(suggestion)
+                overlaySearchInput.setSelection(suggestion.length)
             }
         )
-        suggestionsRecycler = RecyclerView(this).apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter       = suggestionsAdapter
-            itemAnimator  = null
-            overScrollMode = View.OVER_SCROLL_NEVER
-        }
-        suggestionsPopup = android.widget.PopupWindow(
-            suggestionsRecycler,
-            android.view.WindowManager.LayoutParams.MATCH_PARENT,
-            android.view.WindowManager.LayoutParams.WRAP_CONTENT,
-            false          // isFocusable=false → the EditText keeps focus while popup is open
-        ).apply {
-            setBackgroundDrawable(ContextCompat.getDrawable(this@MainActivity, R.drawable.bg_suggestions))
-            elevation      = 8f
-            isTouchable    = true
-            isOutsideTouchable = false  // outside taps pass through to views below
-        }
 
-        // ── Search Suggestions setup ─────────────────────────────────────
-        suggestionsAdapter = SuggestionsAdapter(
-            context    = this,
-            onNavigate = { suggestion ->
-                hideSuggestions()
-                hideKeyboard()
-                navigateTo(suggestion)
-            },
-            onFill = { suggestion ->
-                // Fill bar without navigating — user can continue editing
-                textUrl.setText(suggestion)
-                textUrl.setSelection(suggestion.length)
-            }
-        )
-        suggestionsRecycler.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter       = suggestionsAdapter
-            itemAnimator  = null   // no flicker on fast typing
-        }
         buildNativeOverlays()
         setTopBarVisible(false, immediate = true)
 
@@ -784,8 +745,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun setTopBarVisible(visible: Boolean, immediate: Boolean = false) {
         keepCursorAlive()
-        // Suggestions belong to the topBar — dismiss them whenever it hides.
-        if (!visible) hideSuggestions()
+        // Search overlay belongs to the URL bar — close it when the bar hides.
+        if (!visible) hideSearchOverlay()
         if (immediate) {
             topBar.alpha      = if (visible) 1f else 0f
             topBar.visibility = if (visible) View.VISIBLE else View.GONE
@@ -958,48 +919,12 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.TRANSPARENT)
             setPadding((12*dp).toInt(), 0, (8*dp).toInt(), 0)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            imeOptions  = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
-            inputType   = android.text.InputType.TYPE_CLASS_TEXT or
-                          android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-            setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
-                    val query = text.toString().trim()
-                    if (query.isNotEmpty()) navigateTo(query)
-                    hideKeyboard(); true
-                } else false
-            }
+            // Display-only — tapping it opens the full-screen search overlay
+            isFocusable           = false
+            isFocusableInTouchMode = false
+            setOnClickListener { showSearchOverlay("") }
         }
-        // Keep a reference so the TextWatcher below can anchor the popup to it
-        homeSearchInput = searchInput
         searchBar.addView(searchInput)
-
-        // ── Suggestions for the home-page search bar ──────────────────────
-        // Before showing, we swap the adapter's onFill to paste into searchInput
-        // (the top-bar TextWatcher swaps it back to textUrl before its own show).
-        searchInput.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int)      = Unit
-            override fun afterTextChanged(s: android.text.Editable?) {
-                val query = s?.toString()?.trim() ?: ""
-                if (!prefsManager.suggestionsEnabled || !searchInput.hasFocus()) {
-                    hideSuggestions(); return
-                }
-                if (query.length < 2) { hideSuggestions(); return }
-                val engineKind = resolveSearchEngineKind(prefsManager.searchEngine)
-                suggestionsManager.fetchDebounced(query, engineKind) { list ->
-                    if (list.isEmpty()) { hideSuggestions(); return@fetchDebounced }
-                    suggestionsAdapter.onFill = { suggestion ->
-                        searchInput.setText(suggestion)
-                        searchInput.setSelection(suggestion.length)
-                    }
-                    suggestionsAdapter.items = list
-                    showSuggestionsFor(searchInput)
-                }
-            }
-        })
-        searchInput.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) hideSuggestions()
-        }
 
         fun searchActionButton(iconRes: Int? = null, bitmap: Bitmap? = null,
                                 sizeDp: Int = 40, onClick: () -> Unit): ImageView {
@@ -1646,38 +1571,18 @@ private fun savePersistentTabs() {
         swipeRefresh.setOnRefreshListener { currentWebView?.reload() }
 
         textUrl.setOnEditorActionListener { _, _, _ ->
-            hideSuggestions()
-            navigateTo(textUrl.text.toString().trim())
-            hideKeyboard()
+            // textUrl is now display-only; typing happens inside the search overlay.
+            // If somehow an action fires here, open the overlay.
+            showSearchOverlay(textUrl.text.toString().trim())
             true
         }
 
-        // ── Search Suggestions — TextWatcher ─────────────────────────────
-        textUrl.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int)      = Unit
-            override fun afterTextChanged(s: android.text.Editable?) {
-                val query = s?.toString()?.trim() ?: ""
-                if (!prefsManager.suggestionsEnabled || !textUrl.hasFocus()) {
-                    hideSuggestions(); return
-                }
-                if (query.length < 2) { hideSuggestions(); return }
-                val engineKind = resolveSearchEngineKind(prefsManager.searchEngine)
-                suggestionsManager.fetchDebounced(query, engineKind) { list ->
-                    if (list.isEmpty()) { hideSuggestions(); return@fetchDebounced }
-                    suggestionsAdapter.onFill = { suggestion ->
-                        textUrl.setText(suggestion)
-                        textUrl.setSelection(suggestion.length)
-                    }
-                    suggestionsAdapter.items = list
-                    showSuggestionsFor(textUrl)
-                }
-            }
-        })
-
-        // Hide suggestions when the top-bar loses focus
-        textUrl.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) hideSuggestions()
+        // textUrl is a display-only field — tapping it opens the full-screen
+        // search overlay (pre-filled with the current URL so the user can edit it).
+        textUrl.isFocusable          = false
+        textUrl.isFocusableInTouchMode = false
+        textUrl.setOnClickListener {
+            showSearchOverlay(textUrl.text.toString().trim())
         }
 
         textUrl.setOnLongClickListener {
@@ -2127,25 +2032,203 @@ private fun savePersistentTabs() {
         }
     }
 
-    /** Dismiss the suggestions dropdown and cancel any in-flight fetch. */
-    private fun hideSuggestions() {
-        suggestionsManager.cancel()
-        suggestionsPopup?.dismiss()
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Full-Screen Search Overlay
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Build the full-screen search overlay once, add it to the window's
+     * content view (above everything else) and store the reference.
+     *
+     * Called lazily the first time showSearchOverlay() runs so the
+     * root ConstraintLayout is already attached and measured.
+     */
+    private fun buildSearchOverlay() {
+        if (searchOverlayContainer != null) return
+        val dp  = resources.displayMetrics.density
+        val ctx = this
+
+        // ── RecyclerView for suggestions ─────────────────────────────────
+        suggestionsRecycler = RecyclerView(ctx).apply {
+            layoutManager = LinearLayoutManager(ctx)
+            adapter       = suggestionsAdapter
+            itemAnimator  = null
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+
+        // ── Header row (same height as the top bar — 56 dp) ─────────────
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity     = Gravity.CENTER_VERTICAL
+            setBackgroundColor(0xFF0D0D0D.toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (56 * dp).toInt()
+            )
+        }
+
+        val btnBack = ImageView(ctx).apply {
+            setImageResource(R.drawable.ic_back_arrow)
+            imageTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
+            scaleType     = ImageView.ScaleType.CENTER
+            layoutParams  = LinearLayout.LayoutParams((52 * dp).toInt(),
+                LinearLayout.LayoutParams.MATCH_PARENT)
+            background    = ContextCompat.getDrawable(ctx, R.drawable.bottom_btn_ripple)
+            setOnClickListener { hideSearchOverlay() }
+        }
+
+        val searchIconInBar = ImageView(ctx).apply {
+            val sz = (20 * dp).toInt()
+            setImageResource(R.drawable.ic_search)
+            imageTintList = ColorStateList.valueOf(0xFF666666.toInt())
+            scaleType     = ImageView.ScaleType.CENTER_INSIDE
+            layoutParams  = LinearLayout.LayoutParams(sz, sz).also {
+                it.gravity = Gravity.CENTER_VERTICAL
+            }
+        }
+
+        overlaySearchInput = EditText(ctx).apply {
+            hint      = "Search or type URL"
+            setHintTextColor(0xFF555555.toInt())
+            setTextColor(0xFFFFFFFF.toInt())
+            textSize  = 16f
+            setSingleLine(true)
+            background = null
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH or
+                         android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+            inputType  = android.text.InputType.TYPE_CLASS_TEXT or
+                         android.text.InputType.TYPE_TEXT_VARIATION_URI
+            layoutParams = LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f).also {
+                it.gravity    = Gravity.CENTER_VERTICAL
+                it.marginStart = (10 * dp).toInt()
+                it.marginEnd   = (4 * dp).toInt()
+            }
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+                    actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO) {
+                    val q = text.toString().trim()
+                    if (q.isNotEmpty()) { hideSearchOverlay(); navigateTo(q) }
+                    true
+                } else false
+            }
+        }
+
+        overlayClearBtn = ImageView(ctx).apply {
+            setImageResource(R.drawable.ic_clear)
+            imageTintList = ColorStateList.valueOf(0xFF888888.toInt())
+            scaleType     = ImageView.ScaleType.CENTER
+            layoutParams  = LinearLayout.LayoutParams((48 * dp).toInt(),
+                LinearLayout.LayoutParams.MATCH_PARENT)
+            background    = ContextCompat.getDrawable(ctx, R.drawable.bottom_btn_ripple)
+            visibility    = View.INVISIBLE
+            setOnClickListener {
+                overlaySearchInput.setText("")
+                overlaySearchInput.requestFocus()
+            }
+        }
+
+        header.addView(btnBack)
+        header.addView(searchIconInBar)
+        header.addView(overlaySearchInput)
+        header.addView(overlayClearBtn)
+
+        // ── Thin divider ─────────────────────────────────────────────────
+        val divider = View(ctx).apply {
+            setBackgroundColor(0xFF1C1C1C.toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (1 * dp).toInt().coerceAtLeast(1)
+            )
+        }
+
+        // ── Content stack ────────────────────────────────────────────────
+        val vstack = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            addView(header)
+            addView(divider)
+            addView(suggestionsRecycler)
+        }
+
+        // ── Root container ───────────────────────────────────────────────
+        val container = FrameLayout(ctx).apply {
+            setBackgroundColor(0xFF000000.toInt())
+            visibility = View.GONE
+            addView(vstack)
+        }
+
+        // Add as the highest-z child of the Activity's root view
+        val rootContent = window.decorView
+            .findViewById<ViewGroup>(android.R.id.content)
+        rootContent.addView(container, ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        searchOverlayContainer = container
+
+        // ── TextWatcher: fetch suggestions while typing ──────────────────
+        overlaySearchInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {
+                overlayClearBtn.visibility =
+                    if (s.isNullOrEmpty()) View.INVISIBLE else View.VISIBLE
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val query = s?.toString()?.trim() ?: ""
+                if (!prefsManager.suggestionsEnabled || query.length < 2) {
+                    suggestionsAdapter.items = emptyList(); return
+                }
+                val kind = resolveSearchEngineKind(prefsManager.searchEngine)
+                suggestionsManager.fetchDebounced(query, kind) { list ->
+                    suggestionsAdapter.items = list
+                }
+            }
+        })
     }
 
     /**
-     * Show the suggestions dropdown anchored below [anchor].
-     * The PopupWindow's MATCH_PARENT width fills the full screen width,
-     * and showAsDropDown() positions it immediately below the anchor view.
-     * Works for both the top-bar URL field and the home-overlay search bar.
+     * Show the full-screen search overlay, optionally pre-filling with [prefill].
+     * The overlay slides up (40 dp) and fades in over 200 ms.
      */
-    private fun showSuggestionsFor(anchor: View) {
-        suggestionsAdapter.items.let { if (it.isEmpty()) return }
-        if (suggestionsPopup?.isShowing == true) {
-            suggestionsPopup?.update()   // refresh position/size only
-            return
-        }
-        suggestionsPopup?.showAsDropDown(anchor, 0, 0)
+    fun showSearchOverlay(prefill: String = "") {
+        buildSearchOverlay()
+        val container = searchOverlayContainer ?: return
+
+        container.visibility = View.VISIBLE
+        container.alpha      = 0f
+        container.translationY = resources.displayMetrics.density * 40f
+        container.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(200)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+
+        overlaySearchInput.setText(prefill)
+        overlaySearchInput.requestFocus()
+        overlaySearchInput.setSelection(prefill.length)
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+            .showSoftInput(overlaySearchInput, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    /**
+     * Dismiss the search overlay with a fade-out / slide-down animation.
+     */
+    fun hideSearchOverlay() {
+        suggestionsManager.cancel()
+        suggestionsAdapter.items = emptyList()
+        val container = searchOverlayContainer ?: return
+        if (container.visibility != View.VISIBLE) return
+        hideKeyboard()
+        container.animate()
+            .alpha(0f)
+            .translationY(resources.displayMetrics.density * 40f)
+            .setDuration(160)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction { container.visibility = View.GONE }
+            .start()
     }
 
     private fun hideCustomView() {

@@ -48,16 +48,16 @@ class SuggestionsAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val dp = context.resources.displayMetrics.density
 
-        // ── left icon (magnifying glass) ──────────────────────────────────
+        // ── left icon (clean search / magnifying glass) ───────────────────
         val icon = ImageView(context).apply {
-            val size = (18 * dp).toInt()
+            val size = (20 * dp).toInt()
             layoutParams = LinearLayout.LayoutParams(size, size).also { lp ->
                 lp.gravity    = Gravity.CENTER_VERTICAL
                 lp.marginStart = (16 * dp).toInt()
                 lp.marginEnd  = (12 * dp).toInt()
             }
-            setImageResource(R.drawable.ic_find)
-            imageTintList = ColorStateList.valueOf(0xFF666666.toInt())
+            setImageResource(R.drawable.ic_search)
+            imageTintList = ColorStateList.valueOf(0xFF555555.toInt())
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
 
