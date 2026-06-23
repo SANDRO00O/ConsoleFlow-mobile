@@ -43,8 +43,14 @@
 ## Features
 
 - **Auto-Injected Web Console:** Automatically injects Eruda into web pages for seamless mobile debugging.
+- **Smart Interception (Anti-CAPTCHA):** Bypasses interception for major search engines (Google, Bing, DuckDuckGo) to prevent annoying CAPTCHAs.
+- **Desktop Mode:** One-tap switch to a real desktop user agent and viewport.
 - **Custom JS Injection:** Add your own custom JavaScript to be executed automatically on every page load.
-- **Full controller's support:** Optimized for Android TV and TV remotes, with complete controller, keyboard, mouse, and remote navigation support.
+- **Find in Page:** Easily search for specific text within any webpage.
+- **Bookmarks & History:** Built-in local storage manager for your favorite sites and browsing history.
+- **Native Downloads:** Integrated with Android's native `DownloadManager` for stable file downloading.
+- **Sleek UI:** Custom dark-themed start page, error pages, menus, and Android 12+ Splash Screen support.
+- **Full TV Support:** Optimized for Android TV and TV remotes, with complete controller, keyboard, mouse, and remote navigation support.
 
 ## Installation
 

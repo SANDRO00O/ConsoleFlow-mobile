@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Suggestion row background — used instead of bottom_btn_ripple because
+    ripple drawables don't show focus highlights on Android TV (D-pad navigation).
+    This state list covers both worlds:
+      focused  → solid highlight (TV D-pad selection)
+      pressed  → darker solid   (touch tap feedback)
+      default  → transparent
+    Compatible with API 21+ (all SDK versions ConsoleFlow targets).
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:state_pressed="false">
+        <shape android:shape="rectangle">
+            <solid android:color="#2A2A2A" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#1E1E1E" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>
