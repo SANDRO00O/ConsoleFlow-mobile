@@ -36,7 +36,9 @@ class DownloadService : Service() {
     private val notifIdGen  = AtomicInteger(NOTIF_BASE)
 
     private val notifManager: NotificationManager by lazy {
-        getSystemService(NotificationManager::class.java)!!
+        // getSystemService(Class<T>) is API 23+. The string-based variant
+        // works on all API levels including Android 5.1.1 (API 22).
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
 
     private val okClient = OkHttpClient.Builder()

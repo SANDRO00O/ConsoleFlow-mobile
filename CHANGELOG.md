@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.4.0 — Search Suggestions + Android TV / API 22 Support
+
+### New feature: Search Suggestions
+
+Typing in the address bar or the home page search bar now shows a live suggestions dropdown, the same way Chrome does.
+
+- Full-screen overlay slides up when you tap the search bar — a clean dedicated input UI rather than an inline autocomplete
+- Suggestions update as you type with a 300 ms debounce (no network hammering on every keystroke)
+- Each suggestion row has a **↗ fill** button: autofills the bar without navigating, so you can refine the query before committing
+- Supports all built-in search engines with their native suggestion APIs: Google (OpenSearch), DuckDuckGo (`type=list`), Bing (`osjson.aspx`), Brave
+- Stale-response guard: if you type faster than the network responds, outdated results are silently discarded
+- Back button or the ← arrow dismisses the overlay
+- Can be disabled in Settings → Browser → Search Suggestions
+
+### Android TV & API 22 compatibility
+
+- **`minSdk` lowered from 24 to 22** — the app now installs on Android 5.1.1 devices (including older Android TVs) that were previously rejected with a parse error
+- Explicit V1 (JAR) signing enabled for release builds — required for devices running Android < 7.0
+- Fixed `getSystemService(Class<T>)` call in `DownloadService` (API 23+, crashed silently on API 22)
+- Search overlay fully navigable with D-pad / TV remote:
+  - D-pad DOWN from the search bar moves focus to the first suggestion
+  - D-pad UP from the first suggestion row returns focus to the search bar
+  - D-pad CENTER / ENTER on a suggestion navigates immediately
+  - Back dismisses the overlay
+  - `InputController` is correctly bypassed while the overlay is visible
+
+### Bug fixes
+
+- Fixed animation race condition where rapidly opening/closing the search overlay could leave it permanently invisible
+- Fixed `UninitializedPropertyAccessException` crash on cold start when `hideSearchOverlay()` was called before `initViews()` finished
+- New `ic_search` icon (clean Material Design magnifying glass) replaces the zoom icon on suggestion rows
+
 ## v2.3.0 — Stability Release
 
 A full behavioral audit across the entire codebase. 29 real bugs found and fixed (several critical), plus dead code removal. No new features — this release exists purely to make every existing feature actually work correctly.

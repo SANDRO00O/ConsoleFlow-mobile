@@ -920,9 +920,9 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.TRANSPARENT)
             setPadding((12*dp).toInt(), 0, (8*dp).toInt(), 0)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            // Display-only — tapping it opens the full-screen search overlay
-            isFocusable           = false
+            // Display-only for typing; tapping or D-pad focusing opens the search overlay.
             isFocusableInTouchMode = false
+            setOnFocusChangeListener { _, hasFocus -> if (hasFocus) showSearchOverlay("") }
             setOnClickListener { showSearchOverlay("") }
         }
         searchBar.addView(searchInput)
@@ -1578,10 +1578,14 @@ private fun savePersistentTabs() {
             true
         }
 
-        // textUrl is a display-only field — tapping it opens the full-screen
-        // search overlay (pre-filled with the current URL so the user can edit it).
-        textUrl.isFocusable          = false
+        // textUrl is display-only for typing; tapping/D-pad focusing it opens
+        // the full-screen search overlay pre-filled with the current URL.
+        // isFocusableInTouchMode=false: touch triggers onClick, not focus.
+        // isFocusable=true: TV D-pad can land here and gain focus → overlay.
         textUrl.isFocusableInTouchMode = false
+        textUrl.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) showSearchOverlay(textUrl.text.toString().trim())
+        }
         textUrl.setOnClickListener {
             showSearchOverlay(textUrl.text.toString().trim())
         }
@@ -2055,7 +2059,17 @@ private fun savePersistentTabs() {
             adapter       = suggestionsAdapter
             itemAnimator  = null
             overScrollMode = View.OVER_SCROLL_NEVER
+            // TV: the RecyclerView itself must NOT be focusable.
+            // D-pad focus goes directly to individual item rows (isFocusable=true
+            // in SuggestionsAdapter). If the RecyclerView itself is focusable,
+            // D-pad stops here and never enters the list.
+            isFocusable = false
+            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
+
+        // Wire TV "UP on first row → back to search bar" callback now that
+        // overlaySearchInput will exist by the time the callback fires.
+        suggestionsAdapter.onBackToSearch = { overlaySearchInput.requestFocus() }
 
         // ── Header row (same height as the top bar — 56 dp) ─────────────
         val header = LinearLayout(ctx).apply {
@@ -2109,6 +2123,17 @@ private fun savePersistentTabs() {
                     actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO) {
                     val q = text.toString().trim()
                     if (q.isNotEmpty()) { hideSearchOverlay(); navigateTo(q) }
+                    true
+                } else false
+            }
+            // TV: D-pad DOWN from the search bar moves focus to the first suggestion.
+            // Android's default traversal would land on the RecyclerView container
+            // (if focusable), never on the items. We do it explicitly instead.
+            setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN
+                    && keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                    && suggestionsAdapter.itemCount > 0) {
+                    suggestionsRecycler.getChildAt(0)?.requestFocus() ?: false
                     true
                 } else false
             }
@@ -2221,13 +2246,9 @@ private fun savePersistentTabs() {
 
     fun hideSearchOverlay() {
         suggestionsManager.cancel()
-        // Guard: suggestionsAdapter is lateinit; hideSearchOverlay() can be
-        // called from setTopBarVisible() before initViews() runs.
         if (::suggestionsAdapter.isInitialized) suggestionsAdapter.items = emptyList()
         val container = searchOverlayContainer ?: return
         if (container.visibility != View.VISIBLE) return
-
-        // Cancel any in-progress show animation before starting the hide.
         container.animate().cancel()
         hideKeyboard()
         container.animate()
@@ -2235,7 +2256,12 @@ private fun savePersistentTabs() {
             .translationY(resources.displayMetrics.density * 40f)
             .setDuration(160)
             .setInterpolator(android.view.animation.AccelerateInterpolator())
-            .withEndAction { container.visibility = View.GONE }
+            .withEndAction {
+                container.visibility = View.GONE
+                // TV: move focus to WebView so D-pad focus does NOT drift back to
+                // textUrl/searchInput (which would immediately re-open the overlay).
+                currentWebView?.requestFocus()
+            }
             .start()
     }
 
@@ -2468,6 +2494,15 @@ private fun savePersistentTabs() {
             if (event.isFromSource(InputDevice.SOURCE_GAMEPAD) || event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_DPAD)) {
                 cursorArmed = true
             }
+
+            // When the search overlay is visible, ALL key events go directly to
+            // the focused view (EditText or suggestion row). InputController must
+            // not intercept them — DPAD_CENTER on a focused suggestion row must
+            // navigate to that suggestion, not call activateWebElement().
+            if (searchOverlayContainer?.visibility == View.VISIBLE) {
+                return super.dispatchKeyEvent(event)
+            }
+
             // When an EditText (URL bar, find bar) owns focus, only intercept:
             //   • Escape   → dismiss overlay
             //   • Ctrl+*   → browser shortcuts still work while typing
