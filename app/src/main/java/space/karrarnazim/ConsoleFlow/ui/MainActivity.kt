@@ -6,6 +6,7 @@ import android.app.Activity
 import android.content.*
 import android.content.ClipboardManager
 import android.content.pm.*
+import android.content.res.ColorStateList
 import android.graphics.*
 import android.graphics.drawable.*
 import android.net.*
@@ -2196,6 +2197,11 @@ private fun savePersistentTabs() {
         buildSearchOverlay()
         val container = searchOverlayContainer ?: return
 
+        // Cancel any in-progress hide animation before starting the show.
+        // Without this, the hide's withEndAction { visibility = GONE } fires
+        // AFTER we set visibility = VISIBLE, collapsing the overlay instantly.
+        container.animate().cancel()
+
         container.visibility = View.VISIBLE
         container.alpha      = 0f
         container.translationY = resources.displayMetrics.density * 40f
@@ -2213,14 +2219,16 @@ private fun savePersistentTabs() {
             .showSoftInput(overlaySearchInput, InputMethodManager.SHOW_IMPLICIT)
     }
 
-    /**
-     * Dismiss the search overlay with a fade-out / slide-down animation.
-     */
     fun hideSearchOverlay() {
         suggestionsManager.cancel()
-        suggestionsAdapter.items = emptyList()
+        // Guard: suggestionsAdapter is lateinit; hideSearchOverlay() can be
+        // called from setTopBarVisible() before initViews() runs.
+        if (::suggestionsAdapter.isInitialized) suggestionsAdapter.items = emptyList()
         val container = searchOverlayContainer ?: return
         if (container.visibility != View.VISIBLE) return
+
+        // Cancel any in-progress show animation before starting the hide.
+        container.animate().cancel()
         hideKeyboard()
         container.animate()
             .alpha(0f)
