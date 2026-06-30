@@ -9,10 +9,10 @@ compileSdk 35
 
 defaultConfig {
 applicationId "space.karrarnazim.ConsoleFlow"
-minSdk 24
+minSdk 22
 targetSdk 35
-versionCode 13
-versionName "2.2.8"
+versionCode 15
+versionName "2.4.0"
 }
 
 signingConfigs {
@@ -21,6 +21,11 @@ storeFile file(System.getenv("KEYSTORE_FILE") ?: "$rootDir/release.keystore")
 storePassword System.getenv("KEYSTORE_PASSWORD")
 keyAlias System.getenv("KEY_ALIAS")
 keyPassword System.getenv("KEY_PASSWORD")
+// V1 (JAR signing) is required for Android < 7.0 (API 24).
+// Without it, Android 5/6 shows "parse error" because V2-only APKs
+// cannot be verified on those devices.
+v1SigningEnabled true
+v2SigningEnabled true
 }
 }
 

@@ -212,8 +212,21 @@ class InputController(private val h: Handlers) {
                 }
             }
 
-            KeyEvent.KEYCODE_DPAD_CENTER -> {
-                if (overlayActive()) false else { activateWebElement(); true }
+            KeyEvent.KEYCODE_DPAD_CENTER -> when {
+                overlayActive() -> false
+                // BUG-P FIX: some gamepads (notably PS-style pads through
+                // generic Bluetooth HID adapters) report their confirm
+                // button as DPAD_CENTER rather than BUTTON_A. Without this
+                // check, pressing it while the virtual cursor was visible
+                // ignored the cursor entirely and activated whatever DOM
+                // element happened to have focus instead — clicking the
+                // wrong thing. Mirrors KEYCODE_BUTTON_A's own logic.
+                cursor?.isVisible == true -> {
+                    val handled = performCursorClick()
+                    cursor?.keepVisible()
+                    handled
+                }
+                else -> { activateWebElement(); true }
             }
 
             KeyEvent.KEYCODE_F5           -> { h.reload();           true }

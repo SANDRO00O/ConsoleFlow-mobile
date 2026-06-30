@@ -52,14 +52,6 @@
 - **Sleek UI:** Custom dark-themed start page, error pages, menus, and Android 12+ Splash Screen support.
 - **Full TV Support:** Optimized for Android TV and TV remotes, with complete controller, keyboard, mouse, and remote navigation support.
 
-## Tech Stack & Libraries
-
-- **Language:** Kotlin
-- **Network Interception:** OkHttp3
-- **Web Rendering:** android.webkit.WebView
-- **UI Components:** AndroidX, Material Design Components, SwipeRefreshLayout
-- **Dev Tools:** Eruda (Local Asset)
-
 ## Installation
 
 ConsoleFlow is ready to use right out of the box. 
@@ -84,18 +76,3 @@ Contributions are what make the open-source community such an amazing place to l
 3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
-
-## License
-
-Distributed under the MIT License. See `LICENSE` for more information.
-
-## Contact
-
-**Karrar Nazim** - [portfolio](https://karrarnazim.space)
-
-Project Link: [https://github.com/SANDRO00O/ConsoleFlow-mobile](https://github.com/SANDRO00O/ConsoleFlow-mobile)
-
----
-<div align="center">
-  <i>Karrar Nazim</i>
-</div>

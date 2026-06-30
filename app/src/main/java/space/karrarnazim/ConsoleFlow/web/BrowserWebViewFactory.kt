@@ -37,7 +37,8 @@ class BrowserWebViewFactory(
     private val onReceivedIconUi: (Int, Bitmap) -> Unit,
     private val onReceivedErrorUi: (String?) -> Unit,
     private val onApplyConsoleTools: (WebView) -> Unit,
-    private val onDownloadStart: (url: String, userAgent: String, contentDisposition: String, mimeType: String, contentLength: Long) -> Unit
+    private val onDownloadStart: (url: String, userAgent: String, contentDisposition: String, mimeType: String, contentLength: Long) -> Unit,
+    private val onShowFileChooserUi: (android.webkit.ValueCallback<Array<android.net.Uri>>?, WebChromeClient.FileChooserParams?) -> Boolean
 ) {
 
     @Suppress("SetJavaScriptEnabled")
@@ -126,7 +127,8 @@ class BrowserWebViewFactory(
             onReceivedIconUi = onReceivedIconUi,
             onShowCustomViewUi = onShowCustomViewUi,
             onHideCustomViewUi = onHideCustomViewUi,
-            onPermissionRequestUi = onPermissionRequestUi
+            onPermissionRequestUi = onPermissionRequestUi,
+            onShowFileChooserUi = onShowFileChooserUi
         )
 
         // ── Download listener ────────────────────────────────────────────────
