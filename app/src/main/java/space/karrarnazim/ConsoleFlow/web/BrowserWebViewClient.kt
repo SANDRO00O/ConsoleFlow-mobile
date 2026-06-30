@@ -94,22 +94,7 @@ class BrowserWebViewClient(
                             ""
                         )
                         val injectedScripts = UserScriptsManager.buildInjectedScripts(prefsManager.consoleEnabled, prefsManager.customJs)
-                        // BUG-4 FIX: match <head> with OR without attributes
-                        // (e.g. <head lang="ar">) so injection always succeeds.
-                        if (injectedScripts.isNotEmpty()) {
-                            val headMatch = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
-                            if (headMatch != null) {
-                                val insertAt = headMatch.range.last + 1
-                                html = html.substring(0, insertAt) + injectedScripts + html.substring(insertAt)
-                            } else {
-                                // Fallback: no <head> found, prepend to <body>
-                                val bodyMatch = Regex("<body[^>]*>", RegexOption.IGNORE_CASE).find(html)
-                                if (bodyMatch != null) {
-                                    val insertAt = bodyMatch.range.last + 1
-                                    html = html.substring(0, insertAt) + injectedScripts + html.substring(insertAt)
-                                }
-                            }
-                        }
+                        html = html.replaceFirst("<head>", "<head>$injectedScripts", ignoreCase = true)
                         val hdrs = response.headers.toMultimap().mapValues { it.value.firstOrNull().orEmpty() }.toMutableMap()
                         hdrs.remove("Content-Security-Policy")
                         hdrs.remove("content-security-policy")
@@ -132,27 +117,12 @@ class BrowserWebViewClient(
     }
 
     override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
-        // BUG-T FIX (critical): without the view==currentWebViewProvider() check
-        // (same guard onPageStarted already uses), a BACKGROUND tab failing to
-        // load — DNS failure, no internet, a typo'd URL — covered the user's
-        // screen with a full-screen error overlay even while they were actively
-        // browsing a completely different, perfectly working tab.
-        if (req.isForMainFrame && view == currentWebViewProvider()) {
+        if (req.isForMainFrame) {
             activity.runOnUiThread { onReceivedErrorUi(req.url.toString()) }
         }
     }
 
     override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
-        // BUG-U FIX: this modal dialog could previously pop up for ANY tab,
-        // including ones the user isn't currently looking at — confusing,
-        // and a real risk (approving an untrusted cert for a site you can't
-        // even see or verify, since the dialog doesn't name the host). For
-        // a background tab we fail safe (cancel) instead of prompting; only
-        // the currently visible tab gets the interactive choice.
-        if (view != currentWebViewProvider()) {
-            handler.cancel()
-            return
-        }
         AlertDialog.Builder(activity, R.style.DarkDialog)
             .setTitle("SSL Certificate Error")
             .setMessage("The site's security certificate is not trusted. Continue anyway?")

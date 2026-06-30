@@ -52,16 +52,10 @@ class TabAdapter(
     }
 
     fun updateFavicon(tabId: Int, favicon: Bitmap) {
-        mainHandler.post {
-            // BUG-X FIX: resolve the position INSIDE the posted block, not
-            // before it. Computing it earlier and capturing a stale index
-            // meant a tab closing/reordering between scheduling and
-            // execution could apply the new favicon to the wrong tab card.
-            val position = tabs.indexOfFirst { it.id == tabId }
-            if (position >= 0) {
-                tabs[position].faviconBitmap = favicon
-                notifyItemChanged(position)
-            }
+        val position = tabs.indexOfFirst { it.id == tabId }
+        if (position >= 0) {
+            tabs[position].faviconBitmap = favicon
+            mainHandler.post { notifyItemChanged(position) }
         }
     }
 
@@ -108,16 +102,9 @@ class TabAdapter(
                 ioExecutor.execute {
                     val bitmap = BitmapFactory.decodeFile(file.absolutePath)
                     mainHandler.post {
-                        // BUG-Y FIX: a tab that simply MOVED (e.g. another tab
-                        // ahead of it closed) keeps the same ViewHolder/content
-                        // under DiffUtil — comparing the raw captured `position`
-                        // alone incorrectly skipped applying its own thumbnail
-                        // once it landed on a new index. Compare by tab id at
-                        // the ViewHolder's CURRENT position instead.
+                        // FIX #8 — استخدام bindingAdapterPosition بدلاً من adapterPosition المُهمل
                         val currentPos = h.bindingAdapterPosition
-                        val stillSameTab = currentPos != RecyclerView.NO_POSITION &&
-                            tabs.getOrNull(currentPos)?.id == tab.id
-                        if (stillSameTab) {
+                        if (currentPos != RecyclerView.NO_POSITION && currentPos == position) {
                             if (bitmap != null) h.thumbnail.setImageBitmap(bitmap)
                             else h.thumbnail.setImageResource(android.R.color.transparent)
                         }

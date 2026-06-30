@@ -6,7 +6,6 @@ import android.app.Activity
 import android.content.*
 import android.content.ClipboardManager
 import android.content.pm.*
-import android.content.res.ColorStateList
 import android.graphics.*
 import android.graphics.drawable.*
 import android.net.*
@@ -38,7 +37,6 @@ import androidx.core.content.*
 import androidx.core.view.*
 import androidx.recyclerview.widget.*
 import androidx.swiperefreshlayout.widget.*
-import space.karrarnazim.ConsoleFlow.ui.adapters.SuggestionsAdapter
 import com.google.android.material.bottomsheet.*
 import com.google.android.material.dialog.*
 import com.google.android.material.floatingactionbutton.*
@@ -54,16 +52,7 @@ class MainActivity : AppCompatActivity() {
 
     // ── واجهة المستخدم ──────────────────────────────────────────────────────
     private lateinit var webViewContainer: FrameLayout
-    // BUG-AA FIX: ensureWebViewForTab's eviction picks
-    // `webViews.keys.firstOrNull { it != activeTabId }` and the comment there
-    // calls it "LRU eviction" — but a plain mutableMapOf() (insertion-order
-    // LinkedHashMap) made that pick the OLDEST-CREATED tab, not the least
-    // recently used one. A tab opened early but revisited constantly was the
-    // first eviction candidate, while one opened recently and never touched
-    // again stayed alive forever. accessOrder=true bumps an entry to the end
-    // on every get()/put(), so the entry actually at the front is genuinely
-    // the least-recently-used one — matching what the eviction code assumes.
-    private val webViews = LinkedHashMap<Int, WebView>(16, 0.75f, true)
+    private val webViews = mutableMapOf<Int, WebView>()
     private val currentWebView: WebView? get() = webViews[activeTabId]
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
@@ -75,15 +64,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var findBar: LinearLayout
     private lateinit var bottomBar: LinearLayout
     private lateinit var fullscreenContainer: FrameLayout
-
-    // ── Search Overlay (full-screen, shown on URL bar tap) ──────────────────
-    private val suggestionsManager = SearchSuggestionsManager()
-    private lateinit var suggestionsAdapter: SuggestionsAdapter
-    private lateinit var suggestionsRecycler: RecyclerView
-    /** Root container of the full-screen search overlay, added programmatically. */
-    private var searchOverlayContainer: FrameLayout? = null
-    private lateinit var overlaySearchInput: EditText
-    private lateinit var overlayClearBtn: ImageView
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
@@ -121,8 +101,6 @@ class MainActivity : AppCompatActivity() {
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPermissionRequest: PermissionRequest? = null
-    // BUG-N FIX: holds the pending callback while the system file picker is open
-    private var filePathCallback: ValueCallback<Array<Uri>>? = null
 
     // ── القائمة السفلية المخزنة مؤقتاً ─────────────────────────────────────
     private var cachedMenuSheet: BottomSheetDialog? = null
@@ -198,21 +176,6 @@ class MainActivity : AppCompatActivity() {
         transcript?.let { query -> if (query.isNotBlank()) navigateTo(query) }
     }
 
-    // BUG-N FIX: completes the <input type="file"> flow started by onShowFileChooser
-    private val fileChooserLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val data = result.data
-        val uris: Array<Uri>? = when {
-            result.resultCode != RESULT_OK || data == null -> null
-            data.clipData != null -> Array(data.clipData!!.itemCount) { i -> data.clipData!!.getItemAt(i).uri }
-            data.data != null -> arrayOf(data.data!!)
-            else -> null
-        }
-        filePathCallback?.onReceiveValue(uris)
-        filePathCallback = null
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     //  دورة حياة النشاط
     // ─────────────────────────────────────────────────────────────────────────
@@ -246,24 +209,15 @@ class MainActivity : AppCompatActivity() {
             onInvalidateHomePreviewCache = { invalidateHomePreviewCache() },
             onNavigate = { navigateTo(it) },
             onSetSwipeRefresh = { enabled -> swipeRefresh.isEnabled = enabled },
-            onPageStartedUi = { tabId, _, url ->
-                // BUG-L FIX (critical): this callback fires for EVERY tab, including
-                // background ones. Without this guard, a background tab starting a
-                // new navigation was overwriting the visible address bar text,
-                // bookmark icon, and topBar visibility — even while the user was
-                // looking at (or typing in) a completely different tab.
-                if (tabId == activeTabId) {
-                    keepCursorAlive()
-                    progressBar.visibility = View.VISIBLE
-                    textUrl.setText(if (isHomeUrl(url)) "" else url)
-                    updateBookmarkIcon(url ?: "")
-                    if (isHomeUrl(url)) setTopBarVisible(false) else setTopBarVisible(true)
-                }
+            onPageStartedUi = { _, _, url ->
+                keepCursorAlive()
+                progressBar.visibility = View.VISIBLE
+                textUrl.setText(if (isHomeUrl(url)) "" else url)
+                updateBookmarkIcon(url ?: "")
+                if (isHomeUrl(url)) setTopBarVisible(false) else setTopBarVisible(true)
             },
-            onProgressChangedUi = { tabId, progress ->
-                // BUG-K FIX: a background tab loading must not update the active
-                // tab's progress bar. Only apply when the tab is the current one.
-                if (tabId == activeTabId) progressBar.progress = progress
+            onProgressChangedUi = { _, progress ->
+                progressBar.progress = progress
             },
             onShowCustomViewUi = { view, callback ->
                 customView = view
@@ -278,44 +232,12 @@ class MainActivity : AppCompatActivity() {
                 hideCustomView()
             },
             onPermissionRequestUi = { request ->
-                // BUG-V FIX (critical): this previously only did
-                // `webPermissionRequest = request` and stopped — the registered
-                // requestPermissionLauncher was never actually launched anywhere
-                // in the file. Every getUserMedia() call from a web page (camera/
-                // mic — video calls, WebRTC demos, voice input forms…) just hung
-                // forever: no system dialog, no grant, no deny, no error.
                 webPermissionRequest = request
-                val androidPerms = request?.resources?.mapNotNull {
-                    when (it) {
-                        PermissionRequest.RESOURCE_VIDEO_CAPTURE -> android.Manifest.permission.CAMERA
-                        PermissionRequest.RESOURCE_AUDIO_CAPTURE -> android.Manifest.permission.RECORD_AUDIO
-                        else -> null
-                    }
-                }?.distinct().orEmpty()
-
-                when {
-                    request == null -> Unit
-                    androidPerms.isEmpty() ->
-                        // No dangerous Android permission maps to this resource
-                        // (e.g. protected media ID, MIDI sysex) — safe to grant directly.
-                        request.grant(request.resources)
-                    androidPerms.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED } ->
-                        request.grant(request.resources)
-                    else ->
-                        requestPermissionLauncher.launch(androidPerms.toTypedArray())
-                }
             },
             onPageFinishedUi = { tabId, view, url ->
-                // BUG-2 FIX: only touch UI state for the currently visible tab.
-                // A background tab finishing load must not hide the active tab's
-                // progress bar or reset its pull-to-refresh indicator.
-                val isActiveTab = view == currentWebView
-
-                if (isActiveTab) {
-                    keepCursorAlive()
-                    swipeRefresh.isRefreshing = false
-                    progressBar.visibility = View.INVISIBLE
-                }
+                keepCursorAlive()
+                swipeRefresh.isRefreshing = false
+                progressBar.visibility = View.INVISIBLE
 
                 url?.let { pageUrl ->
                     if (!isHomeUrl(pageUrl)) {
@@ -332,18 +254,11 @@ class MainActivity : AppCompatActivity() {
                             tab.thumbnailUrl = HOME_URL
                         }
                     }
-
-                    // BUG-1 FIX: when goBack() (or any navigation) returns the active
-                    // WebView to about:blank, show the home overlay instead of leaving
-                    // a blank white WebView visible.
-                    if (isActiveTab && isHomeUrl(pageUrl)) showHomeOverlay()
-
                     refreshTabsRecycler()
                     savePersistentTabs()
                 }
 
-                // Desktop-mode viewport hack: only needed for the visible tab.
-                if (isActiveTab && prefsManager.desktopMode) {
+                if (prefsManager.desktopMode) {
                     view.evaluateJavascript(
                         "(function(){" +
                             "var meta=document.querySelector('meta[name=\"viewport\"]');" +
@@ -365,23 +280,6 @@ class MainActivity : AppCompatActivity() {
             onApplyConsoleTools = { view -> applyConsoleTools(view) },
             onDownloadStart = { url, userAgent, contentDisposition, mimeType, contentLength ->
                 handleDownloadRequest(url, userAgent, contentDisposition, mimeType, contentLength)
-            },
-            onShowFileChooserUi = { callback, params ->
-                // BUG-N FIX: launch the system file/image/camera picker so
-                // <input type="file"> actually works instead of doing nothing.
-                filePathCallback?.onReceiveValue(null)
-                filePathCallback = callback
-                val intent = params?.createIntent()
-                if (intent != null) {
-                    val launched = runCatching { fileChooserLauncher.launch(intent) }.isSuccess
-                    if (!launched) {
-                        filePathCallback = null
-                        Toast.makeText(this, "No file picker app available", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    filePathCallback = null
-                }
-                true
             }
         )
 
@@ -414,19 +312,9 @@ class MainActivity : AppCompatActivity() {
                 tabGroups.clear()
                 tabGroups.addAll(savedGroups)
                 activeGroupId = savedInstanceState.getInt("ACTIVE_GROUP_ID", tabGroups.first().id)
-                // BUG-W FIX: fall back to a real group if the saved id doesn't
-                // match any restored group (defensive — currentGroup would
-                // otherwise be null and the rest of this block silently no-ops).
-                if (tabGroups.none { it.id == activeGroupId }) activeGroupId = tabGroups.first().id
                 activeTabId   = savedInstanceState.getInt("ACTIVE_TAB_ID",   tabGroups.first().tabs.firstOrNull()?.id ?: 0)
                 nextTabId     = savedInstanceState.getInt("NEXT_TAB_ID", 100)
                 nextGroupId   = savedInstanceState.getInt("NEXT_GROUP_ID", 100)
-
-                // BUG-W FIX: mirrors loadPersistentTabs' self-heal (BUG-M) for a
-                // restored active group with zero tabs — without this, no
-                // WebView is ever created/attached below, leaving only the
-                // home overlay floating over an empty webViewContainer.
-                if (currentGroup?.tabs.isNullOrEmpty()) sessionManager.createNewTab(HOME_URL)
 
                 val activeTab = currentGroup?.tabs?.find { it.id == activeTabId }
                     ?: currentGroup?.tabs?.firstOrNull()
@@ -452,8 +340,6 @@ class MainActivity : AppCompatActivity() {
             when {
                 tabsOverlay.visibility == View.VISIBLE -> { tabsOverlay.visibility = View.GONE; keepCursorAlive() }
                 nativeOverlayContainer.visibility == View.VISIBLE -> hideNativeOverlays()
-                // Dismiss the search overlay before any deeper back action.
-                searchOverlayContainer?.visibility == View.VISIBLE -> hideSearchOverlay()
                 topBar.visibility == View.VISIBLE && isHomeUrl(currentWebView?.url) -> setTopBarVisible(false)
                 customView != null -> hideCustomView()
                 findBar.visibility == View.VISIBLE -> {
@@ -495,23 +381,6 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updateSearchEngineIcon()
         keepCursorAlive()
-
-        // BUG-5 FIX: SettingsActivity's "Clear Data" can't access the live WebViews,
-        // so it sets a flag. We honour it here where we have full access.
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.getBoolean("pending_full_clear", false)) {
-            prefs.edit().remove("pending_full_clear").apply()
-            clearData()
-        }
-
-        // BUG-R FIX: the user-agent / viewport settings are applied to a WebView
-        // once, at creation time (BrowserWebViewFactory). Toggling "Desktop Mode"
-        // from SettingsActivity only wrote a SharedPreferences value — any tab
-        // that was already open kept its old user-agent forever (the toggle
-        // looked like it simply didn't work). Re-sync every live WebView here;
-        // applyUserAgentToWebView is idempotent so this is a no-op when nothing
-        // changed.
-        webViews.values.forEach { WebViewSettingsHelper.applyUserAgentToWebView(this, it, prefsManager.desktopMode) }
 
         val root = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
@@ -559,25 +428,10 @@ class MainActivity : AppCompatActivity() {
         }
         webViews.clear()
         ioExecutor.shutdown()
-        // Cancel any in-flight / debounced suggestion fetch so the OkHttp
-        // callback can't post to the main handler after the Activity is gone.
-        suggestionsManager.cancel()
         cachedMenuSheet?.dismiss()
         inputController.release()
         cursorController.detach()
         super.onDestroy()
-    }
-
-    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
-        super.onConfigurationChanged(newConfig)
-        // BUG-Q FIX: MainActivity declares configChanges for orientation/screenSize
-        // so it is never recreated on rotation (intentional — avoids reloading
-        // every open WebView). But nothing was refreshing the virtual cursor's
-        // screen bounds, which were captured once in CursorController.attach().
-        // Wait for the new layout pass so decorView.width/height are accurate.
-        if (::cursorController.isInitialized) {
-            window.decorView.post { cursorController.refreshScreenBounds() }
-        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -601,21 +455,6 @@ class MainActivity : AppCompatActivity() {
         tabCount               = findViewById(R.id.tabCount)
         nativeOverlayContainer = findViewById(R.id.nativeOverlayContainer)
         tabGroupsContainer     = findViewById(R.id.tabGroupsContainer)
-
-        // ── Search Overlay: adapter initialised here; the View tree is built
-        //    lazily in buildSearchOverlay() the first time showSearchOverlay() fires,
-        //    because at this point the root ConstraintLayout isn't fully measured yet.
-        suggestionsAdapter = SuggestionsAdapter(
-            context    = this,
-            onNavigate = { suggestion ->
-                hideSearchOverlay()
-                navigateTo(suggestion)
-            },
-            onFill = { suggestion ->
-                overlaySearchInput.setText(suggestion)
-                overlaySearchInput.setSelection(suggestion.length)
-            }
-        )
 
         buildNativeOverlays()
         setTopBarVisible(false, immediate = true)
@@ -686,11 +525,6 @@ class MainActivity : AppCompatActivity() {
     // FIX #4 — invalidate يُستدعى عند تغيير البيانات (bookmarks / search engine)
     private fun invalidateHomePreviewCache() {
         homePreviewBitmapCache = null
-        // BUG-7 FIX: also clear stale home-preview bitmaps cached inside TabState
-        // objects so the tabs overlay shows the refreshed home preview immediately.
-        tabGroups.forEach { group ->
-            group.tabs.filter { isHomeUrl(it.url) }.forEach { it.ramThumbnail = null }
-        }
     }
 
     fun getHomePreviewBitmap(force: Boolean = false): Bitmap {
@@ -746,8 +580,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun setTopBarVisible(visible: Boolean, immediate: Boolean = false) {
         keepCursorAlive()
-        // Search overlay belongs to the URL bar — close it when the bar hides.
-        if (!visible) hideSearchOverlay()
         if (immediate) {
             topBar.alpha      = if (visible) 1f else 0f
             topBar.visibility = if (visible) View.VISIBLE else View.GONE
@@ -920,10 +752,16 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.TRANSPARENT)
             setPadding((12*dp).toInt(), 0, (8*dp).toInt(), 0)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            // Display-only for typing; tapping or D-pad focusing opens the search overlay.
-            isFocusableInTouchMode = false
-            setOnFocusChangeListener { _, hasFocus -> if (hasFocus) showSearchOverlay("") }
-            setOnClickListener { showSearchOverlay("") }
+            imeOptions  = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            inputType   = android.text.InputType.TYPE_CLASS_TEXT or
+                          android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    val query = text.toString().trim()
+                    if (query.isNotEmpty()) navigateTo(query)
+                    hideKeyboard(); true
+                } else false
+            }
         }
         searchBar.addView(searchInput)
 
@@ -1095,7 +933,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         buttonRow.addView(makeButton("Retry") { hideNativeOverlays(); currentWebView?.reload() })
-        buttonRow.addView(makeButton("Home")  { goHome() })
+        buttonRow.addView(makeButton("Home")  { showHomeOverlay() })
         buttonRow.addView(makeButton("Close") { hideNativeOverlays() })
 
         val updateUrlText = {
@@ -1180,15 +1018,6 @@ private fun savePersistentTabs() {
 
     fun loadPersistentTabs(intentUrl: String?) {
         if (sessionManager.restoreFromStorage(this) && sessionManager.tabGroups.isNotEmpty()) {
-            // BUG-M FIX: self-heal a corrupted/stale save where the active
-            // group ended up with zero tabs (e.g. an old app version, or a
-            // manually edited prefs file). Without this, activeTab below is
-            // null, ensureWebViewForTab is never called, and the app boots
-            // into a fully blank screen — no WebView, no overlay, nothing.
-            if (currentGroup?.tabs.isNullOrEmpty()) {
-                sessionManager.createNewTab(HOME_URL)
-            }
-
             val activeGroupTabs = currentGroup?.tabs
             val preferredTabId = activeTabId
             val activeTab = activeGroupTabs?.find { it.id == preferredTabId } ?: activeGroupTabs?.firstOrNull()
@@ -1197,9 +1026,6 @@ private fun savePersistentTabs() {
             if (activeTab != null) {
                 val wv = ensureWebViewForTab(activeTab)
                 if (webViewContainer.indexOfChild(wv) == -1) webViewContainer.addView(wv)
-                // BUG-3 FIX: request focus so TV remote / keyboard / gamepad events
-                // are delivered to the WebView immediately on cold start.
-                wv.requestFocus()
             }
 
             updateGroupsUI()
@@ -1261,25 +1087,15 @@ private fun savePersistentTabs() {
                                     Toast.makeText(context, "Cannot delete the last group", Toast.LENGTH_SHORT).show()
                                     return@showModernPopup
                                 }
-                                val wasActiveGroup = activeGroupId == group.id
                                 group.tabs.forEach { t ->
                                     ioExecutor.execute { File(cacheDir, "thumb_${t.id}.webp").delete() }
                                     webViews[t.id]?.destroy()
                                     webViews.remove(t.id)
                                 }
                                 tabGroups.remove(group)
-
-                                if (wasActiveGroup) {
-                                    // BUG-H FIX: previously only activeGroupId/activeTabId
-                                    // were updated here. The just-destroyed WebView stayed
-                                    // attached as the visible child of webViewContainer —
-                                    // a frozen screen, and any later goBack()/loadUrl() on it
-                                    // throws "WebView cannot be used after destroy()".
-                                    // switchToTab() does the full job: creates/attaches the
-                                    // new tab's WebView and refreshes the whole UI.
+                                if (activeGroupId == group.id) {
                                     activeGroupId = tabGroups.first().id
-                                    val newActiveTab = currentGroup?.tabs?.firstOrNull()
-                                    if (newActiveTab != null) switchToTab(newActiveTab) else openNewTab(HOME_URL)
+                                    activeTabId   = currentGroup?.tabs?.firstOrNull()?.id ?: 0
                                 }
                                 sanitizeActiveTabSelection()
                                 updateGroupsUI(); refreshTabsRecycler(); savePersistentTabs()
@@ -1572,22 +1388,7 @@ private fun savePersistentTabs() {
         swipeRefresh.setOnRefreshListener { currentWebView?.reload() }
 
         textUrl.setOnEditorActionListener { _, _, _ ->
-            // textUrl is now display-only; typing happens inside the search overlay.
-            // If somehow an action fires here, open the overlay.
-            showSearchOverlay(textUrl.text.toString().trim())
-            true
-        }
-
-        // textUrl is display-only for typing; tapping/D-pad focusing it opens
-        // the full-screen search overlay pre-filled with the current URL.
-        // isFocusableInTouchMode=false: touch triggers onClick, not focus.
-        // isFocusable=true: TV D-pad can land here and gain focus → overlay.
-        textUrl.isFocusableInTouchMode = false
-        textUrl.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus) showSearchOverlay(textUrl.text.toString().trim())
-        }
-        textUrl.setOnClickListener {
-            showSearchOverlay(textUrl.text.toString().trim())
+            navigateTo(textUrl.text.toString().trim()); hideKeyboard(); true
         }
 
         textUrl.setOnLongClickListener {
@@ -1611,7 +1412,7 @@ private fun savePersistentTabs() {
 
         findViewById<View>(R.id.btnBackArea).setOnClickListener    { currentWebView?.let { if (it.canGoBack())    it.goBack()    } }
         findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward()) it.goForward() } }
-        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { goHome() }
+        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { showHomeOverlay() }
 
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
             if (tabsOverlay.visibility == View.VISIBLE) {
@@ -1679,25 +1480,11 @@ private fun savePersistentTabs() {
         loadUrlInstantly(finalUrl)
     }
 
-    /**
-     * BUG-Z FIX: single source of truth for "go home". Previously
-     * showHomeOverlay() was called directly from btnHomeArea and the
-     * gamepad/remote Home shortcut WITHOUT navigating the underlying
-     * WebView — the overlay appeared, but the old page stayed loaded
-     * underneath and reappeared unchanged on Back (and the tab's
-     * title/thumbnail never updated to reflect "home"). Only
-     * loadUrlInstantly's home branch paired the two correctly; this makes
-     * that the one place that defines what "home" actually means.
-     */
-    private fun goHome() {
-        showHomeOverlay()
-        currentWebView?.loadUrl(HOME_URL)
-        textUrl.setText("")
-    }
-
     private fun loadUrlInstantly(url: String) {
         if (isHomeUrl(url)) {
-            goHome()
+            showHomeOverlay()
+            currentWebView?.loadUrl(HOME_URL)
+            textUrl.setText("")
             return
         }
         setTopBarVisible(true)
@@ -1762,16 +1549,6 @@ private fun savePersistentTabs() {
                 currentWebView?.setFindListener { ord, total, _ ->
                     findViewById<TextView>(R.id.findMatches).text =
                         if (total > 0) "${ord + 1}/$total" else "0/0"
-                }
-                // BUG-O FIX: focus + show keyboard immediately, matching the
-                // behaviour of the keyboard/gamepad "find" shortcut
-                // (InputController.toggleFind) — previously this menu entry
-                // left the bar visible but required an extra manual tap.
-                val fi = findViewById<EditText>(R.id.findInput)
-                fi.requestFocus()
-                fi.post {
-                    (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                        .showSoftInput(fi, InputMethodManager.SHOW_IMPLICIT)
                 }
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuDesktopMode)?.setOnClickListener {
@@ -2037,234 +1814,6 @@ private fun savePersistentTabs() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Full-Screen Search Overlay
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Build the full-screen search overlay once, add it to the window's
-     * content view (above everything else) and store the reference.
-     *
-     * Called lazily the first time showSearchOverlay() runs so the
-     * root ConstraintLayout is already attached and measured.
-     */
-    private fun buildSearchOverlay() {
-        if (searchOverlayContainer != null) return
-        val dp  = resources.displayMetrics.density
-        val ctx = this
-
-        // ── RecyclerView for suggestions ─────────────────────────────────
-        suggestionsRecycler = RecyclerView(ctx).apply {
-            layoutManager = LinearLayoutManager(ctx)
-            adapter       = suggestionsAdapter
-            itemAnimator  = null
-            overScrollMode = View.OVER_SCROLL_NEVER
-            // TV: the RecyclerView itself must NOT be focusable.
-            // D-pad focus goes directly to individual item rows (isFocusable=true
-            // in SuggestionsAdapter). If the RecyclerView itself is focusable,
-            // D-pad stops here and never enters the list.
-            isFocusable = false
-            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
-        }
-
-        // Wire TV "UP on first row → back to search bar" callback now that
-        // overlaySearchInput will exist by the time the callback fires.
-        suggestionsAdapter.onBackToSearch = { overlaySearchInput.requestFocus() }
-
-        // ── Header row (same height as the top bar — 56 dp) ─────────────
-        val header = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity     = Gravity.CENTER_VERTICAL
-            setBackgroundColor(0xFF0D0D0D.toInt())
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, (56 * dp).toInt()
-            )
-        }
-
-        val btnBack = ImageView(ctx).apply {
-            setImageResource(R.drawable.ic_back_arrow)
-            imageTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
-            scaleType     = ImageView.ScaleType.CENTER
-            layoutParams  = LinearLayout.LayoutParams((52 * dp).toInt(),
-                LinearLayout.LayoutParams.MATCH_PARENT)
-            background    = ContextCompat.getDrawable(ctx, R.drawable.bottom_btn_ripple)
-            setOnClickListener { hideSearchOverlay() }
-        }
-
-        val searchIconInBar = ImageView(ctx).apply {
-            val sz = (20 * dp).toInt()
-            setImageResource(R.drawable.ic_search)
-            imageTintList = ColorStateList.valueOf(0xFF666666.toInt())
-            scaleType     = ImageView.ScaleType.CENTER_INSIDE
-            layoutParams  = LinearLayout.LayoutParams(sz, sz).also {
-                it.gravity = Gravity.CENTER_VERTICAL
-            }
-        }
-
-        overlaySearchInput = EditText(ctx).apply {
-            hint      = "Search or type URL"
-            setHintTextColor(0xFF555555.toInt())
-            setTextColor(0xFFFFFFFF.toInt())
-            textSize  = 16f
-            setSingleLine(true)
-            background = null
-            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH or
-                         android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
-            inputType  = android.text.InputType.TYPE_CLASS_TEXT or
-                         android.text.InputType.TYPE_TEXT_VARIATION_URI
-            layoutParams = LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f).also {
-                it.gravity    = Gravity.CENTER_VERTICAL
-                it.marginStart = (10 * dp).toInt()
-                it.marginEnd   = (4 * dp).toInt()
-            }
-            setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
-                    actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO) {
-                    val q = text.toString().trim()
-                    if (q.isNotEmpty()) { hideSearchOverlay(); navigateTo(q) }
-                    true
-                } else false
-            }
-            // TV: D-pad DOWN from the search bar moves focus to the first suggestion.
-            // Android's default traversal would land on the RecyclerView container
-            // (if focusable), never on the items. We do it explicitly instead.
-            setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_DOWN
-                    && keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                    && suggestionsAdapter.itemCount > 0) {
-                    suggestionsRecycler.getChildAt(0)?.requestFocus() ?: false
-                    true
-                } else false
-            }
-        }
-
-        overlayClearBtn = ImageView(ctx).apply {
-            setImageResource(R.drawable.ic_clear)
-            imageTintList = ColorStateList.valueOf(0xFF888888.toInt())
-            scaleType     = ImageView.ScaleType.CENTER
-            layoutParams  = LinearLayout.LayoutParams((48 * dp).toInt(),
-                LinearLayout.LayoutParams.MATCH_PARENT)
-            background    = ContextCompat.getDrawable(ctx, R.drawable.bottom_btn_ripple)
-            visibility    = View.INVISIBLE
-            setOnClickListener {
-                overlaySearchInput.setText("")
-                overlaySearchInput.requestFocus()
-            }
-        }
-
-        header.addView(btnBack)
-        header.addView(searchIconInBar)
-        header.addView(overlaySearchInput)
-        header.addView(overlayClearBtn)
-
-        // ── Thin divider ─────────────────────────────────────────────────
-        val divider = View(ctx).apply {
-            setBackgroundColor(0xFF1C1C1C.toInt())
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, (1 * dp).toInt().coerceAtLeast(1)
-            )
-        }
-
-        // ── Content stack ────────────────────────────────────────────────
-        val vstack = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            addView(header)
-            addView(divider)
-            addView(suggestionsRecycler)
-        }
-
-        // ── Root container ───────────────────────────────────────────────
-        val container = FrameLayout(ctx).apply {
-            setBackgroundColor(0xFF000000.toInt())
-            visibility = View.GONE
-            addView(vstack)
-        }
-
-        // Add as the highest-z child of the Activity's root view
-        val rootContent = window.decorView
-            .findViewById<ViewGroup>(android.R.id.content)
-        rootContent.addView(container, ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ))
-        searchOverlayContainer = container
-
-        // ── TextWatcher: fetch suggestions while typing ──────────────────
-        overlaySearchInput.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {
-                overlayClearBtn.visibility =
-                    if (s.isNullOrEmpty()) View.INVISIBLE else View.VISIBLE
-            }
-            override fun afterTextChanged(s: android.text.Editable?) {
-                val query = s?.toString()?.trim() ?: ""
-                if (!prefsManager.suggestionsEnabled || query.length < 2) {
-                    suggestionsAdapter.items = emptyList(); return
-                }
-                val kind = resolveSearchEngineKind(prefsManager.searchEngine)
-                suggestionsManager.fetchDebounced(query, kind) { list ->
-                    suggestionsAdapter.items = list
-                }
-            }
-        })
-    }
-
-    /**
-     * Show the full-screen search overlay, optionally pre-filling with [prefill].
-     * The overlay slides up (40 dp) and fades in over 200 ms.
-     */
-    fun showSearchOverlay(prefill: String = "") {
-        buildSearchOverlay()
-        val container = searchOverlayContainer ?: return
-
-        // Cancel any in-progress hide animation before starting the show.
-        // Without this, the hide's withEndAction { visibility = GONE } fires
-        // AFTER we set visibility = VISIBLE, collapsing the overlay instantly.
-        container.animate().cancel()
-
-        container.visibility = View.VISIBLE
-        container.alpha      = 0f
-        container.translationY = resources.displayMetrics.density * 40f
-        container.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(200)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .start()
-
-        overlaySearchInput.setText(prefill)
-        overlaySearchInput.requestFocus()
-        overlaySearchInput.setSelection(prefill.length)
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-            .showSoftInput(overlaySearchInput, InputMethodManager.SHOW_IMPLICIT)
-    }
-
-    fun hideSearchOverlay() {
-        suggestionsManager.cancel()
-        if (::suggestionsAdapter.isInitialized) suggestionsAdapter.items = emptyList()
-        val container = searchOverlayContainer ?: return
-        if (container.visibility != View.VISIBLE) return
-        container.animate().cancel()
-        hideKeyboard()
-        container.animate()
-            .alpha(0f)
-            .translationY(resources.displayMetrics.density * 40f)
-            .setDuration(160)
-            .setInterpolator(android.view.animation.AccelerateInterpolator())
-            .withEndAction {
-                container.visibility = View.GONE
-                // TV: move focus to WebView so D-pad focus does NOT drift back to
-                // textUrl/searchInput (which would immediately re-open the overlay).
-                currentWebView?.requestFocus()
-            }
-            .start()
-    }
-
     private fun hideCustomView() {
         keepCursorAlive()
         customViewCallback?.onCustomViewHidden()
@@ -2359,6 +1908,20 @@ private fun savePersistentTabs() {
 
 
     // ─────────────────────────────────────────────────────────────────────────
+    //  جسر JavaScript
+    // ─────────────────────────────────────────────────────────────────────────
+
+    inner class SearchBridge {
+        @JavascriptInterface
+        fun navigate(input: String) { runOnUiThread { navigateTo(input) } }
+
+        @JavascriptInterface
+        fun setSwipeRefresh(enabled: Boolean) {
+            mainHandler.post { swipeRefresh.isEnabled = enabled }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     //  Input Controller — TV remote · Gamepad · Keyboard · Mouse
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -2399,7 +1962,7 @@ private fun savePersistentTabs() {
                 currentWebView?.let { if (it.canGoForward()) it.goForward() }
             }
 
-            override fun navigateHome() = goHome()
+            override fun navigateHome() = showHomeOverlay()
 
             override fun openNewTab() = this@MainActivity.openNewTab()
 
@@ -2494,15 +2057,6 @@ private fun savePersistentTabs() {
             if (event.isFromSource(InputDevice.SOURCE_GAMEPAD) || event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_DPAD)) {
                 cursorArmed = true
             }
-
-            // When the search overlay is visible, ALL key events go directly to
-            // the focused view (EditText or suggestion row). InputController must
-            // not intercept them — DPAD_CENTER on a focused suggestion row must
-            // navigate to that suggestion, not call activateWebElement().
-            if (searchOverlayContainer?.visibility == View.VISIBLE) {
-                return super.dispatchKeyEvent(event)
-            }
-
             // When an EditText (URL bar, find bar) owns focus, only intercept:
             //   • Escape   → dismiss overlay
             //   • Ctrl+*   → browser shortcuts still work while typing
