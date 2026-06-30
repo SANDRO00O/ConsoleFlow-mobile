@@ -41,13 +41,6 @@ class DownloadsActivity : AppCompatActivity() {
         DownloadTracker.downloads.observe(this) { render(it) }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        // BUG-C FIX: cancel any pending "Clear done → Clear" reset animation
-        // so the Runnable doesn't leak a reference to clearBtn after the Activity dies.
-        clearResetRunnable?.let { clearHandler.removeCallbacks(it) }
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // Root layout
     // ─────────────────────────────────────────────────────────────────────────

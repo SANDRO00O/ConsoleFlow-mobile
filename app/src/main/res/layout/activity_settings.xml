@@ -160,57 +160,6 @@
                         android:layout_height="wrap_content"
                         android:theme="@style/SwitchTheme" />
                 </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginHorizontal="18dp"
-                    android:background="#1A1A1A" />
-
-                <!-- Search Suggestions -->
-                <LinearLayout
-                    android:id="@+id/settingSearchSuggestions"
-                    android:layout_width="match_parent"
-                    android:layout_height="60dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingHorizontal="18dp"
-                    android:background="@drawable/menu_item_ripple">
-
-                    <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/ic_find"
-                        android:tint="#888888" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginStart="14dp"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Search Suggestions"
-                            android:textColor="#FFFFFF"
-                            android:textSize="15sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Show suggestions as you type"
-                            android:textColor="#555555"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/switchSuggestions"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:theme="@style/SwitchTheme" />
-                </LinearLayout>
             </LinearLayout>
 
             <!-- ── DEVELOPER ──────────────────────────────────────────────── -->
