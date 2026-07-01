@@ -24,11 +24,11 @@ object BrowserDialogHelpers {
             orientation = LinearLayout.VERTICAL
             try { setBackgroundResource(R.drawable.bg_bottom_sheet) }
             catch (_: Exception) { setBackgroundColor(Color.parseColor("#2C2C2C")) }
-            setPadding(0, 32, 0, 32)
+            setPadding(context.responsiveDp(0), context.responsiveDp(32), context.responsiveDp(0), context.responsiveDp(32))
         }
 
         val handle = View(context).apply {
-            val dp = context.resources.displayMetrics.density
+            val dp = context.responsiveDensity()
             layoutParams = LinearLayout.LayoutParams(
                 (40 * dp).toInt(), (4 * dp).toInt()
             ).apply {
@@ -41,10 +41,10 @@ object BrowserDialogHelpers {
 
         val titleView = TextView(context).apply {
             text = title
-            textSize = 18f
+            textSize = context.responsiveSp(18f)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, 0, 0, 24)
+            setPadding(0, 0, 0, context.responsiveDp(24))
         }
 
         container.addView(handle)
@@ -54,8 +54,8 @@ object BrowserDialogHelpers {
             val item = TextView(context).apply {
                 this.text = text
                 setTextColor(Color.WHITE)
-                textSize = 16f
-                setPadding(48, 36, 48, 36)
+                textSize = context.responsiveSp(16f)
+                setPadding(context.responsiveDp(48), context.responsiveDp(36), context.responsiveDp(48), context.responsiveDp(36))
                 setOnClickListener {
                     sheet.dismiss()
                     onSelect(index)
@@ -76,14 +76,14 @@ object BrowserDialogHelpers {
         onSelect: (Int) -> Unit
     ) {
         val sheet = BottomSheetDialog(context, R.style.AppBottomSheetDialogTheme)
-        val dp = context.resources.displayMetrics.density
+        val dp = context.responsiveDensity()
         val scrollView = ScrollView(context)
 
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             try { setBackgroundResource(R.drawable.bg_bottom_sheet) }
             catch (_: Exception) { setBackgroundColor(Color.parseColor("#2C2C2C")) }
-            setPadding(0, 32, 0, 32)
+            setPadding(context.responsiveDp(0), context.responsiveDp(32), context.responsiveDp(0), context.responsiveDp(32))
         }
         scrollView.addView(container)
 
@@ -100,7 +100,7 @@ object BrowserDialogHelpers {
 
         val titleView = TextView(context).apply {
             text = title
-            textSize = 18f
+            textSize = context.responsiveSp(18f)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, 0, 0, (24 * dp).toInt())
@@ -132,13 +132,13 @@ object BrowserDialogHelpers {
 
             val titleText = TextView(context).apply {
                 text = item.first
-                textSize = 16f
+                textSize = context.responsiveSp(16f)
                 setTextColor(Color.WHITE)
             }
 
             val subText = TextView(context).apply {
                 text = item.second
-                textSize = 12f
+                textSize = context.responsiveSp(12f)
                 setTextColor(Color.LTGRAY)
             }
 

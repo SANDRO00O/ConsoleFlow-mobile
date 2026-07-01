@@ -52,6 +52,11 @@ import java.util.concurrent.*
 
 class MainActivity : AppCompatActivity() {
 
+    private val uiScale: Float get() = responsiveScale()
+    private val uiDensity: Float get() = responsiveDensity()
+    private fun scalePx(value: Int): Int = responsiveDp(value)
+    private fun scaleText(value: Float): Float = responsiveSp(value)
+
     // ── واجهة المستخدم ──────────────────────────────────────────────────────
     private lateinit var webViewContainer: FrameLayout
     // BUG-AA FIX: ensureWebViewForTab's eviction picks
@@ -517,7 +522,7 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            val extraTop = (resources.displayMetrics.density * 4f).toInt()
+            val extraTop = (uiDensity * 4f).toInt()
 
             topBar.setPadding(
                 topBar.paddingLeft,
@@ -636,7 +641,7 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            val extraTop = (resources.displayMetrics.density * 4f).toInt()
+            val extraTop = (uiDensity * 4f).toInt()
 
             topBar.setPadding(
                 topBar.paddingLeft,
@@ -819,7 +824,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
-        val dp   = resources.displayMetrics.density
+        val dp   = uiDensity
         val root = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -948,7 +953,7 @@ class MainActivity : AppCompatActivity() {
         val fixedHeader = TextView(this).apply {
             text = "DEV BOOKMARKS"
             setTextColor(Color.parseColor("#7B7B7B"))
-            textSize = 11f; letterSpacing = 0.08f
+            textSize = scaleText(11f); letterSpacing = 0.08f
             setPadding((4*dp).toInt(), 0, 0, (10*dp).toInt())
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -982,7 +987,7 @@ class MainActivity : AppCompatActivity() {
                 val label = TextView(this).apply {
                     text = title
                     setTextColor(Color.WHITE)
-                    textSize = 10.5f; maxLines = 1
+                    textSize = scaleText(10.5f); maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     gravity = Gravity.CENTER_HORIZONTAL
                     setPadding((2*dp).toInt(), (6*dp).toInt(), (2*dp).toInt(), 0)
@@ -1011,7 +1016,7 @@ class MainActivity : AppCompatActivity() {
             val userHeader = TextView(this).apply {
                 text = "MY BOOKMARKS"
                 setTextColor(Color.parseColor("#7B7B7B"))
-                textSize = 11f; letterSpacing = 0.08f
+                textSize = scaleText(11f); letterSpacing = 0.08f
                 setPadding((4*dp).toInt(), (10*dp).toInt(), 0, (10*dp).toInt())
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -1025,7 +1030,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildErrorOverlay(): View {
-        val dp   = resources.displayMetrics.density
+        val dp   = uiDensity
         val root = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -1056,13 +1061,13 @@ class MainActivity : AppCompatActivity() {
 
         val title = TextView(this).apply {
             text = "Webpage not available"
-            setTextColor(Color.WHITE); textSize = 22f; gravity = Gravity.CENTER
+            setTextColor(Color.WHITE); textSize = scaleText(22f); gravity = Gravity.CENTER
         }
         content.addView(title)
 
         val desc = TextView(this).apply {
             text = "Could not load the requested page."
-            setTextColor(Color.parseColor("#BBBBBB")); textSize = 14f
+            setTextColor(Color.parseColor("#BBBBBB")); textSize = scaleText(14f)
             gravity = Gravity.CENTER
             setPadding(0, (8*dp).toInt(), 0, (10*dp).toInt())
         }
@@ -1070,7 +1075,7 @@ class MainActivity : AppCompatActivity() {
 
         val urlText = TextView(this).apply {
             text = ""
-            setTextColor(Color.parseColor("#777777")); textSize = 12f
+            setTextColor(Color.parseColor("#777777")); textSize = scaleText(12f)
             gravity = Gravity.CENTER
             setPadding((12*dp).toInt(), 0, (12*dp).toInt(), (20*dp).toInt())
             maxLines = 2
@@ -1084,7 +1089,7 @@ class MainActivity : AppCompatActivity() {
 
         fun makeButton(label: String, onClick: () -> Unit): TextView {
             return TextView(this).apply {
-                text = label; setTextColor(Color.WHITE); textSize = 15f
+                text = label; setTextColor(Color.WHITE); textSize = scaleText(15f)
                 setPadding((18*dp).toInt(), (12*dp).toInt(), (18*dp).toInt(), (12*dp).toInt())
                 setBackgroundResource(R.drawable.bg_menu_item)
                 setOnClickListener { onClick() }
@@ -1224,8 +1229,8 @@ private fun savePersistentTabs() {
         for (group in tabGroups) {
             val tv = TextView(this).apply {
                 text = group.name
-                setPadding(32, 16, 32, 16)
-                textSize = 14f
+                setPadding(scalePx(32), scalePx(16), scalePx(32), scalePx(16))
+                textSize = scaleText(14f)
                 if (group.id == activeGroupId) {
                     setTextColor(Color.WHITE)
                     setBackgroundResource(R.drawable.bg_menu_item)
@@ -1624,7 +1629,7 @@ private fun savePersistentTabs() {
         findViewById<View>(R.id.btnNewTab).setOnClickListener { openNewTab() }
 
         findViewById<View?>(R.id.btnNewGroup)?.setOnClickListener {
-            val input = EditText(this).apply { setTextColor(Color.WHITE); setPadding(32, 32, 32, 32) }
+            val input = EditText(this).apply { setTextColor(Color.WHITE); setPadding(scalePx(32), scalePx(32), scalePx(32), scalePx(32)) }
             AlertDialog.Builder(this, R.style.DarkDialog)
                 .setTitle("New Group Name")
                 .setView(input)
@@ -1835,7 +1840,7 @@ private fun savePersistentTabs() {
         val tabDl      = v.findViewById<TextView>(R.id.menuTabDownloads)
         val pageTools  = v.findViewById<View>(R.id.menuPageTools)
         val pageDl     = v.findViewById<View>(R.id.menuPageDownloads)
-        val density    = resources.displayMetrics.density
+        val density    = uiDensity
 
         val activeChip = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
@@ -1875,7 +1880,7 @@ private fun savePersistentTabs() {
         if (items.isEmpty()) {
             listContainer.addView(TextView(this).apply {
                 text = "No downloads yet"
-                textSize = 14f
+                textSize = scaleText(14f)
                 setTextColor(Color.parseColor("#555555"))
                 gravity = android.view.Gravity.CENTER
                 setPadding(0, menuDp(24), 0, menuDp(8))
@@ -1894,7 +1899,7 @@ private fun savePersistentTabs() {
     }
 
     private fun buildMenuDlRow(item: DownloadItem): View {
-        val density = resources.displayMetrics.density
+        val density = uiDensity
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
@@ -1925,7 +1930,7 @@ private fun savePersistentTabs() {
         }
         col.addView(TextView(this).apply {
             text = item.fileName
-            textSize = 13f
+            textSize = scaleText(13f)
             setTextColor(Color.WHITE)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
@@ -1944,7 +1949,7 @@ private fun savePersistentTabs() {
         }
         col.addView(TextView(this).apply {
             text = stateText
-            textSize = 11f
+            textSize = scaleText(11f)
             setTextColor(menuStateColor(item.state))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1957,7 +1962,7 @@ private fun savePersistentTabs() {
         return row
     }
 
-    private fun menuDp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
+    private fun menuDp(v: Int) = (v * uiDensity + 0.5f).toInt()
 
     private fun menuStateColor(state: DownloadState): Int = Color.parseColor(when (state) {
         DownloadState.RUNNING   -> "#6EA8DC"
@@ -2050,7 +2055,7 @@ private fun savePersistentTabs() {
      */
     private fun buildSearchOverlay() {
         if (searchOverlayContainer != null) return
-        val dp  = resources.displayMetrics.density
+        val dp  = uiDensity
         val ctx = this
 
         // ── RecyclerView for suggestions ─────────────────────────────────
@@ -2229,7 +2234,7 @@ private fun savePersistentTabs() {
 
         container.visibility = View.VISIBLE
         container.alpha      = 0f
-        container.translationY = resources.displayMetrics.density * 40f
+        container.translationY = uiDensity * 40f
         container.animate()
             .alpha(1f)
             .translationY(0f)
@@ -2253,7 +2258,7 @@ private fun savePersistentTabs() {
         hideKeyboard()
         container.animate()
             .alpha(0f)
-            .translationY(resources.displayMetrics.density * 40f)
+            .translationY(uiDensity * 40f)
             .setDuration(160)
             .setInterpolator(android.view.animation.AccelerateInterpolator())
             .withEndAction {

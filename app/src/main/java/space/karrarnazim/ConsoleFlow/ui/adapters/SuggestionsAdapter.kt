@@ -48,7 +48,7 @@ class SuggestionsAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val dp = context.resources.displayMetrics.density
+        val dp = context.responsiveDensity()
 
         val icon = ImageView(context).apply {
             val size = (20 * dp).toInt()
@@ -67,7 +67,7 @@ class SuggestionsAdapter(
                 lp.gravity = Gravity.CENTER_VERTICAL
             }
             setTextColor(0xFFEEEEEE.toInt())
-            textSize  = 14f
+            textSize  = context.responsiveSp(14f)
             typeface  = Typeface.DEFAULT
             maxLines  = 1
             ellipsize = TextUtils.TruncateAt.END
