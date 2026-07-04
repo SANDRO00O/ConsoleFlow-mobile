@@ -34,7 +34,7 @@ import kotlin.math.abs
  */
 class CursorController(private val activity: Activity) {
 
-    private val d      = activity.responsiveDensity()
+    private val d      = activity.resources.displayMetrics.density
     private val RADIUS = 12f * d                      // نصف قطر الدائرة بالبكسل
     private val SIZE   = (RADIUS * 2f + 0.5f).toInt() // حجم الـ View بالبكسل
 
@@ -266,7 +266,7 @@ class CursorController(private val activity: Activity) {
     //  • onTouchEvent يُعيد false → النقرات تمر للـ Views التي تحته.
 
     inner class CursorView(ctx: Context) : View(ctx) {
-        private val den = ctx.responsiveDensity()
+        private val den = ctx.resources.displayMetrics.density
         private val r   = 12f * den           // نصف قطر الدائرة
         private val sw  = 2.2f * den          // سماكة البوردر
 

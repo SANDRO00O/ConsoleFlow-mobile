@@ -1,6 +1,39 @@
 <resources>
+    <!-- Phone defaults — overridden in values-television/ for Android TV -->
+
+    <dimen name="bar_height">56dp</dimen>
+    <dimen name="toolbar_engine_icon">26dp</dimen>
+    <dimen name="toolbar_btn_size">34dp</dimen>
+    <dimen name="url_bar_height">40dp</dimen>
+    <dimen name="nav_icon_size">24dp</dimen>
+    <dimen name="tab_count_text_size">10sp</dimen>
+    <dimen name="tabs_header_height">52dp</dimen>
+    <dimen name="tabs_group_btn">36dp</dimen>
+    <dimen name="tabs_new_btn">40dp</dimen>
+    <dimen name="tab_card_height">240dp</dimen>
+    <dimen name="tab_card_margin">6dp</dimen>
+    <dimen name="tab_favicon_size">20dp</dimen>
+    <dimen name="tab_title_text_size">14sp</dimen>
+    <dimen name="tab_close_size">24dp</dimen>
+    <dimen name="menu_chip_height">40dp</dimen>
+    <dimen name="menu_chip_text_size">13sp</dimen>
+    <dimen name="menu_item_height">80dp</dimen>
+    <dimen name="menu_icon_size">24dp</dimen>
+    <dimen name="menu_item_text_size">12sp</dimen>
+    <dimen name="find_icon_size">32dp</dimen>
+    <dimen name="search_overlay_header">56dp</dimen>
+    <dimen name="search_overlay_btn">52dp</dimen>
+    <dimen name="search_overlay_icon">20dp</dimen>
+    <dimen name="search_overlay_row">52dp</dimen>
+    <dimen name="home_bar_height">56dp</dimen>
+    <dimen name="home_search_icon">20dp</dimen>
+    <dimen name="home_bookmark_tile">80dp</dimen>
+    <dimen name="home_bookmark_text_size">11sp</dimen>
+
+    <!-- Legacy kept for existing code -->
     <dimen name="top_bar_height">40dp</dimen>
     <dimen name="top_bar_bg_gap">5dp</dimen>
     <dimen name="menu_margin">12dp</dimen>
     <dimen name="menu_top_offset">60dp</dimen>
+    <dimen name="home_settings_btn">40dp</dimen>
 </resources>

@@ -101,7 +101,7 @@ class DownloadsActivity : AppCompatActivity() {
 
         val title = TextView(this).apply {
             text = "Downloads"
-            textSize = sp(22f)
+            textSize = 22f
             setTextColor(cOnBg)
             setTypeface(null, android.graphics.Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
@@ -112,7 +112,7 @@ class DownloadsActivity : AppCompatActivity() {
         // Hidden by default — shown only when there's something to clear
         clearBtn = TextView(this).apply {
             text = "Clear"
-            textSize = sp(13f)
+            textSize = 13f
             setTextColor(cPrimary)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = roundedBg(cSurface, 20f)
@@ -173,14 +173,14 @@ class DownloadsActivity : AppCompatActivity() {
             })
             addView(TextView(this@DownloadsActivity).apply {
                 text = "No downloads yet"
-                textSize = sp(18f)
+                textSize = 18f
                 setTextColor(Color.parseColor("#666666"))
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(20) }
             })
             addView(TextView(this@DownloadsActivity).apply {
                 text = "Files you download will appear here"
-                textSize = sp(13f)
+                textSize = 13f
                 setTextColor(Color.parseColor("#444444"))
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) }
@@ -254,7 +254,7 @@ class DownloadsActivity : AppCompatActivity() {
         }
         info.addView(TextView(this).apply {
             text = item.fileName
-            textSize = sp(14f)
+            textSize = 14f
             setTextColor(cOnBg)
             setTypeface(null, android.graphics.Typeface.BOLD)
             maxLines = 2
@@ -272,7 +272,7 @@ class DownloadsActivity : AppCompatActivity() {
         if (badge != null) {
             info.addView(TextView(this).apply {
                 text = badge.first
-                textSize = sp(12f)
+                textSize = 12f
                 setTextColor(badge.second)
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(3) }
             })
@@ -310,7 +310,7 @@ class DownloadsActivity : AppCompatActivity() {
                     if (item.speedBytesPerSec > 0) append("   ${formatSpeed(item.speedBytesPerSec)}")
                     if (item.etaSeconds > 0)        append("  ·  ${formatEta(item.etaSeconds)} left")
                 }
-                textSize = sp(11f)
+                textSize = 11f
                 setTextColor(cOnSurfaceVar)
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(6) }
             })
@@ -325,7 +325,7 @@ class DownloadsActivity : AppCompatActivity() {
         val lp = LinearLayout.LayoutParams(WRAP, dp(32)).apply { marginStart = dp(10) }
         fun chip(label: String, fg: Int, bg: Int, action: () -> Unit) =
             TextView(this).apply {
-                text = label; textSize = sp(12f); setTextColor(fg)
+                text = label; textSize = 12f; setTextColor(fg)
                 background = roundedBg(bg, 8f)
                 setPadding(dp(10), 0, dp(10), 0)
                 gravity = Gravity.CENTER
@@ -385,14 +385,13 @@ class DownloadsActivity : AppCompatActivity() {
     private val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
     private val WRAP  = LinearLayout.LayoutParams.WRAP_CONTENT
 
-    private fun dp(v: Int) = responsiveDp(v)
-    private fun sp(v: Float) = responsiveSp(v)
+    private fun dp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun roundedBg(color: Int, cornerDp: Float): GradientDrawable =
         GradientDrawable().apply {
             shape        = GradientDrawable.RECTANGLE
             setColor(color)
-            cornerRadius = cornerDp * responsiveDensity()
+            cornerRadius = cornerDp * resources.displayMetrics.density
         }
 
     private fun iconForMime(mime: String): Int = when {

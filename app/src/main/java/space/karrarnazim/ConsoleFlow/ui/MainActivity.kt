@@ -52,11 +52,6 @@ import java.util.concurrent.*
 
 class MainActivity : AppCompatActivity() {
 
-    private val uiScale: Float get() = responsiveScale()
-    private val uiDensity: Float get() = responsiveDensity()
-    private fun scalePx(value: Int): Int = responsiveDp(value)
-    private fun scaleText(value: Float): Float = responsiveSp(value)
-
     // ── واجهة المستخدم ──────────────────────────────────────────────────────
     private lateinit var webViewContainer: FrameLayout
     // BUG-AA FIX: ensureWebViewForTab's eviction picks
@@ -89,6 +84,18 @@ class MainActivity : AppCompatActivity() {
     private var searchOverlayContainer: FrameLayout? = null
     private lateinit var overlaySearchInput: EditText
     private lateinit var overlayClearBtn: ImageView
+
+    /**
+     * True on Android TV (leanback). Used to pick wider grids and scaled
+     * programmatic views. The values-television/ resource qualifier handles
+     * all XML-defined dimensions automatically — this flag covers Kotlin code only.
+     */
+    private val isTV: Boolean by lazy {
+        val mgr = getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager
+        mgr.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    }
+
+    private fun px(resId: Int) = resources.getDimensionPixelSize(resId)
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
@@ -522,7 +529,7 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            val extraTop = (uiDensity * 4f).toInt()
+            val extraTop = (resources.displayMetrics.density * 4f).toInt()
 
             topBar.setPadding(
                 topBar.paddingLeft,
@@ -632,7 +639,7 @@ class MainActivity : AppCompatActivity() {
             onTabClick = { tab -> switchToTab(tab) },
             onTabClose = { tab -> closeTab(tab) }
         )
-        tabsRecycler.layoutManager = GridLayoutManager(this, 2)
+        tabsRecycler.layoutManager = GridLayoutManager(this, if (isTV) 4 else 2)
         tabsRecycler.adapter       = tabAdapter
 
         updateSearchEngineIcon()
@@ -641,7 +648,7 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            val extraTop = (uiDensity * 4f).toInt()
+            val extraTop = (resources.displayMetrics.density * 4f).toInt()
 
             topBar.setPadding(
                 topBar.paddingLeft,
@@ -824,7 +831,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
-        val dp   = uiDensity
+        val dp   = resources.displayMetrics.density
+        fun px(r: Int) = resources.getDimensionPixelSize(r)
         val root = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -883,7 +891,7 @@ class MainActivity : AppCompatActivity() {
         val settingsBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
             setColorFilter(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams((40*dp).toInt(), (40*dp).toInt())
+            layoutParams = LinearLayout.LayoutParams(px(R.dimen.home_settings_btn), px(R.dimen.home_settings_btn))
             alpha = 0.85f
             setPadding((9*dp).toInt(), (9*dp).toInt(), (9*dp).toInt(), (9*dp).toInt())
             setBackgroundResource(R.drawable.bottom_btn_ripple)
@@ -902,17 +910,17 @@ class MainActivity : AppCompatActivity() {
             setPadding((14*dp).toInt(), (8*dp).toInt(), (10*dp).toInt(), (8*dp).toInt())
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                px(R.dimen.home_bar_height)
             ).apply { bottomMargin = (26*dp).toInt() }
         }
         content.addView(searchBar)
 
-        // FIX #3 — نضع tag على الـ icon لنتمكن من re-resolve بعد أي rebuild
         val searchIcon = ImageView(this).apply {
             tag = "home_search_engine_icon"
             setImageResource(currentSearchEngineIconRes())
             setColorFilter(Color.parseColor("#7E7E7E"))
-            layoutParams = LinearLayout.LayoutParams((20*dp).toInt(), (20*dp).toInt())
+            val sz = px(R.dimen.home_search_icon)
+            layoutParams = LinearLayout.LayoutParams(sz, sz)
         }
         homeSearchEngineIcon = searchIcon
         searchBar.addView(searchIcon)
@@ -953,7 +961,7 @@ class MainActivity : AppCompatActivity() {
         val fixedHeader = TextView(this).apply {
             text = "DEV BOOKMARKS"
             setTextColor(Color.parseColor("#7B7B7B"))
-            textSize = scaleText(11f); letterSpacing = 0.08f
+            textSize = 11f; letterSpacing = 0.08f
             setPadding((4*dp).toInt(), 0, 0, (10*dp).toInt())
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -962,8 +970,12 @@ class MainActivity : AppCompatActivity() {
 
         fun bookmarkGrid(items: List<kotlin.Pair<String, String>>, loadRemoteIcons: Boolean) {
             if (items.isEmpty()) return
+            val tileSz   = px(R.dimen.home_bookmark_tile)
+            val textSzSp = resources.getDimension(R.dimen.home_bookmark_text_size) /
+                           resources.displayMetrics.scaledDensity
             val grid = GridLayout(this).apply {
-                columnCount = 4; useDefaultMargins = true
+                columnCount = if (isTV) 6 else 4
+                useDefaultMargins = true
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             }
@@ -978,7 +990,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 val icon = ImageView(this).apply {
-                    layoutParams = LinearLayout.LayoutParams((44*dp).toInt(), (44*dp).toInt())
+                    layoutParams = LinearLayout.LayoutParams(tileSz, tileSz)
                     setBackgroundResource(R.drawable.tab_card_bg)
                     scaleType = ImageView.ScaleType.CENTER_INSIDE
                     setPadding((8*dp).toInt(), (8*dp).toInt(), (8*dp).toInt(), (8*dp).toInt())
@@ -987,11 +999,11 @@ class MainActivity : AppCompatActivity() {
                 val label = TextView(this).apply {
                     text = title
                     setTextColor(Color.WHITE)
-                    textSize = scaleText(10.5f); maxLines = 1
+                    textSize = textSzSp; maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     gravity = Gravity.CENTER_HORIZONTAL
                     setPadding((2*dp).toInt(), (6*dp).toInt(), (2*dp).toInt(), 0)
-                    layoutParams = LinearLayout.LayoutParams((54*dp).toInt(),
+                    layoutParams = LinearLayout.LayoutParams(tileSz + (10*dp).toInt(),
                         LinearLayout.LayoutParams.WRAP_CONTENT)
                 }
                 item.addView(icon); item.addView(label)
@@ -1016,7 +1028,7 @@ class MainActivity : AppCompatActivity() {
             val userHeader = TextView(this).apply {
                 text = "MY BOOKMARKS"
                 setTextColor(Color.parseColor("#7B7B7B"))
-                textSize = scaleText(11f); letterSpacing = 0.08f
+                textSize = 11f; letterSpacing = 0.08f
                 setPadding((4*dp).toInt(), (10*dp).toInt(), 0, (10*dp).toInt())
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -1030,7 +1042,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildErrorOverlay(): View {
-        val dp   = uiDensity
+        val dp   = resources.displayMetrics.density
         val root = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -1061,13 +1073,13 @@ class MainActivity : AppCompatActivity() {
 
         val title = TextView(this).apply {
             text = "Webpage not available"
-            setTextColor(Color.WHITE); textSize = scaleText(22f); gravity = Gravity.CENTER
+            setTextColor(Color.WHITE); textSize = 22f; gravity = Gravity.CENTER
         }
         content.addView(title)
 
         val desc = TextView(this).apply {
             text = "Could not load the requested page."
-            setTextColor(Color.parseColor("#BBBBBB")); textSize = scaleText(14f)
+            setTextColor(Color.parseColor("#BBBBBB")); textSize = 14f
             gravity = Gravity.CENTER
             setPadding(0, (8*dp).toInt(), 0, (10*dp).toInt())
         }
@@ -1075,7 +1087,7 @@ class MainActivity : AppCompatActivity() {
 
         val urlText = TextView(this).apply {
             text = ""
-            setTextColor(Color.parseColor("#777777")); textSize = scaleText(12f)
+            setTextColor(Color.parseColor("#777777")); textSize = 12f
             gravity = Gravity.CENTER
             setPadding((12*dp).toInt(), 0, (12*dp).toInt(), (20*dp).toInt())
             maxLines = 2
@@ -1089,7 +1101,7 @@ class MainActivity : AppCompatActivity() {
 
         fun makeButton(label: String, onClick: () -> Unit): TextView {
             return TextView(this).apply {
-                text = label; setTextColor(Color.WHITE); textSize = scaleText(15f)
+                text = label; setTextColor(Color.WHITE); textSize = 15f
                 setPadding((18*dp).toInt(), (12*dp).toInt(), (18*dp).toInt(), (12*dp).toInt())
                 setBackgroundResource(R.drawable.bg_menu_item)
                 setOnClickListener { onClick() }
@@ -1229,8 +1241,8 @@ private fun savePersistentTabs() {
         for (group in tabGroups) {
             val tv = TextView(this).apply {
                 text = group.name
-                setPadding(scalePx(32), scalePx(16), scalePx(32), scalePx(16))
-                textSize = scaleText(14f)
+                setPadding(32, 16, 32, 16)
+                textSize = 14f
                 if (group.id == activeGroupId) {
                     setTextColor(Color.WHITE)
                     setBackgroundResource(R.drawable.bg_menu_item)
@@ -1629,7 +1641,7 @@ private fun savePersistentTabs() {
         findViewById<View>(R.id.btnNewTab).setOnClickListener { openNewTab() }
 
         findViewById<View?>(R.id.btnNewGroup)?.setOnClickListener {
-            val input = EditText(this).apply { setTextColor(Color.WHITE); setPadding(scalePx(32), scalePx(32), scalePx(32), scalePx(32)) }
+            val input = EditText(this).apply { setTextColor(Color.WHITE); setPadding(32, 32, 32, 32) }
             AlertDialog.Builder(this, R.style.DarkDialog)
                 .setTitle("New Group Name")
                 .setView(input)
@@ -1840,7 +1852,7 @@ private fun savePersistentTabs() {
         val tabDl      = v.findViewById<TextView>(R.id.menuTabDownloads)
         val pageTools  = v.findViewById<View>(R.id.menuPageTools)
         val pageDl     = v.findViewById<View>(R.id.menuPageDownloads)
-        val density    = uiDensity
+        val density    = resources.displayMetrics.density
 
         val activeChip = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
@@ -1880,7 +1892,7 @@ private fun savePersistentTabs() {
         if (items.isEmpty()) {
             listContainer.addView(TextView(this).apply {
                 text = "No downloads yet"
-                textSize = scaleText(14f)
+                textSize = 14f
                 setTextColor(Color.parseColor("#555555"))
                 gravity = android.view.Gravity.CENTER
                 setPadding(0, menuDp(24), 0, menuDp(8))
@@ -1899,7 +1911,7 @@ private fun savePersistentTabs() {
     }
 
     private fun buildMenuDlRow(item: DownloadItem): View {
-        val density = uiDensity
+        val density = resources.displayMetrics.density
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
@@ -1930,7 +1942,7 @@ private fun savePersistentTabs() {
         }
         col.addView(TextView(this).apply {
             text = item.fileName
-            textSize = scaleText(13f)
+            textSize = 13f
             setTextColor(Color.WHITE)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
@@ -1949,7 +1961,7 @@ private fun savePersistentTabs() {
         }
         col.addView(TextView(this).apply {
             text = stateText
-            textSize = scaleText(11f)
+            textSize = 11f
             setTextColor(menuStateColor(item.state))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1962,7 +1974,7 @@ private fun savePersistentTabs() {
         return row
     }
 
-    private fun menuDp(v: Int) = (v * uiDensity + 0.5f).toInt()
+    private fun menuDp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun menuStateColor(state: DownloadState): Int = Color.parseColor(when (state) {
         DownloadState.RUNNING   -> "#6EA8DC"
@@ -2055,7 +2067,8 @@ private fun savePersistentTabs() {
      */
     private fun buildSearchOverlay() {
         if (searchOverlayContainer != null) return
-        val dp  = uiDensity
+        val dp  = resources.displayMetrics.density
+        fun px(r: Int) = resources.getDimensionPixelSize(r)
         val ctx = this
 
         // ── RecyclerView for suggestions ─────────────────────────────────
@@ -2076,13 +2089,14 @@ private fun savePersistentTabs() {
         // overlaySearchInput will exist by the time the callback fires.
         suggestionsAdapter.onBackToSearch = { overlaySearchInput.requestFocus() }
 
-        // ── Header row (same height as the top bar — 56 dp) ─────────────
+        // ── Header row — height/sizes from dimens.xml (TV gets larger values) ──
         val header = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity     = Gravity.CENTER_VERTICAL
             setBackgroundColor(0xFF0D0D0D.toInt())
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, (56 * dp).toInt()
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                px(R.dimen.search_overlay_header)
             )
         }
 
@@ -2090,14 +2104,15 @@ private fun savePersistentTabs() {
             setImageResource(R.drawable.ic_back_arrow)
             imageTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
             scaleType     = ImageView.ScaleType.CENTER
-            layoutParams  = LinearLayout.LayoutParams((52 * dp).toInt(),
+            layoutParams  = LinearLayout.LayoutParams(
+                px(R.dimen.search_overlay_btn),
                 LinearLayout.LayoutParams.MATCH_PARENT)
             background    = ContextCompat.getDrawable(ctx, R.drawable.bottom_btn_ripple)
             setOnClickListener { hideSearchOverlay() }
         }
 
         val searchIconInBar = ImageView(ctx).apply {
-            val sz = (20 * dp).toInt()
+            val sz = px(R.dimen.search_overlay_icon)
             setImageResource(R.drawable.ic_search)
             imageTintList = ColorStateList.valueOf(0xFF666666.toInt())
             scaleType     = ImageView.ScaleType.CENTER_INSIDE
@@ -2110,7 +2125,7 @@ private fun savePersistentTabs() {
             hint      = "Search or type URL"
             setHintTextColor(0xFF555555.toInt())
             setTextColor(0xFFFFFFFF.toInt())
-            textSize  = 16f
+            textSize  = if (isTV) 18f else 16f
             setSingleLine(true)
             background = null
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH or
@@ -2148,7 +2163,8 @@ private fun savePersistentTabs() {
             setImageResource(R.drawable.ic_clear)
             imageTintList = ColorStateList.valueOf(0xFF888888.toInt())
             scaleType     = ImageView.ScaleType.CENTER
-            layoutParams  = LinearLayout.LayoutParams((48 * dp).toInt(),
+            layoutParams  = LinearLayout.LayoutParams(
+                px(R.dimen.search_overlay_btn),
                 LinearLayout.LayoutParams.MATCH_PARENT)
             background    = ContextCompat.getDrawable(ctx, R.drawable.bottom_btn_ripple)
             visibility    = View.INVISIBLE
@@ -2234,7 +2250,7 @@ private fun savePersistentTabs() {
 
         container.visibility = View.VISIBLE
         container.alpha      = 0f
-        container.translationY = uiDensity * 40f
+        container.translationY = resources.displayMetrics.density * 40f
         container.animate()
             .alpha(1f)
             .translationY(0f)
@@ -2258,7 +2274,7 @@ private fun savePersistentTabs() {
         hideKeyboard()
         container.animate()
             .alpha(0f)
-            .translationY(uiDensity * 40f)
+            .translationY(resources.displayMetrics.density * 40f)
             .setDuration(160)
             .setInterpolator(android.view.animation.AccelerateInterpolator())
             .withEndAction {

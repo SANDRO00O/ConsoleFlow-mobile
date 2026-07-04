@@ -49,7 +49,7 @@ class AboutActivity : AppCompatActivity() {
         val wv = findViewById<WebView>(R.id.bannerWebView)
 
         // Calculate exact height from banner aspect ratio (viewBox 1778.04 × 250)
-        val horizontalPaddingPx = responsiveDp(32)
+        val horizontalPaddingPx = (32 * resources.displayMetrics.density).toInt()
         val availableWidth      = resources.displayMetrics.widthPixels - horizontalPaddingPx
         val bannerHeight        = (availableWidth / 7.112f).toInt()
 

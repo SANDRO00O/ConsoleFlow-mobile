@@ -1,0 +1,33 @@
+<resources>
+    <!-- Android TV overrides — 1080p at 2-3 metres viewing distance -->
+
+    <dimen name="bar_height">76dp</dimen>
+    <dimen name="toolbar_engine_icon">36dp</dimen>
+    <dimen name="toolbar_btn_size">48dp</dimen>
+    <dimen name="url_bar_height">52dp</dimen>
+    <dimen name="nav_icon_size">38dp</dimen>
+    <dimen name="tab_count_text_size">15sp</dimen>
+    <dimen name="tabs_header_height">72dp</dimen>
+    <dimen name="tabs_group_btn">48dp</dimen>
+    <dimen name="tabs_new_btn">56dp</dimen>
+    <dimen name="tab_card_height">270dp</dimen>
+    <dimen name="tab_card_margin">8dp</dimen>
+    <dimen name="tab_favicon_size">28dp</dimen>
+    <dimen name="tab_title_text_size">17sp</dimen>
+    <dimen name="tab_close_size">36dp</dimen>
+    <dimen name="menu_chip_height">56dp</dimen>
+    <dimen name="menu_chip_text_size">17sp</dimen>
+    <dimen name="menu_item_height">108dp</dimen>
+    <dimen name="menu_icon_size">34dp</dimen>
+    <dimen name="menu_item_text_size">15sp</dimen>
+    <dimen name="find_icon_size">48dp</dimen>
+    <dimen name="search_overlay_header">76dp</dimen>
+    <dimen name="search_overlay_btn">72dp</dimen>
+    <dimen name="search_overlay_icon">28dp</dimen>
+    <dimen name="search_overlay_row">68dp</dimen>
+    <dimen name="home_bar_height">72dp</dimen>
+    <dimen name="home_search_icon">26dp</dimen>
+    <dimen name="home_bookmark_tile">110dp</dimen>
+    <dimen name="home_bookmark_text_size">14sp</dimen>
+    <dimen name="home_settings_btn">56dp</dimen>
+</resources>

@@ -48,11 +48,12 @@ class SuggestionsAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val dp = context.responsiveDensity()
+        val dp  = context.resources.displayMetrics.density
+        fun px(r: Int) = context.resources.getDimensionPixelSize(r)
 
         val icon = ImageView(context).apply {
-            val size = (20 * dp).toInt()
-            layoutParams = LinearLayout.LayoutParams(size, size).also { lp ->
+            val sz = px(R.dimen.search_overlay_icon)
+            layoutParams = LinearLayout.LayoutParams(sz, sz).also { lp ->
                 lp.gravity    = Gravity.CENTER_VERTICAL
                 lp.marginStart = (16 * dp).toInt()
                 lp.marginEnd  = (12 * dp).toInt()
@@ -67,7 +68,7 @@ class SuggestionsAdapter(
                 lp.gravity = Gravity.CENTER_VERTICAL
             }
             setTextColor(0xFFEEEEEE.toInt())
-            textSize  = context.responsiveSp(14f)
+            textSize  = 14f
             typeface  = Typeface.DEFAULT
             maxLines  = 1
             ellipsize = TextUtils.TruncateAt.END
@@ -75,15 +76,12 @@ class SuggestionsAdapter(
         }
 
         val fill = ImageView(context).apply {
-            val size = (44 * dp).toInt()
-            layoutParams = LinearLayout.LayoutParams(size, ViewGroup.LayoutParams.MATCH_PARENT)
+            val sz = px(R.dimen.search_overlay_btn)
+            layoutParams = LinearLayout.LayoutParams(sz, ViewGroup.LayoutParams.MATCH_PARENT)
             setImageResource(R.drawable.ic_suggestion_fill)
             imageTintList = ColorStateList.valueOf(0xFF555555.toInt())
             scaleType = ImageView.ScaleType.CENTER
             background = ContextCompat.getDrawable(context, R.drawable.bottom_btn_ripple)
-            // TV: fill is a touch-only affordance. D-pad focus stays on the row
-            // as a whole; making fill separately focusable would require two
-            // D-pad presses to move past each suggestion instead of one.
             isFocusable = false
         }
 
@@ -92,10 +90,8 @@ class SuggestionsAdapter(
             gravity     = Gravity.CENTER_VERTICAL
             layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                (52 * dp).toInt()
+                px(R.dimen.search_overlay_row)
             )
-            // bg_suggestion_row shows a solid highlight on focus (TV D-pad)
-            // AND a pressed-state on touch — bottom_btn_ripple only handles touch.
             background = ContextCompat.getDrawable(context, R.drawable.bg_suggestion_row)
             isFocusable = true
             isClickable = true

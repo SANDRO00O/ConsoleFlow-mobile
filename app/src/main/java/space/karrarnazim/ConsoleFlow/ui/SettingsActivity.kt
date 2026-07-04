@@ -22,7 +22,6 @@ import android.os.Bundle
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var prefsManager: PrefsManager
-    private fun scaleText(value: Float): Float = responsiveSp(value)
 
     private data class EngineOption(val name: String, val url: String, val iconRes: Int?)
 
@@ -100,7 +99,7 @@ class SettingsActivity : AppCompatActivity() {
             setText(prefsManager.customJs)
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xFF111111.toInt())
-            setPadding(responsiveDp(32), responsiveDp(24), responsiveDp(32), responsiveDp(24))
+            setPadding(32, 24, 32, 24)
             hint = "// Your JavaScript here..."
             setHintTextColor(0xFF444444.toInt())
             isSingleLine = false
@@ -160,7 +159,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun showSearchEnginePicker() {
         val listView = ListView(this).apply {
             divider = null
-            setPadding(responsiveDp(24), responsiveDp(20), responsiveDp(24), responsiveDp(20))
+            setPadding(24, 20, 24, 20)
             clipToPadding = false
         }
 
@@ -174,19 +173,19 @@ class SettingsActivity : AppCompatActivity() {
                 val row = (convertView as? LinearLayout) ?: LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity     = Gravity.CENTER_VERTICAL
-                    setPadding(responsiveDp(24), responsiveDp(22), responsiveDp(24), responsiveDp(22))
-                    minimumHeight = responsiveDp(56)
+                    setPadding(24, 22, 24, 22)
+                    minimumHeight = (56 * resources.displayMetrics.density).toInt()
 
                     addView(ImageView(ctx).apply {
                         id = 1
-                        val size = responsiveDp(24)
+                        val size = (24 * resources.displayMetrics.density).toInt()
                         layoutParams = LinearLayout.LayoutParams(size, size)
                     })
                     addView(TextView(ctx).apply {
                         id = 2
                         setTextColor(0xFFFFFFFF.toInt())
                         setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                        setPadding(responsiveDp(16), 0, 0, 0)
+                        setPadding(16, 0, 0, 0)
                         layoutParams = LinearLayout.LayoutParams(
                             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                     })
@@ -238,7 +237,7 @@ class SettingsActivity : AppCompatActivity() {
             setText(current.takeIf { prefsManager.searchEngineIsCustom } ?: "https://example.com/search?q=%s")
             setTextColor(0xFFFFFFFF.toInt())
             setBackgroundColor(0xFF111111.toInt())
-            setPadding(responsiveDp(32), responsiveDp(24), responsiveDp(32), responsiveDp(24))
+            setPadding(32, 24, 32, 24)
             hint      = "https://example.com/search?q=%s"
             setHintTextColor(0xFF444444.toInt())
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
@@ -247,11 +246,11 @@ class SettingsActivity : AppCompatActivity() {
 
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(responsiveDp(24), responsiveDp(8), responsiveDp(24), 0)
+            setPadding(24, 8, 24, 0)
             addView(TextView(context).apply {
                 text = "Use %s where the search term should go."
                 setTextColor(0xFF888888.toInt())
-                textSize = scaleText(13f)
+                textSize = 13f
             })
             addView(input, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
