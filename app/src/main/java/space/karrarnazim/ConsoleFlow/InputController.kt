@@ -6,7 +6,6 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.webkit.WebView
 import kotlin.math.abs
 
 /**
@@ -30,7 +29,7 @@ import kotlin.math.abs
 class InputController(private val h: Handlers) {
 
     interface Handlers {
-        fun getWebView(): WebView?
+        fun getActiveSession(): GeckoTabSession?
         fun isTopBarVisible(): Boolean
         fun isTabsOverlayVisible(): Boolean
         fun showTopBar()
@@ -177,7 +176,7 @@ class InputController(private val h: Handlers) {
     // ─────────────────────────────────────────────────────────────────────
 
     private fun handleGenericKey(event: KeyEvent): Boolean {
-        val wv by lazy { h.getWebView() }
+        val wv by lazy { h.getActiveSession() }
 
         return when (event.keyCode) {
 
@@ -197,7 +196,7 @@ class InputController(private val h: Handlers) {
                 val v = wv ?: return false
                 when {
                     v.canScrollHorizontally(-1) -> { v.scrollBy(-DPAD_SCROLL, 0); true }
-                    v.canGoBack()               -> { h.navigateBack();            true }
+                    v.canGoBack               -> { h.navigateBack();            true }
                     else                        -> false
                 }
             }
@@ -207,7 +206,7 @@ class InputController(private val h: Handlers) {
                 val v = wv ?: return false
                 when {
                     v.canScrollHorizontally(1) -> { v.scrollBy(DPAD_SCROLL, 0); true }
-                    v.canGoForward()           -> { h.navigateForward();         true }
+                    v.canGoForward           -> { h.navigateForward();         true }
                     else                       -> false
                 }
             }
@@ -309,7 +308,7 @@ class InputController(private val h: Handlers) {
                     return
                 }
 
-                h.getWebView()?.scrollBy(
+                h.getActiveSession()?.scrollBy(
                     (scrollX * SCROLL_SPEED).toInt(),
                     (scrollY * SCROLL_SPEED).toInt()
                 )
@@ -328,7 +327,7 @@ class InputController(private val h: Handlers) {
         val v  = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
         val hz = event.getAxisValue(MotionEvent.AXIS_HSCROLL)
         if (v == 0f && hz == 0f) return false
-        h.getWebView()?.scrollBy((-hz * MOUSE_SPEED).toInt(), (-v * MOUSE_SPEED).toInt())
+        h.getActiveSession()?.scrollBy((-hz * MOUSE_SPEED).toInt(), (-v * MOUSE_SPEED).toInt())
         return true
     }
 
@@ -342,7 +341,7 @@ class InputController(private val h: Handlers) {
     }
 
     private fun activateWebElement() {
-        val wv = h.getWebView() ?: return
+        val wv = h.getActiveSession() ?: return
         stopScrollLoop()
         wv.requestFocus()
         val t  = SystemClock.uptimeMillis()

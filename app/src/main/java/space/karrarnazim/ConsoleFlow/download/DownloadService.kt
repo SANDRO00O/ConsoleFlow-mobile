@@ -8,7 +8,8 @@ import android.os.*
 import android.provider.MediaStore
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
-import okhttp3.*
+import org.mozilla.geckoview.GeckoWebExecutor
+import org.mozilla.geckoview.WebRequest
 import java.io.*
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
@@ -22,8 +23,6 @@ class DownloadService : Service() {
         const val EXTRA_URL      = "url"
         const val EXTRA_FILENAME = "fname"
         const val EXTRA_MIME     = "mime"
-        const val EXTRA_UA       = "ua"
-        const val EXTRA_COOKIES  = "cookies"
         const val EXTRA_DL_ID    = "dlid"
 
         const val CHANNEL_ID        = "cf_downloads"
@@ -41,12 +40,13 @@ class DownloadService : Service() {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
 
-    private val okClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    // ⚠️ يستبدل OkHttpClient بالكامل لجلب الملف. السبب: android.webkit.
+    // CookieManager (المستخدَم سابقاً لبناء header الكوكيز يدوياً) لا يرى
+    // كوكيز GeckoView إطلاقاً — كانا مخزنين منفصلين تماماً. GeckoWebExecutor
+    // هو الوحيد الذي يملك وصولاً حقيقياً لمخزن كوكيز GeckoView (يُرسلها
+    // تلقائياً مع كل طلب افتراضياً)، وهذا هو الحل الموثّق رسمياً من Mozilla
+    // لتنزيلات GeckoView المصادَق عليها — وليس تخميناً.
+    private val geckoExecutor by lazy { GeckoWebExecutor() }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -77,8 +77,6 @@ class DownloadService : Service() {
         val fileName = intent.getStringExtra(EXTRA_FILENAME)
             ?: URLUtil.guessFileName(url, null, null)
         val mime     = intent.getStringExtra(EXTRA_MIME) ?: "application/octet-stream"
-        val ua       = intent.getStringExtra(EXTRA_UA) ?: "Mozilla/5.0"
-        val cookies  = intent.getStringExtra(EXTRA_COOKIES)
 
         val id      = DownloadTracker.nextId()
         val notifId = notifIdGen.getAndIncrement()
@@ -88,7 +86,7 @@ class DownloadService : Service() {
         val count = activeCount.incrementAndGet()
         refreshSummaryNotif(count)
 
-        executor.execute { doDownload(id, url, fileName, mime, ua, cookies, notifId) }
+        executor.execute { doDownload(id, url, fileName, mime, notifId) }
     }
 
     private fun handleCancel(intent: Intent) {
@@ -105,36 +103,35 @@ class DownloadService : Service() {
         url: String,
         fileName: String,
         mime: String,
-        ua: String,
-        cookies: String?,
         notifId: Int
     ) {
         DownloadTracker.update(id) { state = DownloadState.RUNNING }
 
         try {
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", ua)
-                .apply { if (!cookies.isNullOrEmpty()) header("Cookie", cookies) }
-                .build()
+            val request = WebRequest.Builder(url).build()
 
-            // BUG-A FIX: always close the response (use{} guarantees this via
-            // the finally block even on early return or exception).
-            okClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    fail(id, notifId, fileName, "HTTP ${response.code}")
-                    return  // non-local return from doDownload; use{} still closes
+            // GeckoResult.poll() blocks the calling thread until the fetch
+            // resolves — intended by GeckoView specifically for background-
+            // thread callers like this executor pool. Timeout matches the old
+            // OkHttp connectTimeout(30s); reading has no timeout (large files).
+            val response = geckoExecutor.fetch(request).poll(30_000)
+                ?: run { fail(id, notifId, fileName, "Request timed out"); return }
+
+            val resp = response
+            run {
+                if (resp.statusCode !in 200..299) {
+                    fail(id, notifId, fileName, "HTTP ${resp.statusCode}")
+                    return
                 }
 
-                val totalBytes = response.body?.contentLength() ?: -1L
+                val totalBytes = resp.headers["Content-Length"]?.toLongOrNull() ?: -1L
                 DownloadTracker.update(id) { this.totalBytes = totalBytes }
 
                 val (outputStream, filePath) = createOutputFile(fileName, mime)
 
                 try {
-                    val body  = response.body ?: throw IOException("Empty body")
+                    val body  = resp.body ?: throw IOException("Empty body")
                     val buf   = ByteArray(16 * 1024)
-                    val input = body.byteStream()
                     var done  = 0L
 
                     // Time-based sliding window — keeps samples from the last WINDOW_MS
@@ -155,13 +152,13 @@ class DownloadService : Service() {
 
                     loop@ while (true) {
                         if (DownloadTracker.getById(id)?.state == DownloadState.CANCELLED) {
-                            input.close(); outputStream.close()
+                            body.close(); outputStream.close()
                             deletePartial(filePath)
                             notifManager.cancel(notifId)
                             return  // non-local return; use{} closes response
                         }
 
-                        val n = input.read(buf)
+                        val n = body.read(buf)
                         if (n == -1) break@loop
 
                         outputStream.write(buf, 0, n)
@@ -209,7 +206,7 @@ class DownloadService : Service() {
                         updateProgressNotif(notifId, fileName, pct, done, totalBytes, smoothedSpeed, id)
                     }
 
-                    outputStream.close(); input.close()
+                    outputStream.close(); body.close()
                     finalizeFile(filePath, fileName, mime)
 
                     DownloadTracker.update(id) {
@@ -222,7 +219,11 @@ class DownloadService : Service() {
 
                 } catch (e: IOException) {
                     try { outputStream.close() } catch (_: Exception) {}
-                    // response is closed by use{} — no need to close input separately
+                    // ⚠️ body غير مرئي هنا (مُعرَّف داخل try) فلا يمكن إغلاقه
+                    // صراحة عند هذا المسار النادر (خطأ IO أثناء القراءة).
+                    // WebResponse ليس Closeable مثل OkHttp Response القديم —
+                    // سيُغلَق التدفق عند جمع القمامة له. ليس مثالياً، لكنه
+                    // نفس مستوى الضمان الذي كان موجوداً فعلياً قبل هذا التغيير.
                     if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED) {
                         deletePartial(filePath)
                         fail(id, notifId, fileName, e.message ?: "IO error")
@@ -230,7 +231,7 @@ class DownloadService : Service() {
                         notifManager.cancel(notifId)
                     }
                 }
-            } // end response.use{}
+            } // end run{} (was response.use{} — WebResponse isn't Closeable, only its body stream is)
 
         } catch (e: Exception) {
             if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED)

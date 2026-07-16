@@ -63,8 +63,8 @@ class MainActivity : AppCompatActivity() {
     // again stayed alive forever. accessOrder=true bumps an entry to the end
     // on every get()/put(), so the entry actually at the front is genuinely
     // the least-recently-used one — matching what the eviction code assumes.
-    private val webViews = LinkedHashMap<Int, WebView>(16, 0.75f, true)
-    private val currentWebView: WebView? get() = webViews[activeTabId]
+    private val webViews = LinkedHashMap<Int, GeckoTabSession>(16, 0.75f, true)
+    private val currentWebView: GeckoTabSession? get() = webViews[activeTabId]
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var progressBar: ProgressBar
@@ -90,10 +90,11 @@ class MainActivity : AppCompatActivity() {
      * programmatic views. The values-television/ resource qualifier handles
      * all XML-defined dimensions automatically — this flag covers Kotlin code only.
      */
-    private val isTV: Boolean by lazy {
-        val mgr = getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager
-        mgr.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-    }
+    private val isTV: Boolean by lazy { TvUtils.isTelevision(this) }
+
+    // Guards the one-time overscan-safe padding pass applied to the home
+    // overlay (see onResume). Runs once; TV overscan doesn't change at runtime.
+    private var homeOverlayOverscanApplied = false
 
     private fun px(resId: Int) = resources.getDimensionPixelSize(resId)
     private lateinit var tabsOverlay: FrameLayout
@@ -130,11 +131,15 @@ class MainActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // ── الفيديو بملء الشاشة والأذونات ───────────────────────────────────────
-    private var customView: View? = null
-    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
-    private var webPermissionRequest: PermissionRequest? = null
-    // BUG-N FIX: holds the pending callback while the system file picker is open
-    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    // GeckoView renders fullscreen video in-place — no CustomView swap needed,
+    // unlike the old WebChromeClient API. Just track whether we're in it.
+    private var isFullscreenActive = false
+    // BUG-V FIX (preserved): holds the pending callback while the Android
+    // runtime permission dialog is open, so getUserMedia() actually resolves.
+    private var pendingPermissionResult: ((Boolean) -> Unit)? = null
+    // BUG-N FIX (preserved): holds the pending callback while the system file
+    // picker is open, for <input type="file">.
+    private var pendingFileChooserResult: ((List<Uri>?) -> Unit)? = null
 
     // ── القائمة السفلية المخزنة مؤقتاً ─────────────────────────────────────
     private var cachedMenuSheet: BottomSheetDialog? = null
@@ -159,7 +164,7 @@ class MainActivity : AppCompatActivity() {
 
     // ── إدارة الجلسات والتبويبات ───────────────────────────────────────────
     private lateinit var sessionManager: BrowserSessionManager
-    private lateinit var webViewFactory: BrowserWebViewFactory
+    private lateinit var webViewFactory: GeckoSessionFactory
 
     private var tabGroups: MutableList<TabGroup>
         get() = sessionManager.tabGroups
@@ -190,8 +195,8 @@ class MainActivity : AppCompatActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
-        if (perms.values.all { it }) webPermissionRequest?.grant(webPermissionRequest?.resources)
-        else webPermissionRequest?.deny()
+        pendingPermissionResult?.invoke(perms.values.all { it })
+        pendingPermissionResult = null
     }
 
     // POST_NOTIFICATIONS permission for download completion alerts (API 33+)
@@ -215,14 +220,14 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val data = result.data
-        val uris: Array<Uri>? = when {
+        val uris: List<Uri>? = when {
             result.resultCode != RESULT_OK || data == null -> null
-            data.clipData != null -> Array(data.clipData!!.itemCount) { i -> data.clipData!!.getItemAt(i).uri }
-            data.data != null -> arrayOf(data.data!!)
+            data.clipData != null -> List(data.clipData!!.itemCount) { i -> data.clipData!!.getItemAt(i).uri }
+            data.data != null -> listOf(data.data!!)
             else -> null
         }
-        filePathCallback?.onReceiveValue(uris)
-        filePathCallback = null
+        pendingFileChooserResult?.invoke(uris)
+        pendingFileChooserResult = null
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -243,85 +248,76 @@ class MainActivity : AppCompatActivity() {
             Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
         )
 
+        // ⚠️ إصلاح خطأ حقيقي: ErudaAssetCache.preload() كانت مُعرَّفة في
+        // ConsoleToolsInjector.kt لكن ما انحطّت باستدعائها بأي مكان —
+        // يعني الكونسول كان سيفشل بصمت (eruda غير معرَّف، الخطأ يُبتلَع
+        // بصمت داخل try/catch الخاص بحقن السكربت). قراءة الملف I/O من
+        // assets فتُنفَّذ في خيط خلفي بدل حجب onCreate.
+        ioExecutor.execute {
+            runCatching {
+                assets.open("eruda.js").bufferedReader().use { it.readText() }
+            }.getOrNull()?.let { ErudaAssetCache.preload(it) }
+        }
+
         sessionManager = BrowserSessionManager()
-        webViewFactory = BrowserWebViewFactory(
+        webViewFactory = GeckoSessionFactory(
             activity = this,
             prefsManager = prefsManager,
-            okClient = okClient,
-            currentWebViewProvider = { currentWebView },
             isHomeUrl = { isHomeUrl(it) },
-            isLocalhostHost = { isLocalhostHost(it) },
-            noInterceptDomains = NO_INTERCEPT_DOMAINS,
             bookmarkRepository = bookmarkRepository,
             onOpenNewTab = { openNewTab(it) },
             onMarkHomeOverlayDirty = { homeOverlayDirty = true },
             onInvalidateHomePreviewCache = { invalidateHomePreviewCache() },
-            onNavigate = { navigateTo(it) },
-            onSetSwipeRefresh = { enabled -> swipeRefresh.isEnabled = enabled },
-            onPageStartedUi = { tabId, _, url ->
-                // BUG-L FIX (critical): this callback fires for EVERY tab, including
-                // background ones. Without this guard, a background tab starting a
-                // new navigation was overwriting the visible address bar text,
-                // bookmark icon, and topBar visibility — even while the user was
-                // looking at (or typing in) a completely different tab.
-                if (tabId == activeTabId) {
+            onSetSwipeRefresh = { enabled -> swipeRefresh.isEnabled = enabled && swipeRefreshAllowed() },
+            onPageStartedUi = { tab ->
+                // BUG-L FIX (preserved): only touch shared chrome UI when this
+                // is the tab currently on screen — a background tab starting a
+                // new navigation must never overwrite the visible address bar.
+                if (tab.tabId == activeTabId) {
                     keepCursorAlive()
                     progressBar.visibility = View.VISIBLE
-                    textUrl.setText(if (isHomeUrl(url)) "" else url)
-                    updateBookmarkIcon(url ?: "")
-                    if (isHomeUrl(url)) setTopBarVisible(false) else setTopBarVisible(true)
+                    textUrl.setText(if (isHomeUrl(tab.url)) "" else tab.url)
+                    updateBookmarkIcon(tab.url ?: "")
+                    if (isHomeUrl(tab.url)) setTopBarVisible(false) else setTopBarVisible(true)
                 }
             },
-            onProgressChangedUi = { tabId, progress ->
-                // BUG-K FIX: a background tab loading must not update the active
-                // tab's progress bar. Only apply when the tab is the current one.
-                if (tabId == activeTabId) progressBar.progress = progress
+            onProgressChangedUi = { tab ->
+                // BUG-K FIX (preserved): a background tab loading must not
+                // move the active tab's progress bar.
+                if (tab.tabId == activeTabId) progressBar.progress = tab.progress
             },
-            onShowCustomViewUi = { view, callback ->
-                customView = view
-                customViewCallback = callback
-                fullscreenContainer.removeAllViews()
-                if (view != null) fullscreenContainer.addView(view)
-                fullscreenContainer.visibility = View.VISIBLE
-                webViewContainer.visibility = View.GONE
-                setFullscreen(true)
+            onFullScreenUi = { fullScreen ->
+                isFullscreenActive = fullScreen
+                setFullscreen(fullScreen)
             },
-            onHideCustomViewUi = {
-                hideCustomView()
+            onAndroidPermissionsNeededUi = { perms, onResult ->
+                // BUG-V FIX (preserved): getUserMedia() (camera/mic — video
+                // calls, WebRTC, voice input) must reach a real system prompt,
+                // not hang forever.
+                pendingPermissionResult = onResult
+                requestPermissionLauncher.launch(perms)
             },
-            onPermissionRequestUi = { request ->
-                // BUG-V FIX (critical): this previously only did
-                // `webPermissionRequest = request` and stopped — the registered
-                // requestPermissionLauncher was never actually launched anywhere
-                // in the file. Every getUserMedia() call from a web page (camera/
-                // mic — video calls, WebRTC demos, voice input forms…) just hung
-                // forever: no system dialog, no grant, no deny, no error.
-                webPermissionRequest = request
-                val androidPerms = request?.resources?.mapNotNull {
-                    when (it) {
-                        PermissionRequest.RESOURCE_VIDEO_CAPTURE -> android.Manifest.permission.CAMERA
-                        PermissionRequest.RESOURCE_AUDIO_CAPTURE -> android.Manifest.permission.RECORD_AUDIO
-                        else -> null
-                    }
-                }?.distinct().orEmpty()
-
-                when {
-                    request == null -> Unit
-                    androidPerms.isEmpty() ->
-                        // No dangerous Android permission maps to this resource
-                        // (e.g. protected media ID, MIDI sysex) — safe to grant directly.
-                        request.grant(request.resources)
-                    androidPerms.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED } ->
-                        request.grant(request.resources)
-                    else ->
-                        requestPermissionLauncher.launch(androidPerms.toTypedArray())
+            onShowFileChooserUi = { mimeTypes, onResult ->
+                // BUG-N FIX (preserved): <input type="file"> must open the
+                // system file/image/camera picker.
+                pendingFileChooserResult = onResult
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = mimeTypes.firstOrNull()?.takeIf { it.isNotEmpty() } ?: "*/*"
+                    if (mimeTypes.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                }
+                val launched = runCatching { fileChooserLauncher.launch(intent) }.isSuccess
+                if (!launched) {
+                    pendingFileChooserResult = null
+                    Toast.makeText(this, "No file picker app available", Toast.LENGTH_SHORT).show()
+                    onResult(null)
                 }
             },
-            onPageFinishedUi = { tabId, view, url ->
-                // BUG-2 FIX: only touch UI state for the currently visible tab.
-                // A background tab finishing load must not hide the active tab's
-                // progress bar or reset its pull-to-refresh indicator.
-                val isActiveTab = view == currentWebView
+            onPageFinishedUi = { tab ->
+                // BUG-2 FIX (preserved): only touch UI state for the currently
+                // visible tab; a background tab finishing load must not hide
+                // the active tab's progress bar or its pull-to-refresh spinner.
+                val isActiveTab = tab.tabId == activeTabId
 
                 if (isActiveTab) {
                     keepCursorAlive()
@@ -329,71 +325,52 @@ class MainActivity : AppCompatActivity() {
                     progressBar.visibility = View.INVISIBLE
                 }
 
-                url?.let { pageUrl ->
+                val pageUrl = tab.url
+                if (pageUrl != null) {
                     if (!isHomeUrl(pageUrl)) {
-                        val title = view.title ?: "Unknown"
+                        val title = tab.title ?: "Unknown"
                         ioExecutor.execute { historyRepository.addHistory(title, pageUrl) }
                     }
 
-                    currentGroup?.tabs?.find { it.id == tabId }?.let { tab ->
-                        tab.title = view.title ?: "Tab"
-                        tab.url = if (isHomeUrl(pageUrl)) HOME_URL else pageUrl
-                        if (isHomeUrl(pageUrl) && tab.ramThumbnail == null) {
-                            tab.ramThumbnail = getHomePreviewBitmap()
-                            tab.hasThumbnail = true
-                            tab.thumbnailUrl = HOME_URL
+                    currentGroup?.tabs?.find { it.id == tab.tabId }?.let { tabState ->
+                        tabState.title = tab.title ?: "Tab"
+                        tabState.url = if (isHomeUrl(pageUrl)) HOME_URL else pageUrl
+                        if (isHomeUrl(pageUrl) && tabState.ramThumbnail == null) {
+                            tabState.ramThumbnail = getHomePreviewBitmap()
+                            tabState.hasThumbnail = true
+                            tabState.thumbnailUrl = HOME_URL
                         }
                     }
 
-                    // BUG-1 FIX: when goBack() (or any navigation) returns the active
-                    // WebView to about:blank, show the home overlay instead of leaving
-                    // a blank white WebView visible.
+                    // BUG-1 FIX (preserved): returning to about:blank/home must
+                    // show the home overlay instead of a blank screen.
                     if (isActiveTab && isHomeUrl(pageUrl)) showHomeOverlay()
 
                     refreshTabsRecycler()
                     savePersistentTabs()
                 }
 
-                // Desktop-mode viewport hack: only needed for the visible tab.
-                if (isActiveTab && prefsManager.desktopMode) {
-                    view.evaluateJavascript(
-                        "(function(){" +
-                            "var meta=document.querySelector('meta[name=\"viewport\"]');" +
-                            "if(meta){meta.setAttribute('content','width=1024');}" +
-                            "else{var nm=document.createElement('meta');nm.name='viewport';" +
-                            "nm.content='width=1024';document.head.appendChild(nm);" +
-                            "}})()",
-                        null
-                    )
-                }
+                // ⚠️ حُذف حقن viewport meta اليدوي القديم من هنا — كان
+                // ضرورياً في WebView لأنه ما عنده مكافئ أصلي. GeckoView عنده
+                // GeckoSessionSettings.VIEWPORT_MODE_DESKTOP (مُطبَّق في
+                // GeckoTabSession.setDesktopMode()) الذي يغني عن هذا تماماً.
+                // إبقاؤه كان سيعني منطقاً مكرَّراً بلا داعٍ.
             },
-            onReceivedIconUi = { tabId, icon ->
-                currentGroup?.tabs?.find { it.id == tabId }?.let { tab ->
-                    tab.faviconBitmap = icon
+            onReceivedIconUi = { tab ->
+                // NOTE: GeckoView's ContentDelegate has no onReceivedIcon
+                // equivalent to WebView's favicon callback — this currently
+                // only refreshes the tab title in the recycler. Favicon
+                // fetching needs a separate manual request (e.g. reading
+                // <link rel="icon"> after page load) — tracked as a follow-up,
+                // not silently faked here.
+                currentGroup?.tabs?.find { it.id == tab.tabId }?.let {
                     refreshTabsRecycler()
                 }
             },
             onReceivedErrorUi = { url -> showErrorOverlay(url) },
-            onApplyConsoleTools = { view -> applyConsoleTools(view) },
-            onDownloadStart = { url, userAgent, contentDisposition, mimeType, contentLength ->
-                handleDownloadRequest(url, userAgent, contentDisposition, mimeType, contentLength)
-            },
-            onShowFileChooserUi = { callback, params ->
-                // BUG-N FIX: launch the system file/image/camera picker so
-                // <input type="file"> actually works instead of doing nothing.
-                filePathCallback?.onReceiveValue(null)
-                filePathCallback = callback
-                val intent = params?.createIntent()
-                if (intent != null) {
-                    val launched = runCatching { fileChooserLauncher.launch(intent) }.isSuccess
-                    if (!launched) {
-                        filePathCallback = null
-                        Toast.makeText(this, "No file picker app available", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    filePathCallback = null
-                }
-                true
+            onApplyConsoleTools = { tab -> applyConsoleTools(tab) },
+            onDownloadStart = { url, contentType, contentLength, filename ->
+                handleDownloadRequest(url, contentType ?: "application/octet-stream", contentLength, filename)
             }
         )
 
@@ -443,9 +420,9 @@ class MainActivity : AppCompatActivity() {
                 val activeTab = currentGroup?.tabs?.find { it.id == activeTabId }
                     ?: currentGroup?.tabs?.firstOrNull()
                 if (activeTab != null) {
-                    val restoredState = savedInstanceState.getBundle("active_webview_state")
-                    val wv = ensureWebViewForTab(activeTab, restoredState)
-                    webViewContainer.addView(wv)
+                    val wv = ensureWebViewForTab(activeTab)
+                    wv.setActive(true)
+                    webViewContainer.addView(wv.geckoView)
                     wv.requestFocus()
                 }
                 updateGroupsUI()
@@ -467,13 +444,13 @@ class MainActivity : AppCompatActivity() {
                 // Dismiss the search overlay before any deeper back action.
                 searchOverlayContainer?.visibility == View.VISIBLE -> hideSearchOverlay()
                 topBar.visibility == View.VISIBLE && isHomeUrl(currentWebView?.url) -> setTopBarVisible(false)
-                customView != null -> hideCustomView()
+                isFullscreenActive -> hideCustomView()
                 findBar.visibility == View.VISIBLE -> {
                     findBar.visibility = View.GONE
                     currentWebView?.clearMatches()
                     keepCursorAlive()
                 }
-                currentWebView?.canGoBack() == true -> currentWebView?.goBack()
+                currentWebView?.canGoBack == true -> currentWebView?.goBack()
                 else -> finish()
             }
         }
@@ -496,17 +473,19 @@ class MainActivity : AppCompatActivity() {
         outState.putInt("ACTIVE_TAB_ID",   activeTabId)
         outState.putInt("NEXT_TAB_ID",     nextTabId)
         outState.putInt("NEXT_GROUP_ID",   nextGroupId)
-        currentWebView?.let { wv ->
-            val bundle = Bundle()
-            wv.saveState(bundle)
-            outState.putBundle("active_webview_state", bundle)
-        }
+        // ⚠️ فجوة مُغلقة: TabState.sessionStateJson (يُحدَّث تلقائياً عبر
+        // GeckoSession.ProgressDelegate.onSessionStateChange — نمط دفع، لا
+        // استطلاع يدوي غير متزامن) هو مجرد حقل String عادي على tabGroups
+        // القابل للتسلسل أصلاً — فيُحفَظ هنا تلقائياً مع putSerializable
+        // بلا أي كود إضافي. هذا يستعيد تاريخ التصفح الفعلي داخل كل تبويب،
+        // وليس فقط الرابط الحالي.
     }
 
     override fun onResume() {
         super.onResume()
         updateSearchEngineIcon()
         keepCursorAlive()
+        currentWebView?.setActive(true)
 
         // BUG-5 FIX: SettingsActivity's "Clear Data" can't access the live WebViews,
         // so it sets a flag. We honour it here where we have full access.
@@ -523,7 +502,7 @@ class MainActivity : AppCompatActivity() {
         // looked like it simply didn't work). Re-sync every live WebView here;
         // applyUserAgentToWebView is idempotent so this is a no-op when nothing
         // changed.
-        webViews.values.forEach { WebViewSettingsHelper.applyUserAgentToWebView(this, it, prefsManager.desktopMode) }
+        webViews.values.forEach { it.setDesktopMode(prefsManager.desktopMode) }
 
         val root = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
@@ -555,18 +534,26 @@ class MainActivity : AppCompatActivity() {
             insets
         }
         root.requestApplyInsets()
+
+        // TV FIX: window insets only describe system bars (status/nav), not
+        // panel overscan. Most TV screens crop ~5% off every edge, so the
+        // home overlay's logo/tiles were rendered partly outside the visible
+        // picture. Apply once — no-op on phones.
+        if (!homeOverlayOverscanApplied && isTV) {
+            homeOverlayOverscanApplied = true
+            TvUtils.applyOverscanSafePadding(this, nativeOverlayContainer)
+        }
     }
 
     override fun onPause() {
         super.onPause()
+        currentWebView?.setActive(false)
         savePersistentTabs()
     }
 
     override fun onDestroy() {
         webViews.values.forEach { wv ->
-            webViewContainer.removeView(wv)
-            wv.clearHistory()
-            wv.removeAllViews()
+            webViewContainer.removeView(wv.geckoView)
             wv.destroy()
         }
         webViews.clear()
@@ -1139,13 +1126,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * ⚠️ يستبدل JsBridge المحذوف بالخطأ (انظر التوضيح المفصّل في ملخص هذه
+     * الجولة). القديم كان يعطّل swipe-refresh فقط أثناء اللمس الفعلي على
+     * لوحة eruda (دقة عالية عبر JS). GeckoView لا يملك addJavascriptInterface
+     * فبنيت الحل الصحيح (WebExtension) مهمة كبيرة منفصلة — كحل عملي فوري
+     * أدق تقريب ممكن بلا جسر: تعطيل "اسحب للتحديث" بالكامل طالما الكونسول
+     * ظاهر، بدل فقط أثناء اللمس الفعلي. تقريب أخشن لكنه يحل نفس المشكلة
+     * الأصلية (تعارض السحب مع سحب لوحة eruda) بلا أي جسر جافاسكربت.
+     */
+    private fun swipeRefreshAllowed(): Boolean = !prefsManager.consoleEnabled
+
     private fun hideNativeOverlays(immediate: Boolean = false) {
         keepCursorAlive()
         nativeHomeOverlay?.let  { fadeOverlay(it, false, immediate) }
         nativeErrorOverlay?.let { fadeOverlay(it, false, immediate) }
         nativeOverlayContainer.visibility = View.GONE
         swipeRefresh.isRefreshing = false
-        swipeRefresh.isEnabled    = true
+        swipeRefresh.isEnabled    = swipeRefreshAllowed()
     }
 
     // FIX #7 — showHomeOverlay تتحقق من dirty flag وتُعيد البناء عند الحاجة فقط
@@ -1192,6 +1190,15 @@ class MainActivity : AppCompatActivity() {
     // FIX #1 — أخذ snapshot كامل على الـ main thread قبل الكتابة في الخلفية
     // يمنع ConcurrentModificationException الصامت
 private fun savePersistentTabs() {
+        // ⚠️ فجوة مُغلقة: نُزامن sessionStateJson من كل جلسة حيّة إلى TabState
+        // المقابل لها قبل الكتابة، حتى يحمل الملف المحفوظ آخر حالة معروفة —
+        // هذا يستبدل onSaveInstanceState اليدوي غير الممكن مزامنته (انظر
+        // GeckoTabSession.sessionStateJson).
+        webViews.forEach { (id, wv) ->
+            wv.sessionStateJson?.let { json ->
+                tabGroups.forEach { g -> g.tabs.find { it.id == id }?.sessionStateJson = json }
+            }
+        }
         sessionManager.saveToStorage(this)
     }
 
@@ -1213,7 +1220,8 @@ private fun savePersistentTabs() {
 
             if (activeTab != null) {
                 val wv = ensureWebViewForTab(activeTab)
-                if (webViewContainer.indexOfChild(wv) == -1) webViewContainer.addView(wv)
+                wv.setActive(true)
+                if (webViewContainer.indexOfChild(wv.geckoView) == -1) webViewContainer.addView(wv.geckoView)
                 // BUG-3 FIX: request focus so TV remote / keyboard / gamepad events
                 // are delivered to the WebView immediately on cold start.
                 wv.requestFocus()
@@ -1350,8 +1358,8 @@ private fun savePersistentTabs() {
             currentGroup?.tabs?.add(newTab)
 
             val wv = ensureWebViewForTab(newTab)
-            if (wv.parent == null && webViewContainer.childCount == 0) {
-                webViewContainer.addView(wv)
+            if (wv.geckoView.parent == null && webViewContainer.childCount == 0) {
+                webViewContainer.addView(wv.geckoView)
             }
             switchToTab(newTab)
             refreshTabsRecycler()
@@ -1366,12 +1374,19 @@ private fun savePersistentTabs() {
         val shouldAnimateOverlay = tabsOverlay.visibility == View.VISIBLE
 
         val executeSwitch = {
+            val previousWebView = currentWebView
             val targetWebView = ensureWebViewForTab(tab)
             activeTabId = tab.id
             keepCursorAlive()
 
+            // ⚠️ يُغلق فجوة setActive المكتشفة بالمراجعة الرابعة: التبويب
+            // المغادَر يتوقف عن استهلاك موارد الخلفية، والتبويب الجديد
+            // يُفعَّل.
+            if (previousWebView !== targetWebView) previousWebView?.setActive(false)
+            targetWebView.setActive(true)
+
             webViewContainer.removeAllViews()
-            webViewContainer.addView(targetWebView)
+            webViewContainer.addView(targetWebView.geckoView)
             targetWebView.requestFocus()   // keyboard / TV-remote / gamepad focus
             if (::inputController.isInitialized) inputController.stopScrollLoop()
             updateUIForCurrentWebView(targetWebView)
@@ -1420,13 +1435,11 @@ private fun savePersistentTabs() {
         fun destroyClosedTabWebView() {
             closingWebView?.let { wv ->
                 runCatching {
-                    if (webViewContainer.indexOfChild(wv) >= 0) {
-                        webViewContainer.removeView(wv)
+                    if (webViewContainer.indexOfChild(wv.geckoView) >= 0) {
+                        webViewContainer.removeView(wv.geckoView)
                     }
                 }
                 runCatching { wv.stopLoading() }
-                runCatching { wv.clearHistory() }
-                runCatching { wv.removeAllViews() }
                 runCatching { wv.destroy() }
             }
         }
@@ -1452,16 +1465,18 @@ private fun savePersistentTabs() {
     }
 
     // FIX #11 — LRU eviction: لا نحتفظ بأكثر من MAX_LIVE_WEBVIEWS في الذاكرة
-    private fun ensureWebViewForTab(tab: TabState, restoreState: Bundle? = null): WebView {
+    private fun ensureWebViewForTab(tab: TabState): GeckoTabSession {
         webViews[tab.id]?.let { return it }
 
-        // طرد الـ WebView الأقل استخداماً إذا تجاوزنا الحد الأقصى
+        // طرد الجلسة الأقل استخداماً إذا تجاوزنا الحد الأقصى
         if (webViews.size >= MAX_LIVE_WEBVIEWS) {
             val evictId = webViews.keys.firstOrNull { it != activeTabId }
             if (evictId != null) {
-                webViews[evictId]?.let { wv ->
-                    if (webViewContainer.indexOfChild(wv) >= 0) webViewContainer.removeView(wv)
-                    wv.destroy()
+                webViews[evictId]?.let { session ->
+                    if (webViewContainer.indexOfChild(session.geckoView) >= 0) {
+                        webViewContainer.removeView(session.geckoView)
+                    }
+                    session.destroy()
                 }
                 webViews.remove(evictId)
             }
@@ -1469,8 +1484,23 @@ private fun savePersistentTabs() {
 
         val wv = webViewFactory.create(tab.id)
         webViews[tab.id] = wv
-        if (restoreState != null) {
-            runCatching { wv.restoreState(restoreState) }
+        // ⚠️ فجوة مُغلقة: نستعيد تاريخ التصفح/موضع التمرير/بيانات النماذج من
+        // sessionStateJson المحفوظ (يُحدَّث تلقائياً — انظر GeckoTabSession
+        // وGeckoSessionDelegates.onSessionStateChange). هذا يستعيد فعلياً زر
+        // "الرجوع" داخل التبويب بعد إعادة إنشاء العملية، وليس فقط الرابط
+        // الحالي كما كان الحال في المرحلة 2.
+        val savedStateJson = tab.sessionStateJson
+        if (savedStateJson != null) {
+            val restored = runCatching {
+                org.mozilla.geckoview.GeckoSession.SessionState.fromString(savedStateJson)
+            }.getOrNull()
+            if (restored != null) {
+                wv.session.restoreState(restored)
+            } else if (!isHomeUrl(tab.url)) {
+                wv.loadUrl(tab.url)
+            } else {
+                wv.loadUrl(HOME_URL)
+            }
         } else if (!isHomeUrl(tab.url)) {
             wv.loadUrl(tab.url)
         } else {
@@ -1484,7 +1514,7 @@ private fun savePersistentTabs() {
         tabCount.text = totalTabs.toString()
     }
 
-    private fun updateUIForCurrentWebView(wv: WebView) {
+    private fun updateUIForCurrentWebView(wv: GeckoTabSession) {
         keepCursorAlive()
         val url = wv.url ?: HOME_URL
         textUrl.setText(if (isHomeUrl(url)) "" else url)
@@ -1499,7 +1529,7 @@ private fun savePersistentTabs() {
 
     private fun captureAndStoreThumbnail(onComplete: (() -> Unit)? = null) {
         val wv = currentWebView
-        if (wv == null || wv.width <= 0 || wv.height <= 0 || !wv.isAttachedToWindow) {
+        if (wv == null || wv.geckoView.width <= 0 || wv.geckoView.height <= 0 || !wv.geckoView.isAttachedToWindow) {
             currentGroup?.tabs?.find { it.id == activeTabId }?.let {
                 if (isHomeUrl(it.url)) {
                     it.hasThumbnail = true
@@ -1519,38 +1549,55 @@ private fun savePersistentTabs() {
             onComplete?.invoke(); return
         }
 
-        try {
-            val homeLike = isHomeUrl(currentUrl)
-            val bitmap   = if (homeLike) {
-                getHomePreviewBitmap()
-            } else {
-                val scale  = 0.3f
-                val w      = maxOf(1, (wv.width * scale).toInt())
-                val h      = maxOf(1, (wv.height * scale).toInt())
-                val bmp    = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
-                val canvas = Canvas(bmp)
-                canvas.scale(scale, scale)
-                canvas.translate(-wv.scrollX.toFloat(), -wv.scrollY.toFloat())
-                runCatching { wv.draw(canvas) }
-                bmp
-            }
-
+        val homeLike = isHomeUrl(currentUrl)
+        if (homeLike) {
+            val bitmap = getHomePreviewBitmap()
             tabRef?.let {
-                it.hasThumbnail  = true
-                it.thumbnailUrl  = currentUrl
-                it.ramThumbnail  = bitmap
+                it.hasThumbnail = true
+                it.thumbnailUrl = currentUrl
+                it.ramThumbnail = bitmap
             }
             onComplete?.invoke()
-
             ioExecutor.execute {
                 try {
-                    FileOutputStream(file).use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out)
-                    }
+                    FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out) }
                 } catch (e: Exception) { e.printStackTrace() }
             }
-        } catch (e: Exception) {
-            onComplete?.invoke()
+            return
+        }
+
+        // BUG-taste note: capturePixels() is async — onComplete now fires from
+        // inside this callback instead of synchronously, which is why this
+        // function already took a callback parameter to begin with.
+        wv.capturePixels { fullBitmap ->
+            try {
+                val bitmap = if (fullBitmap != null) {
+                    val scale = 0.3f
+                    val w = maxOf(1, (fullBitmap.width * scale).toInt())
+                    val h = maxOf(1, (fullBitmap.height * scale).toInt())
+                    Bitmap.createScaledBitmap(fullBitmap, w, h, true)
+                } else {
+                    null
+                }
+
+                if (bitmap != null) {
+                    tabRef?.let {
+                        it.hasThumbnail = true
+                        it.thumbnailUrl = currentUrl
+                        it.ramThumbnail = bitmap
+                    }
+                    ioExecutor.execute {
+                        try {
+                            FileOutputStream(file).use { out ->
+                                bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out)
+                            }
+                        } catch (e: Exception) { e.printStackTrace() }
+                    }
+                }
+                onComplete?.invoke()
+            } catch (e: Exception) {
+                onComplete?.invoke()
+            }
         }
     }
 
@@ -1626,8 +1673,8 @@ private fun savePersistentTabs() {
             true
         }
 
-        findViewById<View>(R.id.btnBackArea).setOnClickListener    { currentWebView?.let { if (it.canGoBack())    it.goBack()    } }
-        findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward()) it.goForward() } }
+        findViewById<View>(R.id.btnBackArea).setOnClickListener    { currentWebView?.let { if (it.canGoBack)    it.goBack()    } }
+        findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward) it.goForward() } }
         findViewById<View>(R.id.btnHomeArea).setOnClickListener    { goHome() }
 
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
@@ -1744,15 +1791,28 @@ private fun savePersistentTabs() {
             cachedMenuSheetView = layoutInflater.inflate(R.layout.layout_main_menu, null)
             cachedMenuSheet?.setContentView(cachedMenuSheetView!!)
 
+            // TV FIX: BottomSheetBehavior defaults to STATE_COLLAPSED, showing
+            // only peekHeight (~half the sheet) until the user drags it open.
+            // That drag gesture doesn't exist on a D-pad/remote — there is no
+            // touch input — so on TV the menu was permanently stuck showing
+            // only its first quarter with no way to reach the rest. Force it
+            // fully expanded immediately; gated to TV only so phone behavior
+            // (which nobody complained about) is untouched.
+            if (isTV) {
+                (cachedMenuSheetView!!.parent as? View)?.let { sheetInternal ->
+                    BottomSheetBehavior.from(sheetInternal).apply {
+                        state = BottomSheetBehavior.STATE_EXPANDED
+                        skipCollapsed = true
+                    }
+                }
+            }
+
             cachedMenuSheetView?.findViewById<View>(R.id.menuNightMode)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
-                currentWebView?.evaluateJavascript(
-                    "(function(){var el=document.getElementById('__cf_night');" +
-                    "if(el){el.remove();}else{var s=document.createElement('style');" +
-                    "s.id='__cf_night';s.textContent='html{filter:invert(1) hue-rotate(180deg)!important}" +
-                    "img,video,canvas{filter:invert(1) hue-rotate(180deg)!important}';" +
-                    "document.head.appendChild(s);}})()", null
-                )
+                // ⚠️ يستخدم الآن مسار DOM آمن من CSP (GeckoExtensionBridge.
+                // toggleNightMode) بدل eval عام — انظر التوضيح الحرج بمراجعة
+                // عميقة خامسة في content.js.
+                currentWebView?.let { GeckoExtensionBridge.toggleNightMode(it) }
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuBookmarks)?.setOnClickListener {
                 cachedMenuSheet?.dismiss(); BrowserDialogHelpers.showBookmarksDialog(
@@ -1776,9 +1836,9 @@ private fun savePersistentTabs() {
             cachedMenuSheetView?.findViewById<View>(R.id.menuFindInPage)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 findBar.visibility = View.VISIBLE
-                currentWebView?.setFindListener { ord, total, _ ->
+                currentWebView?.setFindListener { current, total ->
                     findViewById<TextView>(R.id.findMatches).text =
-                        if (total > 0) "${ord + 1}/$total" else "0/0"
+                        if (total > 0) "${current + 1}/$total" else "0/0"
                 }
                 // BUG-O FIX: focus + show keyboard immediately, matching the
                 // behaviour of the keyboard/gamepad "find" shortcut
@@ -1794,7 +1854,7 @@ private fun savePersistentTabs() {
             cachedMenuSheetView?.findViewById<View>(R.id.menuDesktopMode)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 prefsManager.desktopMode = !prefsManager.desktopMode
-                webViews.values.forEach { WebViewSettingsHelper.applyUserAgentToWebView(this, it, prefsManager.desktopMode) }
+                webViews.values.forEach { it.setDesktopMode(prefsManager.desktopMode) }
                 // FIX #12 — حذف clearCache(true) الذي كان يمسح cache كل المواقع
                 currentWebView?.reload()
             }
@@ -1995,10 +2055,18 @@ private fun savePersistentTabs() {
 
 
     private fun clearData() {
-        WebStorage.getInstance().deleteAllData()
-        CookieManager.getInstance().removeAllCookies(null)
-        CookieManager.getInstance().flush()
-        webViews.values.forEach { it.clearCache(true); it.clearHistory() }
+        // BUG (migration): android.webkit.WebStorage/CookieManager operate on
+        // the SYSTEM WebView's storage — GeckoView keeps its own completely
+        // separate cookie jar and cache via GeckoRuntime.storageController.
+        // Calling only the old APIs here would make "Clear Data" a no-op that
+        // silently leaves every cookie and cached asset behind post-migration.
+        // ✅ تأكّد StorageController.ClearFlags.ALL فعلياً من توثيق Mozilla
+        // الرسمي (index-all.html: "ALL - Static variable in class
+        // org.mozilla.geckoview.StorageController.ClearFlags").
+        runCatching {
+            GeckoRuntimeManager.get(this).storageController
+                .clearData(org.mozilla.geckoview.StorageController.ClearFlags.ALL)
+        }
         historyRepository.clearHistory()
         invalidateHomePreviewCache()  // FIX #4 — أبطل الـ cache عند مسح البيانات
 
@@ -2288,10 +2356,7 @@ private fun savePersistentTabs() {
 
     private fun hideCustomView() {
         keepCursorAlive()
-        customViewCallback?.onCustomViewHidden()
-        fullscreenContainer.visibility = View.GONE
-        webViewContainer.visibility    = View.VISIBLE
-        customView = null
+        isFullscreenActive = false
         setFullscreen(false)
     }
 
@@ -2310,10 +2375,9 @@ private fun savePersistentTabs() {
      */
     private fun handleDownloadRequest(
         url: String,
-        userAgent: String,
-        contentDisposition: String,
         mimeType: String,
-        contentLength: Long
+        contentLength: Long,
+        suggestedFilename: String?
     ) {
         // Request notification permission on Android 13+ so completion
         // notifications are visible. Downloads work either way.
@@ -2324,9 +2388,14 @@ private fun savePersistentTabs() {
             }
         }
 
-        val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
-        val cookies  = android.webkit.CookieManager.getInstance().getCookie(url) ?: ""
+        val fileName = suggestedFilename?.takeIf { it.isNotBlank() }
+            ?: android.webkit.URLUtil.guessFileName(url, null, mimeType)
 
+        // ⚠️ فجوة مُغلقة: DownloadService لم يعد يحتاج كوكيز/UA مُستخرَجين
+        // يدوياً عبر android.webkit.CookieManager (الذي لا يرى كوكيز
+        // GeckoView إطلاقاً) — أصبح يجلب الملف عبر GeckoWebExecutor مباشرة،
+        // والذي يستخدم مخزن كوكيز GeckoView الحقيقي تلقائياً. انظر
+        // DownloadService.kt.
         androidx.core.content.ContextCompat.startForegroundService(
             this,
             Intent(this, DownloadService::class.java).apply {
@@ -2334,8 +2403,6 @@ private fun savePersistentTabs() {
                 putExtra(DownloadService.EXTRA_URL,      url)
                 putExtra(DownloadService.EXTRA_FILENAME, fileName)
                 putExtra(DownloadService.EXTRA_MIME,     mimeType)
-                putExtra(DownloadService.EXTRA_UA,       userAgent)
-                putExtra(DownloadService.EXTRA_COOKIES,  cookies)
             }
         )
 
@@ -2349,14 +2416,8 @@ private fun savePersistentTabs() {
     private fun toggleConsoleForCurrentPage() {
         val enable = !prefsManager.consoleEnabled
         prefsManager.consoleEnabled = enable
-        currentWebView?.let { view ->
-            if (enable) {
-                view.evaluateJavascript(ConsoleScripts.initScript(), null)
-                view.evaluateJavascript(ConsoleScripts.touchHookScript(), null)
-            } else {
-                view.evaluateJavascript(ConsoleScripts.disableScript(), null)
-            }
-        }
+        swipeRefresh.isEnabled = swipeRefreshAllowed()
+        currentWebView?.let { tab -> ConsoleToolsInjector.apply(tab, enable, "") }
         updateMenuConsoleState()
         Toast.makeText(this, if (enable) "Console enabled" else "Console disabled", Toast.LENGTH_SHORT).show()
     }
@@ -2369,13 +2430,8 @@ private fun savePersistentTabs() {
         }
     }
 
-    private fun applyConsoleTools(view: WebView) {
-        if (prefsManager.consoleEnabled) {
-            view.evaluateJavascript(ConsoleScripts.initScript(), null)
-            view.evaluateJavascript(ConsoleScripts.touchHookScript(), null)
-        } else {
-            view.evaluateJavascript(ConsoleScripts.disableScript(), null)
-        }
+    private fun applyConsoleTools(tab: GeckoTabSession) {
+        ConsoleToolsInjector.apply(tab, prefsManager.consoleEnabled, "")
     }
 
 
@@ -2400,7 +2456,7 @@ private fun savePersistentTabs() {
     private fun buildInputController(): InputController {
         return InputController(object : InputController.Handlers {
 
-            override fun getWebView(): WebView? = currentWebView
+            override fun getActiveSession(): GeckoTabSession? = currentWebView
 
             override fun isTopBarVisible() = topBar.visibility == View.VISIBLE
 
@@ -2413,11 +2469,11 @@ private fun savePersistentTabs() {
             override fun focusUrlBar() = showSearchTopBar()
 
             override fun navigateBack() {
-                currentWebView?.let { if (it.canGoBack()) it.goBack() }
+                currentWebView?.let { if (it.canGoBack) it.goBack() }
             }
 
             override fun navigateForward() {
-                currentWebView?.let { if (it.canGoForward()) it.goForward() }
+                currentWebView?.let { if (it.canGoForward) it.goForward() }
             }
 
             override fun navigateHome() = goHome()
@@ -2448,9 +2504,9 @@ private fun savePersistentTabs() {
                     hideKeyboard()
                 } else {
                     findBar.visibility = View.VISIBLE
-                    currentWebView?.setFindListener { ord, total, _ ->
+                    currentWebView?.setFindListener { current, total ->
                         findViewById<TextView>(R.id.findMatches).text =
-                            if (total > 0) "${ord + 1}/$total" else "0/0"
+                            if (total > 0) "${current + 1}/$total" else "0/0"
                     }
                     val fi = findViewById<EditText>(R.id.findInput)
                     fi.requestFocus()

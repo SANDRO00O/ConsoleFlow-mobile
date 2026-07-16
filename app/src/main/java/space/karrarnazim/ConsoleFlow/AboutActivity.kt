@@ -14,6 +14,7 @@ class AboutActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_about)
+        TvUtils.applyOverscanSafePadding(this, findViewById(android.R.id.content))
 
         // ── back button
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
@@ -48,13 +49,27 @@ class AboutActivity : AppCompatActivity() {
     private fun loadBanner() {
         val wv = findViewById<WebView>(R.id.bannerWebView)
 
-        // Calculate exact height from banner aspect ratio (viewBox 1778.04 × 250)
-        val horizontalPaddingPx = (32 * resources.displayMetrics.density).toInt()
-        val availableWidth      = resources.displayMetrics.widthPixels - horizontalPaddingPx
-        val bannerHeight        = (availableWidth / 7.112f).toInt()
+        // TV FIX: this used to compute height from raw
+        // resources.displayMetrics.widthPixels — the FULL screen width,
+        // ignoring overscan-safe padding applied to the root container on TV
+        // (see TvUtils). On a real TV panel that padding shrinks the banner's
+        // actual on-screen width by ~10%, but the height was still calculated
+        // from the wider, pre-padding figure — so the fixed-aspect-ratio
+        // banner rendered taller than the space actually available and got
+        // clipped. Measure the real parent width after layout instead of
+        // guessing from screen metrics.
+        val parentRow = wv.parent as View
+        parentRow.post {
+            val availableWidth = parentRow.width.takeIf { it > 0 }
+                ?: (resources.displayMetrics.widthPixels - (32 * resources.displayMetrics.density).toInt())
+            val bannerHeight = (availableWidth / 7.112f).toInt()
+            wv.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, bannerHeight)
+            finishLoadingBanner(wv)
+        }
+    }
 
-        wv.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, bannerHeight)
+    private fun finishLoadingBanner(wv: WebView) {
 
         wv.settings.loadWithOverviewMode    = true
         wv.settings.useWideViewPort         = true

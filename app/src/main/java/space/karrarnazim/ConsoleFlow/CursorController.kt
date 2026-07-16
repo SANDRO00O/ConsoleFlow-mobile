@@ -12,7 +12,6 @@ import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebView
 import android.widget.FrameLayout
 import kotlin.math.abs
 
@@ -189,7 +188,7 @@ class CursorController(private val activity: Activity) {
     }
 
     private fun isTargetable(view: View): Boolean {
-        return view is WebView ||
+        return view is org.mozilla.geckoview.GeckoView ||
             view.isClickable ||
             view.isLongClickable ||
             view.hasOnClickListeners() ||

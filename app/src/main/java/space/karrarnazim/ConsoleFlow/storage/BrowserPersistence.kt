@@ -36,6 +36,16 @@ object BrowserPersistence {
                     tabObj.put("url", tab.url)
                     tabObj.put("hasThumb", tab.hasThumbnail)
                     tabObj.put("thumbUrl", tab.thumbnailUrl)
+                    // ⚠️ إصلاح خطأ حقيقي بمراجعة عميقة سابعة: هذا الحقل كان
+                    // غائباً تماماً. BrowserPersistence هو مسار حفظ منفصل
+                    // تماماً عن onSaveInstanceState/putSerializable (الذي
+                    // يغطي فقط تدوير الشاشة) — هذا المسار هنا هو المسؤول عن
+                    // نجاة حالة التبويبات عبر إغلاق التطبيق فعلياً وإعادة
+                    // فتحه، وهي الحالة الأهم عملياً. بدون هذا السطر، كل ادعاء
+                    // "حللنا فجوة استمرارية حالة التبويب" في مرحلة سابقة كان
+                    // غير مكتمل — يعمل فقط عبر تدوير الشاشة، ليس عبر إغلاق
+                    // التطبيق.
+                    tabObj.put("sessionState", tab.sessionStateJson)
                     tabsArray.put(tabObj)
                 }
                 groupObj.put("tabs", tabsArray)
@@ -79,7 +89,8 @@ object BrowserPersistence {
                             url = if (isHomeUrl(rawUrl)) HOME_URL_CONST else rawUrl,
                             hasThumbnail = tObj.optBoolean("hasThumb", false) ||
                                 ThumbnailManager.hasCachedTabThumbnail(context.cacheDir, tabId),
-                            thumbnailUrl = tObj.optString("thumbUrl", rawUrl)
+                            thumbnailUrl = tObj.optString("thumbUrl", rawUrl),
+                            sessionStateJson = tObj.optString("sessionState", null)
                         )
                     )
                 }
