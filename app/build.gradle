@@ -66,10 +66,10 @@ implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
 // ── GeckoView (محرك متصفح مستقل، Mozilla) ──────────────────────────────
 // حل محل androidx.webkit بالكامل — لم يعد هناك أي اعتماد على WebView
 // النظامي.
-// ⚠️ مهم: أثناء المراجعة العميقة، التوثيق الذي تحققت منه فعلياً يغطي
-// إصدارات 140-154، بينما الرقم أدناه (128.3.0) كان تخميناً أولياً غير
-// محقَّق. راجع https://maven.mozilla.org/maven2/org/mozilla/geckoview/
-// واستخدم أحدث نسخة geckoview-default فعلياً متوفرة عند البناء، لا تعتمد
-// على الرقم أدناه كما هو.
-implementation "org.mozilla.geckoview:geckoview-default:128.3.0"
+// ✅ إصلاح خطأ بناء حقيقي: الرقم القديم (128.3.0) لم يكن موجوداً إطلاقاً في
+// مستودع Mozilla — سبّب فشل البناء الفعلي (رسالة الخطأ التي أرسلتها).
+// الرقم أدناه تحقّقت منه بجلب فعلي مباشر من mvnrepository.com/artifact/
+// org.mozilla.geckoview/geckoview وهو أحدث إصدار منشور فعلياً حتى تاريخه.
+// لو ظهر أحدث منه عند البناء، حدّثه من نفس الرابط.
+implementation "org.mozilla.geckoview:geckoview:150.0.20260511200624"
 }
