@@ -1,18 +1,18 @@
 # Add project specific ProGuard rules here.
 
-# Keep WebView JavaScript interfaces — required for ANY class exposed via
-# addJavascriptInterface(). R8 only sees Kotlin/Java call sites; it has no
-# way to know a method is invoked via JS-side reflection (e.g. the eruda
-# touch-hook script calling Android.setSwipeRefresh(...)), so without this
-# rule those methods get renamed/stripped as "unused" in release builds —
-# silently breaking the bridge, with debug builds completely unaffected
-# (minifyEnabled is off there), making the bug invisible during normal
-# local testing. This is the official Android-recommended generic rule —
-# it protects every @JavascriptInterface method regardless of which class
-# it's added to, so a future bridge class doesn't need a rule of its own.
--keepclassmembers class * {
-    @android.webkit.JavascriptInterface <methods>;
-}
+# ⚠️ حُذفت قاعدة @android.webkit.JavascriptInterface القديمة هنا — كانت
+# ضرورية لـJsBridge القديم (addJavascriptInterface)، وهذا النمط بالكامل لم
+# يعد موجوداً بعد ترحيل GeckoView (الاستبدال: WebExtension + native
+# messaging، انظر GeckoExtensionBridge.kt). إبقاؤها كان سيصبح قاعدة ميتة
+# بلا أثر فعلي.
+
+# ✅ إضافة احترازية: release_yml.yml هو أول مكان تُفعَّل فيه فعلياً
+# minifyEnabled (assembleDebug لا يُفعّلها). GeckoView يُفترض أنه يحمل
+# consumer-rules.pro خاصة به داخل الـAAR (نمط قياسي للمكتبات الحديثة)، لكن
+# هذه شبكة أمان إضافية — لا ضرر من الإبقاء عليها حتى لو كانت القواعد
+# المرفقة كافية وحدها.
+-keep class org.mozilla.geckoview.** { *; }
+-dontwarn org.mozilla.geckoview.**
 
 # Keep ZXing
 -keep class com.journeyapps.** { *; }

@@ -5,14 +5,19 @@ id 'org.jetbrains.kotlin.android'
 
 android {
 namespace 'space.karrarnazim.ConsoleFlow'
-compileSdk 35
+compileSdk 36
 
 defaultConfig {
 applicationId "space.karrarnazim.ConsoleFlow"
-minSdk 22
-targetSdk 35
+minSdk 26
+targetSdk 36
 versionCode 16
 versionName "3.0.0"
+// ✅ إصلاح استباقي: GeckoView ضخم جداً (مئات آلاف الدوال) — شبه مؤكد
+// سيتجاوز حد الـ64K method لملف dex واحد أثناء البناء بدون هذا.
+// minSdk 26 (≥21) يعني النظام يدعم multidex أصلياً وقت التشغيل، لكن
+// أداة D8 وقت البناء لا تزال تحتاج هذا العلم صراحةً.
+multiDexEnabled true
 }
 
 signingConfigs {

@@ -3,6 +3,13 @@ name: Quick APK
 on:
   workflow_dispatch:
   push:
+    branches: ["**"]
+
+# يلغي أي تشغيل سابق لنفس الفرع لو دفعة جديدة وصلت أثناء البناء — يوفر
+# دقائق CI بدل تشغيل نسختين قديمة وجديدة بالتوازي بلا داعٍ.
+concurrency:
+  group: quick-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -11,6 +18,7 @@ jobs:
   build:
     name: Build quick APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -20,28 +28,55 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
-          cache: gradle
+          java-version: "17"
+
+      # gradle/actions/setup-gradle هو البديل الرسمي الحديث لخطوات
+      # actions/cache اليدوية — يخزّن ~/.gradle/caches و~/.gradle/wrapper
+      # وحتى مخرجات build cache الخاصة بـGradle نفسه تلقائياً، ويُبطل
+      # الكاش بذكاء عند تغيّر ملفات build.gradle. بدون هذا، كل تشغيل كان
+      # سيُعيد تحميل GeckoView (100+ ميجا) من الصفر في كل مرة.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Rename APK
-        id: rename
+      - name: Locate and rename APK
+        id: apk
         run: |
-          APK_PATH=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)
-          SHORT_SHA="${GITHUB_SHA::7}"
-          NEW_NAME="ConsoleFlow-quick-${SHORT_SHA}.apk"
-          cp "$APK_PATH" "$NEW_NAME"
-          echo "apk_path=$NEW_NAME" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          apk_path=$(find app/build/outputs/apk/debug -name '*.apk' -print -quit)
+          if [ -z "$apk_path" ]; then
+            echo "::error::No APK found under app/build/outputs/apk/debug"
+            exit 1
+          fi
+          short_sha="${GITHUB_SHA::7}"
+          new_name="ConsoleFlow-quick-${short_sha}.apk"
+          cp "$apk_path" "$new_name"
+          echo "apk_path=$new_name" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ConsoleFlow-quick-apk
-          path: ${{ steps.rename.outputs.apk_path }}
+          path: ${{ steps.apk.outputs.apk_path }}
           if-no-files-found: error
           retention-days: 14
+
+      # يرفع تقرير الأخطاء/التحذيرات الكامل حتى عند فشل البناء، حتى لا
+      # تحتاج تنسخ نص السجل يدوياً من واجهة GitHub في كل مرة.
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            **/build/outputs/logs/**
+            **/build/reports/**
+          if-no-files-found: ignore
+          retention-days: 7
