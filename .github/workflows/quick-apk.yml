@@ -44,7 +44,9 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-console.log
 
       - name: Locate and rename APK
         id: apk
@@ -68,15 +70,19 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # يرفع تقرير الأخطاء/التحذيرات الكامل حتى عند فشل البناء، حتى لا
-      # تحتاج تنسخ نص السجل يدوياً من واجهة GitHub في كل مرة.
+      # ⚠️ يستبدل نسخة سابقة كانت ترفع فقط build/outputs/logs و
+      # build/reports — وهذان لا يحويان رسالة "BUILD FAILED" الفعلية،
+      # فقط تقارير جانبية (شجرة دمج المانيفست، تحذيرات deprecation).
+      # gradle-console.log أعلاه هو نص التيرمنال الحقيقي الذي يحوي سبب
+      # الفشل الفعلي — هذا اكتُشف بعد رفع سجل فشل حقيقي لم يحوِ السبب.
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: |
+            gradle-console.log
             **/build/outputs/logs/**
             **/build/reports/**
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 7

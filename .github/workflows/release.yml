@@ -103,7 +103,9 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-console.log
 
       # يحذف ملف الـkeystore فوراً بعد البناء، بنجاح أو فشل — لا يبقى ملف
       # توقيع حسّاس على قرص الـrunner لحظة أطول من اللازم.
@@ -141,7 +143,8 @@ jobs:
         with:
           name: release-build-log
           path: |
+            gradle-console.log
             **/build/outputs/logs/**
             **/build/reports/**
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 7

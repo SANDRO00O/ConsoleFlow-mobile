@@ -8,7 +8,14 @@ plugins {
 // هنا). تحقّقت من هذا عبر بحث مباشر، وليس تخميناً.
 id 'com.android.application' version '8.13.0' apply false
 id 'com.android.library' version '8.13.0' apply false
-id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+// ✅ إصلاح خطأ بناء حقيقي ثالث: Kotlin Gradle Plugin كان لا يزال مثبَّتاً
+// على 1.9.22، لكن اعتماداً عابراً (GeckoView على الأغلب) يسحب
+// kotlin-stdlib:2.3.20 — مترجم الكومبايلر 1.9 لا يقدر يقرأ ميتاداتا
+// مكتوبة بنسخة أحدث منه، فيفشل بعشرات الأخطاء ("compiled with an
+// incompatible version of Kotlin") في كل ملف تقريباً. رفعتها لنفس الرقم
+// (2.3.20) لتفادي أي فجوة توافق إضافية — Kotlin 2.3.x يذكر رسمياً أنه
+// متوافق حتى AGP 8.13.0 بالضبط، نفس نسختنا الحالية.
+id 'org.jetbrains.kotlin.android' version '2.3.20' apply false
 }
 
 task clean(type: Delete) {
