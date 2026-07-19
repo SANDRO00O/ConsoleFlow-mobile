@@ -9,7 +9,6 @@
 **A lightweight, developer-focused Android web browser that brings desktop-like debugging to mobile.**
 
 [![Open Source](https://img.shields.io/badge/Open%20Source-Yes!-brightgreen?style=for-the-badge)](#)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](https://github.com/SANDRO00O/ConsoleFlow-mobile/blob/main/LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/SANDRO00O/ConsoleFlow-mobile/total?logo=github)](https://github.com/SANDRO00O/ConsoleFlow-mobile/releases)
 [![Downloads last month](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fkitswas%2Ffdroid-metrics-dashboard%2Fraw%2Frefs%2Fheads%2Fmain%2Fprocessed%2Fmonthly%2Fspace.karrarnazim.ConsoleFlow.json&query=%24.total_downloads&logo=fdroid&label=Downloads%20last%20month)](https://f-droid.org/en/packages/space.karrarnazim.ConsoleFlow/)
 
@@ -52,14 +51,6 @@
 - **Sleek UI:** Custom dark-themed start page, error pages, menus, and Android 12+ Splash Screen support.
 - **Full TV Support:** Optimized for Android TV and TV remotes, with complete controller, keyboard, mouse, and remote navigation support.
 
-## Tech Stack & Libraries
-
-- **Language:** Kotlin
-- **Network Interception:** OkHttp3
-- **Web Rendering:** android.webkit.WebView
-- **UI Components:** AndroidX, Material Design Components, SwipeRefreshLayout
-- **Dev Tools:** Eruda (Local Asset)
-
 ## Installation
 
 ConsoleFlow is ready to use right out of the box. 
@@ -84,18 +75,3 @@ Contributions are what make the open-source community such an amazing place to l
 3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
-
-## License
-
-Distributed under the MIT License. See `LICENSE` for more information.
-
-## Contact
-
-**Karrar Nazim** - [portfolio](https://karrarnazim.space)
-
-Project Link: [https://github.com/SANDRO00O/ConsoleFlow-mobile](https://github.com/SANDRO00O/ConsoleFlow-mobile)
-
----
-<div align="center">
-  <i>Karrar Nazim</i>
-</div>
