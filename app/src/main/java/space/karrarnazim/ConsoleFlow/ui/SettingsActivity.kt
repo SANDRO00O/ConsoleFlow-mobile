@@ -121,10 +121,19 @@ class SettingsActivity : AppCompatActivity() {
             .setTitle("Clear Browsing Data")
             .setMessage("This will delete cache, cookies, and history.")
             .setPositiveButton("Clear") { _, _ ->
-                android.webkit.WebStorage.getInstance().deleteAllData()
-                val cookies = android.webkit.CookieManager.getInstance()
-                cookies.removeAllCookies(null)
-                cookies.flush()
+                // ✅ إصلاح خطأ حقيقي اكتُشف بمراجعة شاملة لكل الملفات: نفس
+                // خلل WebStorage/CookieManager الذي أُصلح سابقاً في
+                // MainActivity.clearData() كان موجوداً هنا أيضاً — نسخة
+                // مكرَّرة فاتتني في الجولات السابقة لأن الفحص كان يركّز على
+                // MainActivity.kt فقط. android.webkit.WebStorage/
+                // CookieManager لا يريان مخزن GeckoView إطلاقاً (مخزنان
+                // منفصلان تماماً) — كان هذا الزر سيبدو أنه يعمل بلا أي أثر
+                // فعلي على GeckoView.
+                runCatching {
+                    GeckoRuntimeManager.get(this)
+                        .storageController
+                        .clearData(org.mozilla.geckoview.StorageController.ClearFlags.ALL)
+                }
                 prefsManager.clearHistory()
                 getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
                     .edit()

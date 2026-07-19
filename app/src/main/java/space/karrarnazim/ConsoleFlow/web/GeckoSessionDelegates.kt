@@ -239,7 +239,9 @@ class GeckoSessionDelegates(
         val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
         // ✅ تأكّد التوقيع فعلياً: FilePrompt.confirm(Context, Uri[]) موجود
         // بالضبط بهذا الشكل في توثيق Mozilla الرسمي.
-        onShowFileChooserUi(prompt.mimeType ?: emptyArray()) { uris ->
+        // ✅ إصلاح خطأ تصريف حقيقي: الاسم الصحيح mimeTypes (جمع)، وليس
+        // mimeType — تأكّدت منه من كود اختبارات GeckoView المصدري نفسه.
+        onShowFileChooserUi(prompt.mimeTypes ?: emptyArray()) { uris ->
             if (uris.isNullOrEmpty()) {
                 result.complete(prompt.dismiss())
             } else {

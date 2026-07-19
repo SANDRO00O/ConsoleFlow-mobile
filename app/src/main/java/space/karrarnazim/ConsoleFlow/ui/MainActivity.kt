@@ -23,7 +23,6 @@ import androidx.activity.result.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.*
 import androidx.fragment.app.*
-import androidx.webkit.*
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import android.util.Patterns
 import android.speech.RecognizerIntent

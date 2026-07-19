@@ -114,7 +114,12 @@ class GeckoTabSession(
      * capturePixels() هو المسار الصحيح، لكنه غير متزامن.
      */
     fun capturePixels(onResult: (Bitmap?) -> Unit) {
-        session.capturePixels()
+        // ✅ إصلاح خطأ تصريف حقيقي: capturePixels() ليست موجودة على
+        // GeckoSession — هي على GeckoView (أو GeckoDisplay) تحديداً، لأن
+        // التقاط البكسلات يحتاج الاتصال الفعلي بالـSurface الذي يُركَّب
+        // عليه المحتوى، وGeckoSession وحدها (بدون View) لا تملك ذلك.
+        // مصدر GeckoDisplay.java الرسمي يؤكد هذا حرفياً.
+        geckoView.capturePixels()
             .accept({ bmp -> onResult(bmp) }, { onResult(null) })
     }
 
