@@ -46,9 +46,11 @@ class DownloadService : Service() {
     // هو الوحيد الذي يملك وصولاً حقيقياً لمخزن كوكيز GeckoView (يُرسلها
     // تلقائياً مع كل طلب افتراضياً)، وهذا هو الحل الموثّق رسمياً من Mozilla
     // لتنزيلات GeckoView المصادَق عليها — وليس تخميناً.
-    // ✅ إصلاح خطأ تصريف حقيقي: GeckoWebExecutor() بلا معامل غير موجود في
-    // هذا الإصدار — يتطلب Context. DownloadService نفسه Context صالح.
-    private val geckoExecutor by lazy { GeckoWebExecutor(this) }
+    // ✅ إصلاح خطأ تصريف حقيقي ثانٍ: الإصلاح الأول (تمرير Context) كان
+    // خطأً أيضاً — رسالة الخطأ الفعلية أكدت أن المعامل المتوقَّع هو
+    // GeckoRuntime تحديداً، وليس Context. GeckoRuntimeManager.get(this)
+    // يُرجع نفس GeckoRuntime الوحيد المستخدَم بكل الجلسات.
+    private val geckoExecutor by lazy { GeckoWebExecutor(GeckoRuntimeManager.get(this)) }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Lifecycle
