@@ -39,12 +39,12 @@ splits {
 // كل APK ناتج عن splits يحتاج versionCode فريداً (رقم قياسي متفَق عليه لكل
 // معمارية) وإلا فآليات التحديث/التثبيت قد تلتبس بين النسخ. هذا هو الأسلوب
 // الموثَّق رسمياً من Google لهذا الغرض بالضبط.
-ext.abiCodes = ["armeabi-v7a": 1, "arm64-v8a": 2, "x86": 3, "x86_64": 4]
+def abiCodes = ["armeabi-v7a": 1, "arm64-v8a": 2, "x86": 3, "x86_64": 4]
 android.applicationVariants.all { variant ->
     variant.outputs.each { output ->
         def abi = output.getFilter(com.android.build.OutputFile.ABI)
-        if (abi != null && ext.abiCodes.containsKey(abi)) {
-            output.versionCodeOverride = ext.abiCodes.get(abi) * 1000 + variant.versionCode
+        if (abi != null && abiCodes.containsKey(abi)) {
+            output.versionCodeOverride = abiCodes.get(abi) * 1000 + variant.versionCode
         }
     }
 }
