@@ -60,6 +60,7 @@ class GeckoSessionDelegates(
         perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
         hasUserGesture: Boolean
     ) {
+        timber.log.Timber.tag("ConsoleFlowNav").i("onLocationChange tab=%s url=%s", tab.tabId, url)
         tab.url = url
         onPageStartedUi(tab)
     }
@@ -77,6 +78,19 @@ class GeckoSessionDelegates(
         request: GeckoSession.NavigationDelegate.LoadRequest
     ): GeckoResult<AllowOrDeny>? {
         val url = request.uri
+        timber.log.Timber.tag("ConsoleFlowNav").i(
+            "onLoadRequest tab=%s url=%s isHome=%s triggeredByRedirect=%s",
+            tab.tabId, url, isHomeUrl(url), request.isRedirect
+        )
+        // ✅ إصلاح خطأ حقيقي: about:blank (رابط الشاشة الرئيسية الداخلي)
+        // كان يقع ضمن هذا الشرط بالغلط — لا يبدأ بـ"http"، فكان يُعامَل
+        // بالضبط مثل intent://‏ أو market://‏ ويُسلَّم للنظام في كل مرة
+        // تُحمَّل فيها الشاشة الرئيسية (بدء التطبيق، إغلاق تبويب، الرجوع
+        // للرئيسية) — هذا بالضبط ما كان يُظهر معرض "اختر متصفحاً" بشكل
+        // متكرر. about:blank يجب معالجته داخلياً دائماً، مثله مثل http(s).
+        if (isHomeUrl(url)) {
+            return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+        }
         // روابط غير http(s) (مثل intent://, market://, mailto:) نُسلّمها
         // للنظام مباشرة — نفس منطق shouldOverrideUrlLoading القديم تماماً.
         if (!url.startsWith("http")) {
@@ -97,22 +111,58 @@ class GeckoSessionDelegates(
         return GeckoResult.fromValue(null)
     }
 
+    /**
+     * ✅ إصلاح خطأ معماري حقيقي اكتُشف بعد بلاغات "وميض/تخربط عند فشل
+     * التحميل": onLoadError لم يكن مُطبَّقاً إطلاقاً هنا. هذه هي نقطة
+     * التحكّم الموثّقة رسمياً الوحيدة لما يحدث عند فشل تحميل صفحة —
+     * وبدونها، GeckoView كان يتصرّف بسلوكه الداخلي الافتراضي (غير معروف
+     * بالضبط ماذا يعرض) في نفس الوقت الذي يعرض فيه تطبيقنا شاشة الخطأ
+     * النيتف الخاصة به (عبر onPageStop success=false → onReceivedErrorUi).
+     * نظامان منفصلان يتعاملان مع نفس الفشل بلا تنسيق بينهما — تفسير منطقي
+     * قوي لما وُصِف من ظهور/اختفاء متكرر لواجهة الخطأ. الإرجاع الصريح لـ
+     * null هنا (موثَّق رسمياً بأنه "يوقف التحميل تماماً بلا محتوى بديل")
+     * يجعل شاشة الخطأ النيتف لدينا هي المصدر الوحيد والحصري لعرض الفشل.
+     */
+    override fun onLoadError(
+        session: GeckoSession,
+        uri: String?,
+        error: org.mozilla.geckoview.WebRequestError
+    ): GeckoResult<String>? {
+        // 🔎 تسجيل تشخيصي مقصود: لا نعرف بعد السبب *الحقيقي* لفشل التحميل
+        // المتقطّع أثناء البحث — بلا هذا، أي إصلاح إضافي سيكون تخميناً.
+        // WebRequestError.category/code هما المصدر الرسمي الوحيد لمعرفة
+        // نوع الفشل الفعلي (شبكة؟ أمان/شهادة؟ رابط مشوَّه؟). صرِّح للمستخدم
+        // بتشغيل `adb logcat -s ConsoleFlowLoadError` أثناء إعادة إنتاج
+        // المشكلة، وأرسل النتيجة — عندها الإصلاح يكون مبنياً على الحقيقة
+        // لا التخمين.
+        timber.log.Timber.tag("ConsoleFlowLoadError").e(
+            "uri=%s category=%s code=%s", uri, error.category, error.code
+        )
+        return GeckoResult.fromValue(null)
+    }
+
     // ── ProgressDelegate ────────────────────────────────────────────────────
 
     override fun onPageStart(session: GeckoSession, url: String) {
+        timber.log.Timber.tag("ConsoleFlowNav").i("onPageStart tab=%s url=%s", tab.tabId, url)
         tab.isLoading = true
         tab.progress = 0
+        tab.hasConfirmedScrollPosition = false
         onProgressChangedUi(tab)
     }
 
     override fun onPageStop(session: GeckoSession, success: Boolean) {
+        timber.log.Timber.tag("ConsoleFlowNav").i("onPageStop tab=%s success=%s url=%s", tab.tabId, success, tab.url)
         tab.isLoading = false
         tab.progress = 100
         onSetSwipeRefresh(false)
         onProgressChangedUi(tab)
         onPageFinishedUi(tab)
-        if (success) onApplyConsoleTools(tab)
-        if (!success) onReceivedErrorUi(tab.url)
+        if (success) {
+            onApplyConsoleTools(tab)
+        } else {
+            onReceivedErrorUi(tab.url)
+        }
     }
 
     override fun onProgressChange(session: GeckoSession, progress: Int) {
@@ -254,14 +304,12 @@ class GeckoSessionDelegates(
     // ── ScrollDelegate ───────────────────────────────────────────────────────
 
     override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
-        // ⚠️ خطر انجراف إصدار حقيقي اكتُشف في هذه المراجعة: وجدت
-        // org.mozilla.geckoview.GeckoSession.ScrollPositionUpdate كصنف متداخل
-        // فعلي في شجرة أصناف GeckoView — هذا يرجّح أن onScrollChanged في
-        // إصدارات أحدث قد يستقبل كائن ScrollPositionUpdate واحد بدل
-        // (scrollX, scrollY) منفصلين كما هنا. التوثيق الذي تحققت منه بنفسي
-        // يغطي إصدارات 140-154، وbuild.gradle مثبَّت الآن على 150.0.x
-        // (نسخة حقيقية مؤكَّدة، إصلاح لخطأ 128.3.0 الذي فشل به البناء
-        // الفعلي) — ضمن نطاق التوثيق المتحقَّق منه، خطر الانجراف أقل الآن.
+        // ✅ تحديث: هذا التوقيع صرّف بنجاح فعلياً على GeckoView 150.x
+        // المثبَّتة — خطر الانجراف المذكور سابقاً لم يتحقق، الواجهة الحقيقية
+        // لهذه النسخة لا تزال تستقبل (scrollX, scrollY) منفصلين.
+        tab.scrollX = scrollX
+        tab.scrollY = scrollY
+        tab.hasConfirmedScrollPosition = true
         tab.scrollX = scrollX
         tab.scrollY = scrollY
     }

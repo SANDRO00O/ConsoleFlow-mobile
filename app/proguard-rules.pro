@@ -18,5 +18,10 @@
 -keep class com.journeyapps.** { *; }
 -keep class com.google.zxing.** { *; }
 
+# Timber: يعتمد على اسم الكلاس المستدعي عبر Throwable.getStackTrace() لتوليد
+# الوسم تلقائياً في DebugTree — لا يحتاج قاعدة keep خاصة لهذا، لكن نُبقي على
+# أسماء أصناف السجل نفسها لتبقى الرسائل قابلة للقراءة بالسجل المُصدَّر.
+-keep class space.karrarnazim.ConsoleFlow.logging.** { *; }
+
 # Uncomment to preserve line numbers for debugging
 #-keepattributes SourceFile,LineNumberTable

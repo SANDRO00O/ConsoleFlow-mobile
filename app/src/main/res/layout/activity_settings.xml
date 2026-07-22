@@ -335,6 +335,64 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- ── DEVELOPER ───────────────────────────────────────────────── -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"
+                android:paddingHorizontal="6dp"
+                android:text="DEVELOPER"
+                android:textColor="#555555"
+                android:textSize="11sp"
+                android:letterSpacing="0.08" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_menu_item"
+                android:orientation="vertical">
+
+                <!-- View Logs -->
+                <LinearLayout
+                    android:id="@+id/settingViewLogs"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/menu_item_height"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="18dp"
+                    android:background="@drawable/menu_item_ripple">
+
+                    <ImageView
+                        android:layout_width="@dimen/menu_icon_size"
+                        android:layout_height="@dimen/menu_icon_size"
+                        android:src="@drawable/ic_code"
+                        android:tint="#888888" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="14dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="View Logs"
+                            android:textColor="#FFFFFF"
+                            android:textSize="@dimen/menu_item_text_size" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Diagnostics, errors and app activity"
+                            android:textColor="#888888"
+                            android:textSize="@dimen/menu_item_text_size" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- ── ABOUT ───────────────────────────────────────────────────── -->
             <TextView
                 android:layout_width="match_parent"

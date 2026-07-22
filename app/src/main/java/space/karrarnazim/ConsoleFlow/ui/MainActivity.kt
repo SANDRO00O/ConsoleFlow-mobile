@@ -237,6 +237,15 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        // ✅ إصلاح مشكلة "الواجهات تختلف قليلاً عن السابق": مع targetSdk 36
+        // (رُفع أثناء إصلاح أخطاء البناء)، Android يفرض عرض edge-to-edge
+        // إلزامياً (المحتوى يمتد خلف أشرطة الحالة/التنقل) بلا إمكانية
+        // تعطيله. التطبيق ما كان يستدعي setDecorFitsSystemWindows(false)
+        // إطلاقاً، فكان يعتمد على تصرّف افتراضي غير متوافق مع طريقة تعامل
+        // كود onApplyWindowInsetsListener الموجود أصلاً — هذا الاستدعاء
+        // يجعل الطرفين (النظام والتطبيق) متفقين على من المسؤول عن حساب
+        // المسافات، بدل تعارض ضمني ينتج عنه انزياح بصري طفيف بكل الواجهة.
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
         prefsManager = PrefsManager(this)
         bookmarkRepository = BookmarkRepository(prefsManager)
@@ -530,6 +539,17 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            // ✅ إصلاح "الواجهات تختلف قليلاً": الشاشة الرئيسية ما كانت
+            // تحصل على أي تعويض لأشرطة النظام على الهاتف (فقط padding
+            // التلفاز isTV كان يُطبَّق). بعد تفعيل edge-to-edge صراحة، تحتاج
+            // نفس تعويض statusBar/navBar الذي تحصل عليه topBar/bottomBar.
+            nativeOverlayContainer.setPadding(
+                nativeOverlayContainer.paddingLeft,
+                statusBarTop,
+                nativeOverlayContainer.paddingRight,
+                navBarBottom
+            )
+
             insets
         }
         root.requestApplyInsets()
@@ -657,6 +677,17 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            // ✅ نفس إصلاح "الواجهات تختلف قليلاً" مكرَّر هنا لاتساق الحالتين
+            // (هذا الملف فيه دالتان شبه متطابقتان لمعالجة الـinsets —
+            // ملاحظة قديمة في الكود لم تُحل بعد؛ التزمت بإصلاح الاثنتين
+            // بدل حذف إحداهما، تفادياً لتغيير سلوك لم يُطلَب حالياً).
+            nativeOverlayContainer.setPadding(
+                nativeOverlayContainer.paddingLeft,
+                statusBarTop,
+                nativeOverlayContainer.paddingRight,
+                navBarBottom
+            )
+
             insets
         }
         root.requestApplyInsets()
@@ -743,6 +774,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setTopBarVisible(visible: Boolean, immediate: Boolean = false) {
+        // ✅ إصلاح جذري لمشكلة "الشريط العلوي يضل ينبض أثناء البحث":
+        // onLocationChange يُستدعى مرة واحدة لكل قفزة إعادة توجيه (سلوك
+        // طبيعي تماماً — أغلب محركات البحث تُعيد التوجيه مرة على الأقل)،
+        // وكل استدعاء كان يُعيد تشغيل أنيميشن الظهور/الاختفاء من الصفر حتى
+        // لو الشريط ظاهر أصلاً — يعني قفزة مرئية للأعلى وتلاشٍ وظهور من
+        // جديد، مرة لكل قفزة. هذا الحارس يمنع إعادة التشغيل لو الحالة
+        // الحالية تطابق الحالة المطلوبة أصلاً.
+        val alreadyInTargetState = if (visible) {
+            topBar.visibility == View.VISIBLE && topBar.alpha >= 0.99f
+        } else {
+            topBar.visibility != View.VISIBLE
+        }
+        if (alreadyInTargetState && !immediate) return
+
         keepCursorAlive()
         // Search overlay belongs to the URL bar — close it when the bar hides.
         if (!visible) hideSearchOverlay()
@@ -1631,7 +1676,19 @@ private fun savePersistentTabs() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupListeners() {
-        swipeRefresh.setOnChildScrollUpCallback { _, _ -> (currentWebView?.scrollY ?: 0) > 0 }
+        // ✅ تحسين دفاعي متعلق بمشكلة "الصفحة تنعاد عند التمرير": هذا
+        // الشرط يقرر هل يُسمح بسحب-للتحديث بالاعتماد على scrollY المُحدَّث
+        // فقط عبر GeckoSession.ScrollDelegate.onScrollChanged. لو هذا
+        // الاستدعاء يتأخر أو نادر، scrollY يبقى 0 (قيمته الافتراضية) رغم
+        // أن المستخدم فعلياً بمنتصف صفحة طويلة — فيُسمَح بسحب-للتحديث
+        // خطأً أثناء حركة تمرير عادية، وتُعاد الصفحة بلا قصد. القاعدة
+        // الآن: نفترض "لسا في وسط الصفحة" (نمنع السحب) افتراضياً، ولا نسمح
+        // به إلا بعد تأكيد فعلي واحد على الأقل بوصول scrollY=0 من الجلسة
+        // الحالية تحديداً.
+        swipeRefresh.setOnChildScrollUpCallback { _, _ ->
+            val tab = currentWebView
+            tab == null || !tab.hasConfirmedScrollPosition || tab.scrollY > 0
+        }
         swipeRefresh.setOnRefreshListener { currentWebView?.reload() }
 
         textUrl.setOnEditorActionListener { _, _, _ ->

@@ -70,6 +70,9 @@ class SettingsActivity : AppCompatActivity() {
 
         // clear data
         findViewById<View>(R.id.settingClearData).setOnClickListener { showClearDataDialog() }
+        findViewById<View>(R.id.settingViewLogs).setOnClickListener {
+            startActivity(Intent(this, space.karrarnazim.ConsoleFlow.ui.LogsActivity::class.java))
+        }
 
         // about — opens AboutActivity
         findViewById<View>(R.id.settingAbout).setOnClickListener {

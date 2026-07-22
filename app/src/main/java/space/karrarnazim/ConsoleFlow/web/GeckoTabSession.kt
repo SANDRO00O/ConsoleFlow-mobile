@@ -113,14 +113,46 @@ class GeckoTabSession(
      * الصفحة لا يُرسم عبر مسار View.draw() العادي كما كان في WebView.
      * capturePixels() هو المسار الصحيح، لكنه غير متزامن.
      */
+    /**
+     * ⚠️ إصلاح خطأ حقيقي اكتُشف بعد الإبلاغ عن "كاردات التابويبات UI
+     * خربانة": توثيق GeckoView الرسمي يؤكد صراحة أن capturePixels() يفشل
+     * بـIllegalStateException لو GeckoSession.isCompositorReady() لا تزال
+     * false — حالة شائعة جداً فور فتح تبويب أو التبديل إليه مباشرة، قبل
+     * اكتمال أول رسم فعلي. كان هذا الفشل يُبتلَع بصمت (onResult(null))،
+     * فتبقى الصورة المصغّرة فارغة أو قديمة إلى الأبد لذلك التبويب. الحل:
+     * إعادة محاولة قصيرة بدل الاستسلام من أول فشل.
+     */
     fun capturePixels(onResult: (Bitmap?) -> Unit) {
-        // ✅ إصلاح خطأ تصريف حقيقي: capturePixels() ليست موجودة على
-        // GeckoSession — هي على GeckoView (أو GeckoDisplay) تحديداً، لأن
-        // التقاط البكسلات يحتاج الاتصال الفعلي بالـSurface الذي يُركَّب
-        // عليه المحتوى، وGeckoSession وحدها (بدون View) لا تملك ذلك.
-        // مصدر GeckoDisplay.java الرسمي يؤكد هذا حرفياً.
+        capturePixelsWithRetry(onResult, attemptsLeft = 5)
+    }
+
+    private fun capturePixelsWithRetry(onResult: (Bitmap?) -> Unit, attemptsLeft: Int) {
+        if (attemptsLeft <= 0 || !session.isCompositorReady) {
+            if (attemptsLeft <= 0) {
+                onResult(null)
+            } else {
+                // الـcompositor لسا غير جاهز — أعد المحاولة بعد فاصل قصير
+                // بدل استدعاء capturePixels() وتحمّل استثناء مؤكَّد الحدوث.
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                    { capturePixelsWithRetry(onResult, attemptsLeft - 1) },
+                    120L
+                )
+            }
+            return
+        }
         geckoView.capturePixels()
-            .accept({ bmp -> onResult(bmp) }, { onResult(null) })
+            .accept(
+                { bmp -> onResult(bmp) },
+                {
+                    // فشل فعلي رغم أن isCompositorReady كانت true (حالة
+                    // نادرة لكن ممكنة بسباق توقيت) — أعد المحاولة أيضاً
+                    // بدل الاستسلام الفوري.
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                        { capturePixelsWithRetry(onResult, attemptsLeft - 1) },
+                        120L
+                    )
+                }
+            )
     }
 
     // ── البحث داخل الصفحة ──────────────────────────────────────────────────
@@ -157,6 +189,10 @@ class GeckoTabSession(
     var scrollX: Int = 0
         internal set
     var scrollY: Int = 0
+        internal set
+    // ✅ يمنع الوثوق بالقيمة الافتراضية (0) على أنها "تأكيد فعلي بأننا
+    // أعلى الصفحة" — انظر استخدامها في MainActivity.setOnChildScrollUpCallback.
+    var hasConfirmedScrollPosition: Boolean = false
         internal set
 
     // ── استمرارية حالة التبويب ──────────────────────────────────────────────

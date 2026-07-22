@@ -113,19 +113,26 @@ jobs:
         if: always()
         run: rm -f release.keystore
 
-      - name: Locate and rename APK
+      - name: Locate and rename APKs
         id: apk
         run: |
           set -euo pipefail
-          original_path=$(find app/build/outputs/apk/release -name "*.apk" -print -quit)
-          if [ -z "$original_path" ]; then
-            echo "::error::No release APK found under app/build/outputs/apk/release"
+          base_name="${{ steps.metadata.outputs.apk_custom_name }}"
+          base_name="${base_name%.apk}"
+          out_dir="app/build/outputs/apk/release"
+          found=0
+          # ✅ splits.abi ينتج APK منفصل لكل معمارية (بدل ملف واحد ضخم) —
+          # نرفعهم جميعاً للإصدار حتى يختار كل مستخدم النسخة المناسبة لجهازه.
+          while IFS= read -r -d '' apk_path; do
+            found=1
+            abi_suffix=$(basename "$apk_path" .apk | sed -E 's/.*-(arm64-v8a|armeabi-v7a|x86_64|x86)(-release)?(-unsigned)?$/\1/')
+            mv "$apk_path" "$out_dir/${base_name}-${abi_suffix}.apk"
+          done < <(find "$out_dir" -name "*.apk" -print0)
+          if [ "$found" -eq 0 ]; then
+            echo "::error::No release APK found under $out_dir"
             exit 1
           fi
-          new_name="${{ steps.metadata.outputs.apk_custom_name }}"
-          new_path="app/build/outputs/apk/release/$new_name"
-          mv "$original_path" "$new_path"
-          echo "path=$new_path" >> "$GITHUB_OUTPUT"
+          echo "glob=$out_dir/${base_name}-*.apk" >> "$GITHUB_OUTPUT"
 
       - name: Create new Release
         uses: softprops/action-gh-release@v2
@@ -134,7 +141,7 @@ jobs:
           name: ${{ steps.metadata.outputs.name }}
           prerelease: ${{ steps.metadata.outputs.pre }}
           body: ${{ steps.metadata.outputs.body }}
-          files: ${{ steps.apk.outputs.path }}
+          files: ${{ steps.apk.outputs.glob }}
           generate_release_notes: true
 
       - name: Upload build log on failure
