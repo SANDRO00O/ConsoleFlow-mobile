@@ -127,26 +127,18 @@ class GeckoTabSession(
     }
 
     private fun capturePixelsWithRetry(onResult: (Bitmap?) -> Unit, attemptsLeft: Int) {
-        if (attemptsLeft <= 0 || !session.isCompositorReady) {
-            if (attemptsLeft <= 0) {
-                onResult(null)
-            } else {
-                // الـcompositor لسا غير جاهز — أعد المحاولة بعد فاصل قصير
-                // بدل استدعاء capturePixels() وتحمّل استثناء مؤكَّد الحدوث.
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
-                    { capturePixelsWithRetry(onResult, attemptsLeft - 1) },
-                    120L
-                )
-            }
+        if (attemptsLeft <= 0) {
+            onResult(null)
             return
         }
+
         geckoView.capturePixels()
             .accept(
                 { bmp -> onResult(bmp) },
                 {
-                    // فشل فعلي رغم أن isCompositorReady كانت true (حالة
-                    // نادرة لكن ممكنة بسباق توقيت) — أعد المحاولة أيضاً
-                    // بدل الاستسلام الفوري.
+                    // GeckoView يرفض الالتقاط قبل اكتمال تهيئة الـ compositor.
+                    // لا نلمس isCompositorReady لأنه ليس API عامًا هنا؛ نعتمد
+                    // بدلًا من ذلك على إعادة المحاولة بعد فاصل قصير.
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
                         { capturePixelsWithRetry(onResult, attemptsLeft - 1) },
                         120L
