@@ -1,0 +1,253 @@
+name: Update F-Droid Metadata (GitLab MR)
+
+# 完全独立的 workflow：只手动触发，不碰任何现有的 release / quick-apk / keystore 流程。
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "覆盖 versionName（留空 = 自动读取 app/build.gradle）"
+        required: false
+        default: ""
+      version_code:
+        description: "覆盖 versionCode（留空 = 自动读取 app/build.gradle）"
+        required: false
+        default: ""
+      commit_sha:
+        description: "写入 Builds 条目的 commit（留空 = 使用当前 HEAD）"
+        required: false
+        default: ""
+
+# 最小权限：这个 workflow 不需要写 GitHub 仓库本身，只需要读源码。
+permissions:
+  contents: read
+
+jobs:
+  sync-fdroid-metadata:
+    name: Push to fork and open MR against fdroid/fdroiddata
+    runs-on: ubuntu-latest
+
+    env:
+      # ── 在仓库 Settings → Secrets and variables → Actions 里配置 ──
+      # Variables（非敏感）:
+      GITLAB_FORK_PROJECT_PATH: ${{ vars.GITLAB_FDROID_FORK_PATH || 'mk63cp/fdroiddata' }}
+      GITLAB_UPSTREAM_PROJECT_PATH: ${{ vars.GITLAB_FDROID_UPSTREAM_PATH || 'fdroid/fdroiddata' }}
+      GITLAB_METADATA_PATH: ${{ vars.GITLAB_FDROID_METADATA_PATH || 'metadata/space.karrarnazim.ConsoleFlow.yml' }}
+      GITLAB_BASE_BRANCH: ${{ vars.GITLAB_FDROID_BASE_BRANCH || 'master' }}
+      GIT_AUTHOR_NAME: ${{ vars.FDROID_GIT_AUTHOR_NAME || 'ConsoleFlow F-Droid Bot' }}
+      GIT_AUTHOR_EMAIL: ${{ vars.FDROID_GIT_AUTHOR_EMAIL || 'actions@karrarnazim.space' }}
+      # Secrets（敏感）:
+      # GITLAB_TOKEN: 在你的 fork（mk63cp/fdroiddata）创建 Project Access Token
+      #   scope 必须是 "api"（创建 Merge Request 走 REST API，write_repository 不够用）
+      #   role 至少 Developer
+
+    steps:
+      - name: Checkout ConsoleFlow source (read version info)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate required configuration
+        run: |
+          if [ -z "$GITLAB_FORK_PROJECT_PATH" ] || [ -z "$GITLAB_METADATA_PATH" ]; then
+            echo "::error::请检查 GITLAB_FDROID_FORK_PATH / GITLAB_FDROID_METADATA_PATH 是否设置正确"
+            exit 1
+          fi
+          if [ -z "${{ secrets.GITLAB_TOKEN }}" ]; then
+            echo "::error::缺少 secrets.GITLAB_TOKEN（需要 scope=api 的 GitLab Project Access Token，创建于你的 fork 上）"
+            exit 1
+          fi
+
+      - name: Read version from app/build.gradle (source of truth)
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version_name }}" ]; then
+            NAME="${{ github.event.inputs.version_name }}"
+          else
+            NAME=$(grep -m1 'versionName' app/build.gradle | sed -E 's/.*versionName[[:space:]]+"([^"]+)".*/\1/')
+          fi
+
+          if [ -n "${{ github.event.inputs.version_code }}" ]; then
+            CODE="${{ github.event.inputs.version_code }}"
+          else
+            CODE=$(grep -m1 'versionCode' app/build.gradle | sed -E 's/.*versionCode[[:space:]]+([0-9]+).*/\1/')
+          fi
+
+          if [ -n "${{ github.event.inputs.commit_sha }}" ]; then
+            SHA="${{ github.event.inputs.commit_sha }}"
+          else
+            SHA=$(git rev-parse HEAD)
+          fi
+
+          if [ -z "$NAME" ] || [ -z "$CODE" ]; then
+            echo "::error::无法从 app/build.gradle 解析出 versionName/versionCode"
+            exit 1
+          fi
+
+          BRANCH="update-consoleflow-v${NAME}"
+
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Resolved: versionName=$NAME versionCode=$CODE commit=$SHA branch=$BRANCH"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install ruamel.yaml
+        run: pip install --break-system-packages ruamel.yaml
+
+      - name: Clone fork and create working branch
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+        run: |
+          git clone --branch "$GITLAB_BASE_BRANCH" --single-branch \
+            "https://oauth2:${GITLAB_TOKEN}@gitlab.com/${GITLAB_FORK_PROJECT_PATH}.git" \
+            fdroid-metadata
+          cd fdroid-metadata
+          git checkout -b "$BRANCH"
+
+      - name: Update metadata YAML (format-preserving)
+        env:
+          METADATA_FILE: fdroid-metadata/${{ env.GITLAB_METADATA_PATH }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          COMMIT_SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          python3 - <<'PYEOF'
+          import os
+          from ruamel.yaml import YAML
+          from ruamel.yaml.comments import CommentedMap
+
+          path = os.environ["METADATA_FILE"]
+          version_name = os.environ["VERSION_NAME"]
+          version_code = int(os.environ["VERSION_CODE"])
+          commit_sha = os.environ["COMMIT_SHA"]
+
+          if not os.path.isfile(path):
+              raise SystemExit(f"元数据文件不存在: {path}")
+
+          yaml = YAML()
+          yaml.preserve_quotes = True
+          yaml.indent(mapping=2, sequence=2, offset=0)
+          yaml.width = 100000
+
+          with open(path) as f:
+              data = yaml.load(f)
+
+          builds = data.get("Builds") or []
+          already_present = any(b.get("versionCode") == version_code for b in builds)
+
+          if not already_present:
+              new_build = CommentedMap()
+              new_build["versionName"] = version_name
+              new_build["versionCode"] = version_code
+              new_build["commit"] = commit_sha
+              new_build["subdir"] = "app"
+              new_build["gradle"] = ["yes"]
+              builds.append(new_build)
+              data["Builds"] = builds
+              print(f"新增 Builds 条目: versionName={version_name} versionCode={version_code}")
+          else:
+              print(f"versionCode={version_code} 已存在于 Builds 中，跳过新增")
+
+          data["CurrentVersion"] = version_name
+          data["CurrentVersionCode"] = version_code
+
+          with open(path, "w") as f:
+              yaml.dump(data, f)
+          PYEOF
+
+      - name: Check for changes
+        id: diff
+        working-directory: fdroid-metadata
+        run: |
+          if git diff --quiet -- "${{ env.GITLAB_METADATA_PATH }}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push to fork branch
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: fdroid-metadata
+        env:
+          BRANCH: ${{ steps.version.outputs.branch }}
+        run: |
+          git config user.name "$GIT_AUTHOR_NAME"
+          git config user.email "$GIT_AUTHOR_EMAIL"
+          git add "${{ env.GITLAB_METADATA_PATH }}"
+          git commit -m "Update ConsoleFlow to v${{ steps.version.outputs.name }} (${{ steps.version.outputs.code }})"
+          git push origin "HEAD:$BRANCH" --force
+
+      - name: Resolve GitLab project IDs
+        if: steps.diff.outputs.changed == 'true'
+        id: ids
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          FORK_ENC=$(echo "$GITLAB_FORK_PROJECT_PATH" | sed 's/\//%2F/g')
+          UPSTREAM_ENC=$(echo "$GITLAB_UPSTREAM_PROJECT_PATH" | sed 's/\//%2F/g')
+
+          FORK_ID=$(curl -sf --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "https://gitlab.com/api/v4/projects/${FORK_ENC}" | jq -r '.id')
+          UPSTREAM_ID=$(curl -sf --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "https://gitlab.com/api/v4/projects/${UPSTREAM_ENC}" | jq -r '.id')
+
+          if [ -z "$FORK_ID" ] || [ "$FORK_ID" = "null" ]; then
+            echo "::error::无法解析 fork 项目 ID，检查 GITLAB_FDROID_FORK_PATH / token 权限"
+            exit 1
+          fi
+          if [ -z "$UPSTREAM_ID" ] || [ "$UPSTREAM_ID" = "null" ]; then
+            echo "::error::无法解析上游项目 ID，检查 GITLAB_FDROID_UPSTREAM_PATH"
+            exit 1
+          fi
+
+          echo "fork_id=$FORK_ID" >> "$GITHUB_OUTPUT"
+          echo "upstream_id=$UPSTREAM_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Check for existing open MR
+        if: steps.diff.outputs.changed == 'true'
+        id: existing_mr
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+        run: |
+          EXISTING=$(curl -sf --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "https://gitlab.com/api/v4/projects/${{ steps.ids.outputs.fork_id }}/merge_requests?source_branch=${BRANCH}&state=opened" \
+            | jq -r 'if length > 0 then .[0].web_url else "" end')
+          echo "url=$EXISTING" >> "$GITHUB_OUTPUT"
+
+      - name: Open merge request against fdroid/fdroiddata
+        if: steps.diff.outputs.changed == 'true' && steps.existing_mr.outputs.url == ''
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+        run: |
+          RESPONSE=$(curl -sf --request POST \
+            --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data @- \
+            "https://gitlab.com/api/v4/projects/${{ steps.ids.outputs.fork_id }}/merge_requests" <<EOF
+          {
+            "source_branch": "${BRANCH}",
+            "target_branch": "${GITLAB_BASE_BRANCH}",
+            "target_project_id": ${{ steps.ids.outputs.upstream_id }},
+            "title": "Update ConsoleFlow to v${{ steps.version.outputs.name }}",
+            "description": "Automated update generated from GitHub Actions.\n\nversionName: ${{ steps.version.outputs.name }}\nversionCode: ${{ steps.version.outputs.code }}\ncommit: ${{ steps.version.outputs.sha }}",
+            "remove_source_branch": true
+          }
+          EOF
+          )
+          echo "$RESPONSE" | jq -r '"Merge request opened: " + .web_url'
+
+      - name: Skip - MR already open
+        if: steps.diff.outputs.changed == 'true' && steps.existing_mr.outputs.url != ''
+        run: echo "已存在开启中的 MR，跳过重复创建: ${{ steps.existing_mr.outputs.url }}"
+
+      - name: No changes
+        if: steps.diff.outputs.changed == 'false'
+        run: echo "元数据没有变化，跳过 push 和 MR。"
