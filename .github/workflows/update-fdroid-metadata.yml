@@ -100,16 +100,20 @@ jobs:
         run: |
           pip install --break-system-packages ruamel.yaml
 
-      - name: Clone fork and create working branch
+      - name: Clone upstream (always up to date) and create working branch
+        # Clone fdroid/fdroiddata directly instead of the fork. The fork's master
+        # can lag behind upstream, which causes merge conflicts when the MR is opened.
+        # Basing the change on upstream/master directly avoids that class of conflict entirely.
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
           BRANCH: ${{ steps.version.outputs.branch }}
         run: |
           git clone --branch "$GITLAB_BASE_BRANCH" --single-branch \
-            "https://oauth2:${GITLAB_TOKEN}@gitlab.com/${GITLAB_FORK_PROJECT_PATH}.git" \
+            "https://gitlab.com/${GITLAB_UPSTREAM_PROJECT_PATH}.git" \
             fdroid-metadata
           cd fdroid-metadata
           git checkout -b "$BRANCH"
+          git remote add fork "https://oauth2:${GITLAB_TOKEN}@gitlab.com/${GITLAB_FORK_PROJECT_PATH}.git"
 
       - name: Update metadata YAML (format-preserving)
         env:
@@ -182,7 +186,7 @@ jobs:
           git config user.email "$GIT_AUTHOR_EMAIL"
           git add "${{ env.GITLAB_METADATA_PATH }}"
           git commit -m "Update ConsoleFlow to v${{ steps.version.outputs.name }} (${{ steps.version.outputs.code }})"
-          git push origin "HEAD:$BRANCH" --force
+          git push fork "HEAD:$BRANCH" --force
 
       - name: Resolve GitLab project IDs
         if: steps.diff.outputs.changed == 'true'
