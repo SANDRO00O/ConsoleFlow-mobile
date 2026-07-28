@@ -122,31 +122,36 @@ class GeckoTabSession(
      * فتبقى الصورة المصغّرة فارغة أو قديمة إلى الأبد لذلك التبويب. الحل:
      * إعادة محاولة قصيرة بدل الاستسلام من أول فشل.
      */
+    /**
+     * ⚠️ إصلاح خطأ حقيقي اكتُشف بعد الإبلاغ عن "كاردات التابويبات UI
+     * خربانة": توثيق GeckoView الرسمي يؤكد صراحة أن capturePixels() يفشل
+     * بـIllegalStateException لو compositor الجلسة لا يزال غير جاهز — حالة
+     * شائعة جداً فور فتح تبويب أو التبديل إليه مباشرة، قبل اكتمال أول رسم
+     * فعلي. كان هذا الفشل يُبتلَع بصمت (onResult(null))، فتبقى الصورة
+     * المصغّرة فارغة أو قديمة إلى الأبد لذلك التبويب. الحل: إعادة محاولة
+     * قصيرة بدل الاستسلام من أول فشل.
+     *
+     * ✅ إصلاح خطأ تصريف حقيقي إضافي: session.isCompositorReady غير
+     * متاحة — هي package-private داخل GeckoView نفسه، لا يمكن الوصول لها
+     * من كود التطبيق. الفحص المسبق حُذف بالكامل؛ الاعتماد الآن فقط على
+     * إعادة المحاولة عند فشل capturePixels() الفعلي (الفرع الاحتياطي أدناه)،
+     * وهذا لا يحتاج أي وصول لحالة GeckoView الداخلية.
+     */
     fun capturePixels(onResult: (Bitmap?) -> Unit) {
         capturePixelsWithRetry(onResult, attemptsLeft = 5)
     }
 
     private fun capturePixelsWithRetry(onResult: (Bitmap?) -> Unit, attemptsLeft: Int) {
-        if (attemptsLeft <= 0 || !session.isCompositorReady) {
-            if (attemptsLeft <= 0) {
-                onResult(null)
-            } else {
-                // الـcompositor لسا غير جاهز — أعد المحاولة بعد فاصل قصير
-                // بدل استدعاء capturePixels() وتحمّل استثناء مؤكَّد الحدوث.
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
-                    { capturePixelsWithRetry(onResult, attemptsLeft - 1) },
-                    120L
-                )
-            }
+        if (attemptsLeft <= 0) {
+            onResult(null)
             return
         }
         geckoView.capturePixels()
             .accept(
                 { bmp -> onResult(bmp) },
                 {
-                    // فشل فعلي رغم أن isCompositorReady كانت true (حالة
-                    // نادرة لكن ممكنة بسباق توقيت) — أعد المحاولة أيضاً
-                    // بدل الاستسلام الفوري.
+                    // فشل (على الأغلب compositor لسا غير جاهز) — أعد
+                    // المحاولة بعد فاصل قصير بدل الاستسلام الفوري.
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
                         { capturePixelsWithRetry(onResult, attemptsLeft - 1) },
                         120L

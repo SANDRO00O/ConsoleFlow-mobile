@@ -83,6 +83,10 @@ jvmTarget = '17'
 }
 buildFeatures {
 viewBinding true
+// ✅ إصلاح خطأ تصريف حقيقي: توليد BuildConfig أصبح معطَّلاً افتراضياً منذ
+// AGP 8.0+ (تغيير افتراضي معروف) — بدونه، BuildConfig.DEBUG/VERSION_NAME
+// المستخدَمان في ConsoleFlowApplication.kt غير موجودين إطلاقاً.
+buildConfig true
 }
 }
 
