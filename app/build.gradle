@@ -39,12 +39,16 @@ splits {
 // كل APK ناتج عن splits يحتاج versionCode فريداً (رقم قياسي متفَق عليه لكل
 // معمارية) وإلا فآليات التحديث/التثبيت قد تلتبس بين النسخ. هذا هو الأسلوب
 // الموثَّق رسمياً من Google لهذا الغرض بالضبط.
-def abiCodes = ["armeabi-v7a": 1, "arm64-v8a": 2, "x86": 3, "x86_64": 4]
+// ✅ إصلاح خطأ بناء حقيقي: 'ext.abiCodes' بلا تأهيل داخل closure متداخلة
+// (variant.outputs.each) لا يتحلّل لنفس 'ext' على مستوى المشروع — هذا سلوك
+// Groovy المعروف بدقّة تحليل الـclosure delegate. 'project.ext' الصريح هو
+// الحل الموثَّق لتفادي هذا الالتباس تحديداً.
+project.ext.abiCodes = ["armeabi-v7a": 1, "arm64-v8a": 2, "x86": 3, "x86_64": 4]
 android.applicationVariants.all { variant ->
     variant.outputs.each { output ->
         def abi = output.getFilter(com.android.build.OutputFile.ABI)
-        if (abi != null && abiCodes.containsKey(abi)) {
-            output.versionCodeOverride = abiCodes.get(abi) * 1000 + variant.versionCode
+        if (abi != null && project.ext.abiCodes.containsKey(abi)) {
+            output.versionCodeOverride = project.ext.abiCodes.get(abi) * 1000 + variant.versionCode
         }
     }
 }
@@ -79,7 +83,6 @@ jvmTarget = '17'
 }
 buildFeatures {
 viewBinding true
-buildConfig true
 }
 }
 
