@@ -1,7 +1,7 @@
 {
-  "release_name": "v2.2.8 ConsoleFlow",
-  "release_body": "## What is new\n\n- Added a **new dedicated download management system** with its own page.\n- Added **full support** for controllers, keyboard, mouse, and TV remotes.\n- Fixed some issues and made other improvements.\n- New app logo.\n",
-  "apk_name": "ConsoleFlow_v2.2.8.apk",
+  "release_name": "v2.2.9 ConsoleFlow",
+  "release_body": "## What is new\n\n- Minor changes",
+  "apk_name": "ConsoleFlow_v2.2.9.apk",
   "is_prerelease": false,
-  "tag": "v2.2.8"
+  "tag": "v2.2.9"
 }
