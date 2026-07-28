@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.2.9
+
+### What is new
+
+- Minor changes
+
+
 ## v2.2.8
 
 ### What is new
