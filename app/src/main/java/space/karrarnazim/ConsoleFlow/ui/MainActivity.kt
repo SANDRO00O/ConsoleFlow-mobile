@@ -348,6 +348,15 @@ class MainActivity : AppCompatActivity() {
                             tabState.hasThumbnail = true
                             tabState.thumbnailUrl = HOME_URL
                         }
+                        // ✅ إصلاح فجوة معروفة (كانت سبب اختلاف شكل كاردات
+                        // التبويبات عن التصميم القديم): GeckoView ما عنده
+                        // onReceivedIcon، فكانت الأيقونة تبقى فارغة دائماً.
+                        // نفس خدمة الجلب المستخدَمة أصلاً لمفضلة الشاشة
+                        // الرئيسية، بشرط عدم الجلب المتكرر لنفس الرابط.
+                        if (!isHomeUrl(pageUrl) && tabState.faviconUrl != pageUrl) {
+                            tabState.faviconUrl = pageUrl
+                            fetchTabFavicon(tab.tabId, pageUrl)
+                        }
                     }
 
                     // BUG-1 FIX (preserved): returning to about:blank/home must
@@ -436,7 +445,7 @@ class MainActivity : AppCompatActivity() {
                 updateGroupsUI()
                 refreshTabsRecycler()
                 val activeTabUrl = currentGroup?.tabs?.find { it.id == activeTabId }?.url
-                if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay()
+                if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay(immediate = true)
                 else hideNativeOverlays(immediate = true)
             } else {
                 createNewGroup("Default")
@@ -518,12 +527,13 @@ class MainActivity : AppCompatActivity() {
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val extraTop = (resources.displayMetrics.density * 4f).toInt()
 
-            topBar.setPadding(
-                topBar.paddingLeft,
-                statusBarTop + extraTop,
-                topBar.paddingRight,
-                topBar.paddingBottom
-            )
+            (topBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                val newTopMargin = statusBarTop + extraTop
+                if (lp.topMargin != newTopMargin) {
+                    lp.topMargin = newTopMargin
+                    topBar.layoutParams = lp
+                }
+            }
 
             tabsOverlay.setPadding(
                 tabsOverlay.paddingLeft,
@@ -656,12 +666,13 @@ class MainActivity : AppCompatActivity() {
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val extraTop = (resources.displayMetrics.density * 4f).toInt()
 
-            topBar.setPadding(
-                topBar.paddingLeft,
-                statusBarTop + extraTop,
-                topBar.paddingRight,
-                topBar.paddingBottom
-            )
+            (topBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                val newTopMargin = statusBarTop + extraTop
+                if (lp.topMargin != newTopMargin) {
+                    lp.topMargin = newTopMargin
+                    topBar.layoutParams = lp
+                }
+            }
 
             tabsOverlay.setPadding(
                 tabsOverlay.paddingLeft,
@@ -837,6 +848,30 @@ class MainActivity : AppCompatActivity() {
             .onFailure { Toast.makeText(this, "Voice search unavailable", Toast.LENGTH_SHORT).show() }
     }
 
+    /** يجلب أيقونة موقع حقيقية لكارد تبويب — يغلق فجوة onReceivedIcon المفقودة بـGeckoView. */
+    private fun fetchTabFavicon(tabId: Int, url: String) {
+        ioExecutor.execute {
+            try {
+                val host = runCatching { Uri.parse(url).host }.getOrNull().orEmpty()
+                if (host.isEmpty()) return@execute
+                val faviconUrl = "https://www.google.com/s2/favicons?sz=64&domain=$host"
+                val request = Request.Builder().url(faviconUrl).build()
+                okClient.newCall(request).execute().use { response ->
+                    val body   = response.body ?: return@use
+                    val bitmap = BitmapFactory.decodeStream(body.byteStream()) ?: return@use
+                    mainHandler.post {
+                        currentGroup?.tabs?.find { it.id == tabId }?.let { tabState ->
+                            tabState.faviconBitmap = bitmap
+                            refreshTabsRecycler()
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // فشل صامت — تبقى الأيقونة الافتراضية، بلا أثر على استقرار التطبيق.
+            }
+        }
+    }
+
     private fun loadBookmarkFavicon(url: String, target: ImageView) {
         ioExecutor.execute {
             try {
@@ -999,6 +1034,32 @@ class MainActivity : AppCompatActivity() {
         }
         content.addView(fixedHeader)
 
+        fun brandMonogram(title: String): kotlin.Pair<Int, String>? = when (title) {
+            // ألوان العلامة التجارية الرسمية الحقيقية لكل موقع.
+            "GitHub"   -> Color.parseColor("#181717") to "G"
+            "GitLab"   -> Color.parseColor("#FC6D26") to "G"
+            "Codeberg" -> Color.parseColor("#2185D0") to "C"
+            "F-Droid"  -> Color.parseColor("#1976D2") to "F"
+            else -> null
+        }
+
+        fun monogramDrawable(letter: String, bgColor: Int): android.graphics.drawable.Drawable {
+            val size = 256
+            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bgColor }
+            canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                textSize = size * 0.5f
+                textAlign = Paint.Align.CENTER
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            }
+            val textY = size / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
+            canvas.drawText(letter, size / 2f, textY, textPaint)
+            return android.graphics.drawable.BitmapDrawable(resources, bmp)
+        }
+
         fun bookmarkGrid(items: List<kotlin.Pair<String, String>>, loadRemoteIcons: Boolean) {
             if (items.isEmpty()) return
             val tileSz   = px(R.dimen.home_bookmark_tile)
@@ -1022,10 +1083,18 @@ class MainActivity : AppCompatActivity() {
                 }
                 val icon = ImageView(this).apply {
                     layoutParams = LinearLayout.LayoutParams(tileSz, tileSz)
-                    setBackgroundResource(R.drawable.tab_card_bg)
-                    scaleType = ImageView.ScaleType.CENTER_INSIDE
-                    setPadding((8*dp).toInt(), (8*dp).toInt(), (8*dp).toInt(), (8*dp).toInt())
+                    setBackgroundResource(R.drawable.bookmark_icon_circle_bg)
+                    clipToOutline = true
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setPadding(0, 0, 0, 0)
                     setImageResource(R.drawable.ic_favicon_fallback)
+                }
+                // ✅ دائرة بلون العلامة التجارية الحقيقي + الحرف الأول تظهر
+                // فوراً (بلا حاجة شبكة) — بديل صادق لعدم القدرة على تحميل
+                // صور شعارات حقيقية محلياً بالأدوات المتاحة حالياً. تُستبدَل
+                // لاحقاً بالأيقونة الحقيقية لو نجح الجلب عبر الشبكة.
+                brandMonogram(title)?.let { (bg, letter) ->
+                    icon.setImageDrawable(monogramDrawable(letter, bg))
                 }
                 val label = TextView(this).apply {
                     text = title
@@ -1047,10 +1116,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         val fixedSites = listOf(
-            "GitHub"       to "https://github.com",
-            "Stack Overflow" to "https://stackoverflow.com",
-            "MDN"          to "https://developer.mozilla.org",
-            "Kotlin"       to "https://kotlinlang.org"
+            "GitHub"   to "https://github.com",
+            "GitLab"   to "https://gitlab.com",
+            "Codeberg" to "https://codeberg.org",
+            "F-Droid"  to "https://f-droid.org"
         )
         bookmarkGrid(fixedSites, loadFavicons)
 
@@ -1142,7 +1211,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        buttonRow.addView(makeButton("Retry") { hideNativeOverlays(); currentWebView?.reload() })
+        buttonRow.addView(makeButton("Retry") { hideNativeOverlays(immediate = true); currentWebView?.reload() })
         buttonRow.addView(makeButton("Home")  { goHome() })
         buttonRow.addView(makeButton("Close") { hideNativeOverlays() })
 
@@ -1191,18 +1260,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     // FIX #7 — showHomeOverlay تتحقق من dirty flag وتُعيد البناء عند الحاجة فقط
-    private fun showHomeOverlay() {
+    private fun showHomeOverlay(immediate: Boolean = false) {
         keepCursorAlive()
         if (homeOverlayDirty) {
             buildNativeOverlays()
             homeOverlayDirty = false
         }
         lastErrorUrl = null
-        setTopBarVisible(false)
-        nativeErrorOverlay?.let { fadeOverlay(it, false) }
+        setTopBarVisible(false, immediate = immediate)
+        nativeErrorOverlay?.let { fadeOverlay(it, false, immediate = immediate) }
         nativeHomeOverlay?.let {
             nativeOverlayContainer.visibility = View.VISIBLE
-            fadeOverlay(it, true)
+            fadeOverlay(it, true, immediate = immediate)
             nativeOverlayContainer.bringToFront()
             swipeRefresh.isRefreshing = false
             swipeRefresh.isEnabled    = false
@@ -1275,7 +1344,7 @@ private fun savePersistentTabs() {
             refreshTabsRecycler()
 
             val activeTabUrl = currentGroup?.tabs?.find { it.id == activeTabId }?.url
-            if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay()
+            if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay(immediate = true)
             else hideNativeOverlays(immediate = true)
 
             if (!intentUrl.isNullOrEmpty()) openNewTab(intentUrl)
@@ -1528,6 +1597,11 @@ private fun savePersistentTabs() {
 
         val wv = webViewFactory.create(tab.id)
         webViews[tab.id] = wv
+        // ✅ إصلاح جذري إضافي: تعطيل الجلسة فوراً عند إنشائها كافتراضي آمن
+        // — لا نثق بالحالة الافتراضية الداخلية غير الموثَّقة لـGeckoView.
+        // المستدعي (switchToTab أو مسارات الاستعادة الباردة) هو من يُفعِّلها
+        // صراحةً فقط عندما تصبح التبويب المعروض فعلياً على الشاشة.
+        wv.setActive(false)
         // ⚠️ فجوة مُغلقة: نستعيد تاريخ التصفح/موضع التمرير/بيانات النماذج من
         // sessionStateJson المحفوظ (يُحدَّث تلقائياً — انظر GeckoTabSession
         // وGeckoSessionDelegates.onSessionStateChange). هذا يستعيد فعلياً زر

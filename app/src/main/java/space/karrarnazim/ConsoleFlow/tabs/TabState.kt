@@ -17,4 +17,7 @@ data class TabState(
 ) : Serializable {
     @Transient var ramThumbnail: Bitmap? = null
     @Transient var faviconBitmap: Bitmap? = null
+    // يمنع إعادة جلب الأيقونة لنفس الرابط عند تكرار onPageFinishedUi (يحصل
+    // فعلياً مع كل قفزة إعادة توجيه ضمن نفس التنقّل).
+    @Transient var faviconUrl: String? = null
 }
