@@ -20,6 +20,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Patterns
 import android.util.TypedValue
+import android.transition.TransitionManager
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.webkit.*
@@ -692,49 +693,52 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
 
-                view.evaluateJavascript(
-                    "(function(){" +
-                    "if(window.__erudaInited)return;" +
-                    "if(typeof eruda!=='undefined'){" +
-                        "try{eruda.init();window.__erudaInited=true;}catch(e){}" +
-                        "return;" +
-                    "}" +
-                    "var x=new XMLHttpRequest();" +
-                    "x.open('GET','https://eruda.local/eruda.js',true);" +
-                    "x.onload=function(){" +
+                if (prefsManager.consoleEnabled) {
+                    view.evaluateJavascript(
+                        "(function(){" +
                         "if(window.__erudaInited)return;" +
-                        "try{eval(x.responseText);eruda.init();window.__erudaInited=true;}catch(e){}" +
-                    "};" +
-                    "x.send();" +
-                    "})()", null
-                )
-
-                // تعطيل SwipeRefresh عند سحب زر Eruda لمنع تعارض الـ touch events
-                view.evaluateJavascript(
-                    "(function(){" +
-                    "if(window.__erudaTouchHooked)return;" +
-                    "window.__erudaTouchHooked=true;" +
-                    "function getErudaEl(){return document.getElementById('eruda');}" +
-                    "document.addEventListener('touchstart',function(e){" +
-                        "var el=getErudaEl();" +
-                        "if(el&&el.contains(e.target)){" +
-                            "try{Android.setSwipeRefresh(false);}catch(ex){}" +
+                        "if(typeof eruda!=='undefined'){" +
+                            "try{eruda.init();window.__erudaInited=true;}catch(e){}" +
+                            "return;" +
                         "}" +
-                    "},{capture:true,passive:true});" +
-                    "document.addEventListener('touchend',function(){" +
-                        "try{Android.setSwipeRefresh(true);}catch(ex){}" +
-                    "},{capture:true,passive:true});" +
-                    "document.addEventListener('touchcancel',function(){" +
-                        "try{Android.setSwipeRefresh(true);}catch(ex){}" +
-                    "},{capture:true,passive:true});" +
-                    "})()", null
-                )
+                        "var x=new XMLHttpRequest();" +
+                        "x.open('GET','https://eruda.local/eruda.js',true);" +
+                        "x.onload=function(){" +
+                            "if(window.__erudaInited)return;" +
+                            "try{eval(x.responseText);eruda.init();window.__erudaInited=true;}catch(e){}" +
+                        "};" +
+                        "x.send();" +
+                        "})()", null
+                    )
+
+                    // تعطيل SwipeRefresh عند سحب زر Eruda لمنع تعارض الـ touch events
+                    view.evaluateJavascript(
+                        "(function(){" +
+                        "if(window.__erudaTouchHooked)return;" +
+                        "window.__erudaTouchHooked=true;" +
+                        "function getErudaEl(){return document.getElementById('eruda');}" +
+                        "document.addEventListener('touchstart',function(e){" +
+                            "var el=getErudaEl();" +
+                            "if(el&&el.contains(e.target)){" +
+                                "try{Android.setSwipeRefresh(false);}catch(ex){}" +
+                            "}" +
+                        "},{capture:true,passive:true});" +
+                        "document.addEventListener('touchend',function(){" +
+                            "try{Android.setSwipeRefresh(true);}catch(ex){}" +
+                        "},{capture:true,passive:true});" +
+                        "document.addEventListener('touchcancel',function(){" +
+                            "try{Android.setSwipeRefresh(true);}catch(ex){}" +
+                        "},{capture:true,passive:true});" +
+                        "})()", null
+                    )
+                }
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
 
                 if (url == "https://eruda.local/eruda.js") {
+                    if (!prefsManager.consoleEnabled) return null
                     return try {
                         WebResourceResponse("application/javascript", "utf-8", assets.open("eruda.js"))
                     } catch (_: Exception) {
@@ -935,6 +939,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnHomeArea).setOnClickListener    { loadUrlInstantly(HOME_URL) }
 
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
+            TransitionManager.beginDelayedTransition(findViewById(android.R.id.content))
             if (tabsOverlay.visibility == View.VISIBLE) {
                 tabsOverlay.visibility = View.GONE
             } else {
@@ -987,6 +992,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnFindNext).setOnClickListener  { currentWebView?.findNext(true)  }
         findViewById<View>(R.id.btnFindPrev).setOnClickListener  { currentWebView?.findNext(false) }
         findViewById<View>(R.id.btnFindClose).setOnClickListener {
+            TransitionManager.beginDelayedTransition(findViewById(android.R.id.content))
             findBar.visibility = View.GONE
             currentWebView?.clearMatches()
             hideKeyboard()
@@ -1102,17 +1108,14 @@ class MainActivity : AppCompatActivity() {
                 cachedMenuSheet?.dismiss()
                 showHistoryDialog()
             }
-            cachedMenuSheetView?.findViewById<View>(R.id.menuShare)?.setOnClickListener {
+            cachedMenuSheetView?.findViewById<View>(R.id.menuToggleConsole)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
-                val url = currentWebView?.url ?: return@setOnClickListener
-                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, url)
-                    putExtra(Intent.EXTRA_SUBJECT, currentWebView?.title ?: "")
-                }, "Share"))
+                prefsManager.consoleEnabled = !prefsManager.consoleEnabled
+                currentWebView?.reload()
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuFindInPage)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
+                TransitionManager.beginDelayedTransition(findViewById(android.R.id.content))
                 findBar.visibility = View.VISIBLE
                 currentWebView?.setFindListener { ord, total, _ ->
                     findViewById<TextView>(R.id.findMatches).text = if (total > 0) "${ord + 1}/$total" else "0/0"
@@ -1131,6 +1134,7 @@ class MainActivity : AppCompatActivity() {
             cachedMenuSheetView?.findViewById<View>(R.id.menuSettings)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 startActivity(Intent(this, SettingsActivity::class.java))
+                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuClearData)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
@@ -1150,6 +1154,16 @@ class MainActivity : AppCompatActivity() {
         } else {
             desktopLabel?.text = "Desktop"
             desktopLabel?.setTextColor(Color.parseColor("#CCCCCC"))
+        }
+
+        val consoleLabel = cachedMenuSheetView?.findViewById<TextView>(R.id.menuToggleConsoleLabel)
+        val consoleIcon  = cachedMenuSheetView?.findViewById<ImageView>(R.id.menuToggleConsoleIcon)
+        if (prefsManager.consoleEnabled) {
+            consoleLabel?.setTextColor(Color.WHITE)
+            consoleIcon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+        } else {
+            consoleLabel?.setTextColor(Color.parseColor("#CCCCCC"))
+            consoleIcon?.imageTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#CCCCCC"))
         }
 
         cachedMenuSheet?.show()
