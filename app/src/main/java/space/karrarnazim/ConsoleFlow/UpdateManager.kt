@@ -14,8 +14,6 @@ import java.util.concurrent.TimeUnit
 
 object UpdateManager {
 
-    // ─── constants ───────────────────────────────────────────────────────────
-
     private const val PREFS         = "update_cache"
     private const val KEY_VERSION   = "latest_version"
     private const val KEY_NAME      = "release_name"
@@ -23,21 +21,17 @@ object UpdateManager {
     private const val KEY_URL       = "release_url"
     private const val KEY_DATE      = "published_at"
     private const val KEY_CHECKED   = "last_checked"
-    private const val CACHE_TTL     = 6 * 60 * 60 * 1000L   // 6 hours
+    private const val CACHE_TTL     = 6 * 60 * 60 * 1000L
     private const val API_URL       =
-        "https://api.github.com/repos/SANDRO00O/ConsoleFlow-mobile/releases/latest"
-
-    // ─── data ────────────────────────────────────────────────────────────────
+        "https://api.github.com/repos/ConsoleFlow-Group/ConsoleFlow-mobile/releases/latest"
 
     data class ReleaseInfo(
-        val latestVersion : String,   // e.g. "2.3.0"
-        val releaseName   : String,   // e.g. "v2.3.0 ConsoleFlow"
-        val changelog     : String,   // raw GitHub release body (Markdown)
-        val releaseUrl    : String,   // HTML link on GitHub
-        val publishedAt   : String    // ISO-8601 date string
+        val latestVersion : String,
+        val releaseName   : String,
+        val changelog     : String,
+        val releaseUrl    : String,
+        val publishedAt   : String
     )
-
-    // ─── private state ───────────────────────────────────────────────────────
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -46,14 +40,10 @@ object UpdateManager {
 
     private val main = Handler(Looper.getMainLooper())
 
-    // ─── public API ──────────────────────────────────────────────────────────
-
-    /** Current installed version (from PackageManager). */
     fun currentVersion(ctx: Context): String =
         try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "0.0.0" }
         catch (_: Exception) { "0.0.0" }
 
-    /** Returns cached release info without any network call. Null if never fetched. */
     fun getCached(ctx: Context): ReleaseInfo? {
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val ver = p.getString(KEY_VERSION, null) ?: return null
@@ -66,22 +56,11 @@ object UpdateManager {
         )
     }
 
-    /**
-     * Fast synchronous cache read — safe on the main thread.
-     * Returns true only when we know for certain a newer version exists.
-     */
     fun isUpdateAvailable(ctx: Context): Boolean {
         val cached = getCached(ctx) ?: return false
         return compare(currentVersion(ctx), cached.latestVersion) < 0
     }
 
-    /**
-     * Check GitHub releases API.
-     *  - Uses cached data when cache is fresh (< 6 h).
-     *  - [forceRefresh] bypasses the cache and always hits the network.
-     *  - [callback] is always invoked on the **main thread**.
-     *  - Network errors fall back to cached data silently.
-     */
     fun check(
         ctx          : Context,
         forceRefresh : Boolean = false,
@@ -143,12 +122,6 @@ object UpdateManager {
         })
     }
 
-    // ─── version comparison ──────────────────────────────────────────────────
-
-    /**
-     * Semantic version compare (major.minor.patch).
-     * Returns < 0 if a < b,  0 if equal,  > 0 if a > b.
-     */
     fun compare(a: String, b: String): Int {
         val pa = a.split(".").map { it.trim().toIntOrNull() ?: 0 }
         val pb = b.split(".").map { it.trim().toIntOrNull() ?: 0 }

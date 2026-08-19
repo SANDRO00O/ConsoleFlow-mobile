@@ -15,40 +15,31 @@ class AboutActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_about)
 
-        // ── back button
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
 
-        // ── banner
         loadBanner()
 
-        // ── current version
         findViewById<TextView>(R.id.tvVersion).text = "v${UpdateManager.currentVersion(this)}"
 
-        // ── links
         mapOf(
             R.id.linkWebsite   to "https://consoleflow.karrarnazim.space",
             R.id.linkDeveloper to "https://karrarnazim.space",
             R.id.linkPrivacy   to "https://consoleflow.karrarnazim.space/privacy",
-            R.id.linkGithub    to "https://github.com/SANDRO00O/ConsoleFlow-mobile"
+            R.id.linkGithub    to "https://github.com/ConsoleFlow-Group/ConsoleFlow-mobile"
         ).forEach { (viewId, url) ->
             findViewById<View>(viewId).setOnClickListener { openUrl(url) }
         }
 
-        // ── update check (uses cache if fresh, hits network if stale)
         startUpdateCheck(forceRefresh = false)
 
-        // ── manual check button
         findViewById<View>(R.id.btnCheckUpdate).setOnClickListener {
             startUpdateCheck(forceRefresh = true)
         }
     }
 
-    // ─── banner ──────────────────────────────────────────────────────────────
-
     private fun loadBanner() {
         val wv = findViewById<WebView>(R.id.bannerWebView)
 
-        // Calculate exact height from banner aspect ratio (viewBox 1778.04 × 250)
         val horizontalPaddingPx = (32 * resources.displayMetrics.density).toInt()
         val availableWidth      = resources.displayMetrics.widthPixels - horizontalPaddingPx
         val bannerHeight        = (availableWidth / 7.112f).toInt()
@@ -75,8 +66,6 @@ class AboutActivity : AppCompatActivity() {
 
         wv.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
     }
-
-    // ─── update logic ────────────────────────────────────────────────────────
 
     private fun startUpdateCheck(forceRefresh: Boolean) {
         showState(R.id.updateLoading)
@@ -105,7 +94,6 @@ class AboutActivity : AppCompatActivity() {
         }
     }
 
-    /** Shows exactly one of the four update-state views, hides the rest. */
     private fun showState(targetId: Int) {
         listOf(R.id.updateLoading, R.id.updateUpToDate, R.id.updateAvailable, R.id.updateError)
             .forEach { id ->
@@ -114,12 +102,6 @@ class AboutActivity : AppCompatActivity() {
             }
     }
 
-    // ─── changelog formatter ─────────────────────────────────────────────────
-
-    /**
-     * Converts the raw GitHub Markdown release body to clean plain text
-     * suitable for a standard Android TextView.
-     */
     private fun formatChangelog(raw: String): String =
         raw.lines()
             .joinToString("\n") { line ->
@@ -135,8 +117,6 @@ class AboutActivity : AppCompatActivity() {
             .replace(Regex("""`(.+?)`""")) { it.groupValues[1] }
             .trimStart('\n')
             .trim()
-
-    // ─── helpers ─────────────────────────────────────────────────────────────
 
     private fun openUrl(url: String) {
         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))

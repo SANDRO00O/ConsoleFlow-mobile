@@ -1,7 +1,7 @@
 {
-  "release_name": "v2.2.9 ConsoleFlow",
-  "release_body": "## What is new\n\n- Minor changes",
-  "apk_name": "ConsoleFlow_v2.2.9.apk",
+  "release_name": "v2.2.10 ConsoleFlow",
+  "release_body": "## What is new\n\n- The project moved to a new home: https://github.com/ConsoleFlow-Group/ConsoleFlow-mobile\n- Fixed the in-app update checker and the About screen's GitHub link to point to the new repository",
+  "apk_name": "ConsoleFlow_v2.2.10.apk",
   "is_prerelease": false,
-  "tag": "v2.2.9"
+  "tag": "v2.2.10"
 }

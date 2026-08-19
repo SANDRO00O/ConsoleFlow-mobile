@@ -46,10 +46,6 @@ class DownloadService : Service() {
         .followSslRedirects(true)
         .build()
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Lifecycle
-    // ─────────────────────────────────────────────────────────────────────────
-
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -65,10 +61,6 @@ class DownloadService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Command handlers
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun handleStart(intent: Intent) {
         val url      = intent.getStringExtra(EXTRA_URL) ?: return
@@ -93,10 +85,6 @@ class DownloadService : Service() {
         val id = intent.getIntExtra(EXTRA_DL_ID, -1)
         if (id != -1) DownloadTracker.update(id) { state = DownloadState.CANCELLED }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Download loop
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun doDownload(
         id: Int,
@@ -133,13 +121,9 @@ class DownloadService : Service() {
                 val input = body.byteStream()
                 var done  = 0L
 
-                // Time-based sliding window — keeps samples from the last WINDOW_MS
-                val WINDOW_MS   = 5_000L   // look back 5 seconds for raw speed
-                val UPDATE_MS   = 800L     // update UI / notification every 800 ms
+                val WINDOW_MS   = 5_000L
+                val UPDATE_MS   = 800L
 
-                // EMA constants: low alpha = very stable display, slow to react
-                // alpha=0.20 for speed:  ~5 updates (~4s) to fully reflect a change
-                // alpha=0.10 for ETA:    ~10 updates (~8s) — barely flickers
                 val SPEED_ALPHA = 0.20
                 val ETA_ALPHA   = 0.10
 
@@ -165,28 +149,23 @@ class DownloadService : Service() {
 
                     val now = System.currentTimeMillis()
 
-                    // ── Only compute + update every UPDATE_MS ─────────────────
                     if (now - lastUpdateMs < UPDATE_MS) continue@loop
                     lastUpdateMs = now
 
-                    // Time-based window: discard samples older than WINDOW_MS
                     winTime.addLast(now); winBytes.addLast(done)
                     while (winTime.size > 1 && (now - winTime.first()) > WINDOW_MS) {
                         winTime.removeFirst(); winBytes.removeFirst()
                     }
 
-                    // Raw speed over the window
                     val rawSpeed: Long = if (winTime.size >= 2) {
                         val dtSec = (winTime.last() - winTime.first()) / 1000.0
                         val db    = winBytes.last() - winBytes.first()
                         if (dtSec > 0) (db / dtSec).toLong() else smoothedSpeed
                     } else smoothedSpeed
 
-                    // EMA on speed — damps short spikes completely
                     smoothedSpeed = if (smoothedSpeed == 0L) rawSpeed
                                     else ((SPEED_ALPHA * rawSpeed) + ((1 - SPEED_ALPHA) * smoothedSpeed)).toLong()
 
-                    // Raw ETA from smoothed speed, then EMA on ETA
                     val rawEta = if (smoothedSpeed > 0 && totalBytes > 0)
                                      (totalBytes - done) / smoothedSpeed else -1L
                     smoothedEta = when {
@@ -250,10 +229,6 @@ class DownloadService : Service() {
             .build())
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // File helpers
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun createOutputFile(fileName: String, mime: String): Pair<OutputStream, String> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val cv = ContentValues().apply {
@@ -303,10 +278,6 @@ class DownloadService : Service() {
         } catch (_: Exception) {}
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Notifications
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             notifManager.createNotificationChannel(
@@ -319,7 +290,6 @@ class DownloadService : Service() {
         }
     }
 
-    /** Tap-to-open downloads page intent — reused in several notifications */
     private fun openDownloadsPagePi(): PendingIntent = PendingIntent.getActivity(
         this, 0,
         Intent(this, DownloadsActivity::class.java)
@@ -327,7 +297,6 @@ class DownloadService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    /** Updates (or creates) the persistent foreground notification with download count. */
     private fun refreshSummaryNotif(activeNow: Int) {
         val text = when {
             activeNow > 1 -> "$activeNow downloads in progress"
@@ -411,10 +380,6 @@ class DownloadService : Service() {
             .build())
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Self-management
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun stopWhenIdle() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -422,10 +387,6 @@ class DownloadService : Service() {
             @Suppress("DEPRECATION") stopForeground(true)
         stopSelf()
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Formatters
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun formatBytes(b: Long): String = when {
         b < 1_024L         -> "$b B"

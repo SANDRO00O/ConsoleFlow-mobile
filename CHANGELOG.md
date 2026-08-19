@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.2.10
+
+### What is new
+
+- The project moved to a new home: [ConsoleFlow-Group/ConsoleFlow-mobile](https://github.com/ConsoleFlow-Group/ConsoleFlow-mobile).
+- Fixed the in-app update checker and the About screen's GitHub link to point to the new repository.
+
+
 ## v2.2.9
 
 ### What is new

@@ -3,14 +3,6 @@ package space.karrarnazim.ConsoleFlow
 import androidx.lifecycle.MutableLiveData
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Singleton state for all downloads.
- *
- * KEY FIX: We maintain _list as the private source of truth.
- * LiveData.getValue() is NOT safe from background threads — it can return
- * stale data between postValue() calls. Reading from _list (under lock)
- * guarantees we always see the latest state.
- */
 object DownloadTracker {
 
     private val _list = mutableListOf<DownloadItem>()
@@ -46,7 +38,6 @@ object DownloadTracker {
         downloads.postValue(_list.toList())
     }
 
-    // Safe to call from any thread
     fun getById(id: Int): DownloadItem? = synchronized(lock) {
         _list.find { it.id == id }
     }

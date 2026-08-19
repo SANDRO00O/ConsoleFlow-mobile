@@ -1,6 +1,5 @@
 package space.karrarnazim.ConsoleFlow
 
-
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -18,7 +17,6 @@ import java.util.concurrent.ExecutorService
 
 class TabAdapter(
     private val context: Context,
-    // FIX #5 — نستقبل الـ executor من الـ Activity بدلاً من إنشاء thread pool خاص
     private val ioExecutor: ExecutorService,
     private val onTabClick: (TabState) -> Unit,
     private val onTabClose: (TabState) -> Unit
@@ -28,7 +26,6 @@ class TabAdapter(
     private var activeId: Int = -1
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // FIX #6 — DiffUtil بدلاً من notifyDataSetChanged الكارثية
     fun submitUpdate(newTabs: List<TabState>, newActiveId: Int) {
         val oldTabs     = tabs
         val oldActiveId = activeId
@@ -39,7 +36,6 @@ class TabAdapter(
                 oldTabs[oldPos].id == newTabs[newPos].id
             override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean {
                 val old = oldTabs[oldPos]; val new = newTabs[newPos]
-                // يعيد رسم العنصر فقط إذا تغيّر المحتوى أو حالة النشاط
                 return old.title == new.title &&
                        old.url == new.url &&
                        old.hasThumbnail == new.hasThumbnail &&
@@ -48,7 +44,7 @@ class TabAdapter(
         })
         tabs     = newTabs.toMutableList()
         activeId = newActiveId
-        diff.dispatchUpdatesTo(this)  // يُطبّق فقط التغييرات الضرورية
+        diff.dispatchUpdatesTo(this)
     }
 
     fun updateFavicon(tabId: Int, favicon: Bitmap) {
@@ -98,11 +94,9 @@ class TabAdapter(
         } else {
             val file = File(context.cacheDir, "thumb_${tab.id}.webp")
             if (tab.hasThumbnail || file.exists()) {
-                // FIX #8 (adapter) — استخدام الـ executor الممرر من الـ Activity
                 ioExecutor.execute {
                     val bitmap = BitmapFactory.decodeFile(file.absolutePath)
                     mainHandler.post {
-                        // FIX #8 — استخدام bindingAdapterPosition بدلاً من adapterPosition المُهمل
                         val currentPos = h.bindingAdapterPosition
                         if (currentPos != RecyclerView.NO_POSITION && currentPos == position) {
                             if (bitmap != null) h.thumbnail.setImageBitmap(bitmap)

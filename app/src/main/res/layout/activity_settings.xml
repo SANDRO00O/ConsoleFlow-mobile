@@ -5,7 +5,6 @@
     android:orientation="vertical"
     android:background="#000000">
 
-    <!-- ── Top bar ──────────────────────────────────────────────────────────── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="64dp"
@@ -52,7 +51,6 @@
         android:layout_height="1dp"
         android:background="#1A1A1A" />
 
-    <!-- ── Scrollable content ─────────────────────────────────────────────── -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -65,7 +63,6 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- ── BROWSER ────────────────────────────────────────────────── -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -82,7 +79,6 @@
                 android:background="@drawable/bg_menu_item"
                 android:orientation="vertical">
 
-                <!-- Search Engine -->
                 <LinearLayout
                     android:id="@+id/settingSearchEngine"
                     android:layout_width="match_parent"
@@ -129,7 +125,6 @@
                     android:layout_marginHorizontal="18dp"
                     android:background="#1A1A1A" />
 
-                <!-- Desktop Mode -->
                 <LinearLayout
                     android:id="@+id/settingDesktopMode"
                     android:layout_width="match_parent"
@@ -162,7 +157,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- ── DEVELOPER ──────────────────────────────────────────────── -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -180,7 +174,6 @@
                 android:background="@drawable/bg_menu_item"
                 android:orientation="vertical">
 
-                <!-- Custom JS -->
                 <LinearLayout
                     android:id="@+id/settingCustomJs"
                     android:layout_width="match_parent"
@@ -226,7 +219,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- ── DATA ───────────────────────────────────────────────────── -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -244,7 +236,6 @@
                 android:background="@drawable/bg_menu_item"
                 android:orientation="vertical">
 
-                <!-- Clear Data -->
                 <LinearLayout
                     android:id="@+id/settingClearData"
                     android:layout_width="match_parent"
@@ -284,7 +275,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- ── ABOUT ───────────────────────────────────────────────────── -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -326,7 +316,6 @@
                         android:textColor="#FFFFFF"
                         android:textSize="15sp" />
 
-                    <!-- Update available badge -->
                     <TextView
                         android:id="@+id/updateDot"
                         android:layout_width="wrap_content"

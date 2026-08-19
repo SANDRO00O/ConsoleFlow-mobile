@@ -5,7 +5,6 @@
     android:orientation="vertical"
     android:background="#111111">
 
-    <!-- Header -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
@@ -26,7 +25,6 @@
         android:layout_height="1dp"
         android:background="#222222" />
 
-    <!-- Section: Search Engine -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -74,7 +72,6 @@
         android:layout_marginHorizontal="20dp"
         android:background="#222222" />
 
-    <!-- Section: User Agent -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -120,7 +117,6 @@
         android:layout_marginHorizontal="20dp"
         android:background="#222222" />
 
-    <!-- Section: JavaScript -->
     <LinearLayout
         android:id="@+id/settingCustomJs"
         android:layout_width="match_parent"
@@ -157,7 +153,6 @@
         android:layout_marginHorizontal="20dp"
         android:background="#222222" />
 
-    <!-- Section: Data -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
