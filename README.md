@@ -1,3 +1,10 @@
+> [!WARNING]
+> 💙 **Help renew `karrarnazim.space`**
+>
+> I'm broke rn, so The domain has expired. If you'd like to help, you can purchase/renew it and transfer it to me pls pls pls.
+>
+> 📩 Telegram: [@kaarar](https://t.me/kararar) · Instagram: [@k9k6e](https://instagram.com/k9k6e)
+
 <div align="center">
 <img src="screenshots/banner.svg" width="380" alt="ConsoleFlow logo">
 
