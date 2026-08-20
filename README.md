@@ -1,4 +1,3 @@
-> [!WARNING]
 > 💙 **Help renew `karrarnazim.space`**
 >
 > I'm broke rn, so The domain has expired. If you'd like to help, you can purchase/renew it and transfer it to me pls pls pls.
