@@ -385,12 +385,13 @@ class MainActivity : AppCompatActivity() {
             val extraTop = (resources.displayMetrics.density * 4f).toInt()
             lastStatusBarTop = statusBarTop
 
-            topBar.setPadding(
-                topBar.paddingLeft,
-                statusBarTop + extraTop,
-                topBar.paddingRight,
-                topBar.paddingBottom
-            )
+            (topBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                val desiredTop = statusBarTop + extraTop
+                if (lp.topMargin != desiredTop) {
+                    lp.topMargin = desiredTop
+                    topBar.layoutParams = lp
+                }
+            }
 
             tabsOverlay.setPadding(
                 tabsOverlay.paddingLeft,
@@ -472,12 +473,13 @@ class MainActivity : AppCompatActivity() {
             val extraTop = (resources.displayMetrics.density * 4f).toInt()
             lastStatusBarTop = statusBarTop
 
-            topBar.setPadding(
-                topBar.paddingLeft,
-                statusBarTop + extraTop,
-                topBar.paddingRight,
-                topBar.paddingBottom
-            )
+            (topBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                val desiredTop = statusBarTop + extraTop
+                if (lp.topMargin != desiredTop) {
+                    lp.topMargin = desiredTop
+                    topBar.layoutParams = lp
+                }
+            }
 
             tabsOverlay.setPadding(
                 tabsOverlay.paddingLeft,
