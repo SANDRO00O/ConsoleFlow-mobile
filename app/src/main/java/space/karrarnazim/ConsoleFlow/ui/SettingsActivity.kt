@@ -33,21 +33,16 @@ class SettingsActivity : AppCompatActivity() {
         EngineOption("Custom",     "",                                        null)
     )
 
-    // ─── lifecycle ────────────────────────────────────────────────────────────
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
         prefsManager = PrefsManager(this)
 
-        // back
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
 
-        // search engine
         updateSearchEngineValue()
         findViewById<View>(R.id.settingSearchEngine).setOnClickListener { showSearchEnginePicker() }
 
-        // desktop mode
         val switchDesktop = findViewById<SwitchCompat>(R.id.switchDesktopMode)
         switchDesktop.isChecked = prefsManager.desktopMode
         switchDesktop.setOnCheckedChangeListener { _, checked -> prefsManager.desktopMode = checked }
@@ -55,26 +50,10 @@ class SettingsActivity : AppCompatActivity() {
             switchDesktop.isChecked = !switchDesktop.isChecked
         }
 
-        // search suggestions
-        val switchSuggestions = findViewById<SwitchCompat>(R.id.switchSuggestions)
-        switchSuggestions.isChecked = prefsManager.suggestionsEnabled
-        switchSuggestions.setOnCheckedChangeListener { _, checked ->
-            prefsManager.suggestionsEnabled = checked
-        }
-        findViewById<View>(R.id.settingSearchSuggestions).setOnClickListener {
-            switchSuggestions.isChecked = !switchSuggestions.isChecked
-        }
-
-        // custom JS
         findViewById<View>(R.id.settingCustomJs).setOnClickListener { showCustomJsDialog() }
 
-        // clear data
         findViewById<View>(R.id.settingClearData).setOnClickListener { showClearDataDialog() }
-        findViewById<View>(R.id.settingViewLogs).setOnClickListener {
-            startActivity(Intent(this, space.karrarnazim.ConsoleFlow.ui.LogsActivity::class.java))
-        }
 
-        // about — opens AboutActivity
         findViewById<View>(R.id.settingAbout).setOnClickListener {
             startActivity(Intent(this, AboutActivity::class.java))
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
@@ -84,18 +63,13 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshUpdateBadge()
-        // Silently refresh cache in background; update badge on result
         UpdateManager.check(this) { _, _ -> refreshUpdateBadge() }
     }
-
-    // ─── update badge ─────────────────────────────────────────────────────────
 
     private fun refreshUpdateBadge() {
         val dot = findViewById<View>(R.id.updateDot) ?: return
         dot.visibility = if (UpdateManager.isUpdateAvailable(this)) View.VISIBLE else View.GONE
     }
-
-    // ─── dialogs ─────────────────────────────────────────────────────────────
 
     private fun showCustomJsDialog() {
         val input = EditText(this).apply {
@@ -124,19 +98,10 @@ class SettingsActivity : AppCompatActivity() {
             .setTitle("Clear Browsing Data")
             .setMessage("This will delete cache, cookies, and history.")
             .setPositiveButton("Clear") { _, _ ->
-                // ✅ إصلاح خطأ حقيقي اكتُشف بمراجعة شاملة لكل الملفات: نفس
-                // خلل WebStorage/CookieManager الذي أُصلح سابقاً في
-                // MainActivity.clearData() كان موجوداً هنا أيضاً — نسخة
-                // مكرَّرة فاتتني في الجولات السابقة لأن الفحص كان يركّز على
-                // MainActivity.kt فقط. android.webkit.WebStorage/
-                // CookieManager لا يريان مخزن GeckoView إطلاقاً (مخزنان
-                // منفصلان تماماً) — كان هذا الزر سيبدو أنه يعمل بلا أي أثر
-                // فعلي على GeckoView.
-                runCatching {
-                    GeckoRuntimeManager.get(this)
-                        .storageController
-                        .clearData(org.mozilla.geckoview.StorageController.ClearFlags.ALL)
-                }
+                android.webkit.WebStorage.getInstance().deleteAllData()
+                val cookies = android.webkit.CookieManager.getInstance()
+                cookies.removeAllCookies(null)
+                cookies.flush()
                 prefsManager.clearHistory()
                 getSharedPreferences("ConsoleFlowPrefs", Context.MODE_PRIVATE)
                     .edit()
@@ -145,9 +110,6 @@ class SettingsActivity : AppCompatActivity() {
                     .remove("ACTIVE_TAB")
                     .remove("NEXT_TAB_ID")
                     .remove("NEXT_GROUP_ID")
-                    // BUG-5 FIX: signal MainActivity.onResume() to also clear the
-                    // in-memory WebView cache/history that we can't reach from here.
-                    .putBoolean("pending_full_clear", true)
                     .apply()
                 cacheDir.listFiles()?.forEach { file ->
                     if (file.name.startsWith("thumb_") && file.name.endsWith(".webp"))       file.delete()
@@ -159,8 +121,6 @@ class SettingsActivity : AppCompatActivity() {
             .setNegativeButton("Cancel", null)
             .show()
     }
-
-    // ─── search engine picker ─────────────────────────────────────────────────
 
     private fun updateSearchEngineValue() {
         val label = if (prefsManager.searchEngineIsCustom) "Custom"
@@ -286,8 +246,6 @@ class SettingsActivity : AppCompatActivity() {
             .setNegativeButton("Cancel", null)
             .show()
     }
-
-    // ─── transition ──────────────────────────────────────────────────────────
 
     override fun finish() {
         super.finish()

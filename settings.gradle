@@ -10,9 +10,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // مطلوب لـ GeckoView — لا يمكن إضافته داخل app/build.gradle لأن
-        // FAIL_ON_PROJECT_REPOS أعلاه يمنع أي repositories{} على مستوى الموديول.
-        maven { url = uri("https://maven.mozilla.org/maven2/") }
     }
 }
 rootProject.name = "ConsoleFlow"

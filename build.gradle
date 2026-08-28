@@ -1,21 +1,7 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
 plugins {
-// ✅ إصلاح خطأ بناء حقيقي ثانٍ: androidx.core:core-ktx:1.18.0 (يُسحَب
-// كاعتماد عابر عبر GeckoView على الأغلب) يتطلب AGP 8.9.1+ وcompileSdk 36+.
-// اخترت 8.13.0 تحديداً (لا 9.x) لأنه آخر إصدار يدعم API 36 وهو لا يزال
-// بخط AGP 8.x — يتجنّب كسر التوافق الكبير في AGP 9 (يزيل org.jetbrains.
-// kotlin.android لصالح "built-in Kotlin"، وهو تغيير أكبر بكثير من اللازم
-// هنا). تحقّقت من هذا عبر بحث مباشر، وليس تخميناً.
-id 'com.android.application' version '8.13.0' apply false
-id 'com.android.library' version '8.13.0' apply false
-// ✅ إصلاح خطأ بناء حقيقي ثالث: Kotlin Gradle Plugin كان لا يزال مثبَّتاً
-// على 1.9.22، لكن اعتماداً عابراً (GeckoView على الأغلب) يسحب
-// kotlin-stdlib:2.3.20 — مترجم الكومبايلر 1.9 لا يقدر يقرأ ميتاداتا
-// مكتوبة بنسخة أحدث منه، فيفشل بعشرات الأخطاء ("compiled with an
-// incompatible version of Kotlin") في كل ملف تقريباً. رفعتها لنفس الرقم
-// (2.3.20) لتفادي أي فجوة توافق إضافية — Kotlin 2.3.x يذكر رسمياً أنه
-// متوافق حتى AGP 8.13.0 بالضبط، نفس نسختنا الحالية.
-id 'org.jetbrains.kotlin.android' version '2.3.20' apply false
+id 'com.android.application' version '8.2.2' apply false
+id 'com.android.library' version '8.2.2' apply false
+id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
 }
 
 task clean(type: Delete) {

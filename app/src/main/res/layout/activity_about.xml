@@ -5,7 +5,6 @@
     android:orientation="vertical"
     android:background="#000000">
 
-    <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="64dp"
@@ -52,7 +51,6 @@
         android:layout_height="1dp"
         android:background="#1A1A1A" />
 
-    <!-- ── Scrollable content ──────────────────────────────────────────────── -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -65,7 +63,6 @@
             android:orientation="vertical"
             android:paddingHorizontal="16dp">
 
-            <!-- ── App identity ──────────────────────────────────────────── -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -74,7 +71,6 @@
                 android:paddingTop="40dp"
                 android:paddingBottom="28dp">
 
-                <!-- Banner SVG — height set dynamically in AboutActivity -->
                 <WebView
                     android:id="@+id/bannerWebView"
                     android:layout_width="match_parent"
@@ -86,12 +82,11 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="v2.4.0"
+                    android:text="v2.2.10"
                     android:textColor="#444444"
                     android:textSize="13sp" />
             </LinearLayout>
 
-            <!-- ── Update status card ────────────────────────────────────── -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -99,7 +94,6 @@
                 android:orientation="vertical"
                 android:padding="18dp">
 
-                <!-- Loading state -->
                 <LinearLayout
                     android:id="@+id/updateLoading"
                     android:layout_width="match_parent"
@@ -123,7 +117,6 @@
                         android:textSize="14sp" />
                 </LinearLayout>
 
-                <!-- Up to date state -->
                 <LinearLayout
                     android:id="@+id/updateUpToDate"
                     android:layout_width="match_parent"
@@ -147,7 +140,6 @@
                         android:textSize="14sp" />
                 </LinearLayout>
 
-                <!-- Update available state -->
                 <LinearLayout
                     android:id="@+id/updateAvailable"
                     android:layout_width="match_parent"
@@ -180,7 +172,7 @@
                             android:id="@+id/tvLatestVersion"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="v2.4.0"
+                            android:text="v2.3.0"
                             android:textColor="#4CAF50"
                             android:textSize="14sp"
                             android:textStyle="bold" />
@@ -199,7 +191,6 @@
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <!-- Error state -->
                 <LinearLayout
                     android:id="@+id/updateError"
                     android:layout_width="match_parent"
@@ -216,7 +207,6 @@
                         android:textSize="14sp" />
                 </LinearLayout>
 
-                <!-- Divider + Check again -->
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
@@ -236,7 +226,6 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <!-- ── Changelog section (hidden until loaded) ───────────────── -->
             <LinearLayout
                 android:id="@+id/changelogSection"
                 android:layout_width="match_parent"
@@ -272,7 +261,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- ── Links section ─────────────────────────────────────────── -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -290,7 +278,6 @@
                 android:background="@drawable/bg_menu_item"
                 android:orientation="vertical">
 
-                <!-- App Website -->
                 <LinearLayout
                     android:id="@+id/linkWebsite"
                     android:layout_width="match_parent"
@@ -336,7 +323,6 @@
                 <View android:layout_width="match_parent" android:layout_height="1dp"
                     android:layout_marginHorizontal="18dp" android:background="#1A1A1A" />
 
-                <!-- Developer -->
                 <LinearLayout
                     android:id="@+id/linkDeveloper"
                     android:layout_width="match_parent"
@@ -382,7 +368,6 @@
                 <View android:layout_width="match_parent" android:layout_height="1dp"
                     android:layout_marginHorizontal="18dp" android:background="#1A1A1A" />
 
-                <!-- Privacy Policy -->
                 <LinearLayout
                     android:id="@+id/linkPrivacy"
                     android:layout_width="match_parent"
@@ -428,7 +413,6 @@
                 <View android:layout_width="match_parent" android:layout_height="1dp"
                     android:layout_marginHorizontal="18dp" android:background="#1A1A1A" />
 
-                <!-- GitHub -->
                 <LinearLayout
                     android:id="@+id/linkGithub"
                     android:layout_width="match_parent"
@@ -459,7 +443,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="github.com/SANDRO00O/ConsoleFlow-mobile"
+                            android:text="github.com/ConsoleFlow-Group/ConsoleFlow-mobile"
                             android:textColor="#666666"
                             android:textSize="12sp" />
                     </LinearLayout>
@@ -472,7 +456,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- ── Footer ────────────────────────────────────────────────── -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

@@ -8,8 +8,7 @@ import android.os.*
 import android.provider.MediaStore
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
-import org.mozilla.geckoview.GeckoWebExecutor
-import org.mozilla.geckoview.WebRequest
+import okhttp3.*
 import java.io.*
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
@@ -23,6 +22,8 @@ class DownloadService : Service() {
         const val EXTRA_URL      = "url"
         const val EXTRA_FILENAME = "fname"
         const val EXTRA_MIME     = "mime"
+        const val EXTRA_UA       = "ua"
+        const val EXTRA_COOKIES  = "cookies"
         const val EXTRA_DL_ID    = "dlid"
 
         const val CHANNEL_ID        = "cf_downloads"
@@ -35,26 +36,15 @@ class DownloadService : Service() {
     private val notifIdGen  = AtomicInteger(NOTIF_BASE)
 
     private val notifManager: NotificationManager by lazy {
-        // getSystemService(Class<T>) is API 23+. The string-based variant
-        // works on all API levels including Android 5.1.1 (API 22).
-        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        getSystemService(NotificationManager::class.java)!!
     }
 
-    // ⚠️ يستبدل OkHttpClient بالكامل لجلب الملف. السبب: android.webkit.
-    // CookieManager (المستخدَم سابقاً لبناء header الكوكيز يدوياً) لا يرى
-    // كوكيز GeckoView إطلاقاً — كانا مخزنين منفصلين تماماً. GeckoWebExecutor
-    // هو الوحيد الذي يملك وصولاً حقيقياً لمخزن كوكيز GeckoView (يُرسلها
-    // تلقائياً مع كل طلب افتراضياً)، وهذا هو الحل الموثّق رسمياً من Mozilla
-    // لتنزيلات GeckoView المصادَق عليها — وليس تخميناً.
-    // ✅ إصلاح خطأ تصريف حقيقي ثانٍ: الإصلاح الأول (تمرير Context) كان
-    // خطأً أيضاً — رسالة الخطأ الفعلية أكدت أن المعامل المتوقَّع هو
-    // GeckoRuntime تحديداً، وليس Context. GeckoRuntimeManager.get(this)
-    // يُرجع نفس GeckoRuntime الوحيد المستخدَم بكل الجلسات.
-    private val geckoExecutor by lazy { GeckoWebExecutor(GeckoRuntimeManager.get(this)) }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Lifecycle
-    // ─────────────────────────────────────────────────────────────────────────
+    private val okClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
 
     override fun onCreate() {
         super.onCreate()
@@ -72,15 +62,13 @@ class DownloadService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Command handlers
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun handleStart(intent: Intent) {
         val url      = intent.getStringExtra(EXTRA_URL) ?: return
         val fileName = intent.getStringExtra(EXTRA_FILENAME)
             ?: URLUtil.guessFileName(url, null, null)
         val mime     = intent.getStringExtra(EXTRA_MIME) ?: "application/octet-stream"
+        val ua       = intent.getStringExtra(EXTRA_UA) ?: "Mozilla/5.0"
+        val cookies  = intent.getStringExtra(EXTRA_COOKIES)
 
         val id      = DownloadTracker.nextId()
         val notifId = notifIdGen.getAndIncrement()
@@ -90,7 +78,7 @@ class DownloadService : Service() {
         val count = activeCount.incrementAndGet()
         refreshSummaryNotif(count)
 
-        executor.execute { doDownload(id, url, fileName, mime, notifId) }
+        executor.execute { doDownload(id, url, fileName, mime, ua, cookies, notifId) }
     }
 
     private fun handleCancel(intent: Intent) {
@@ -98,144 +86,124 @@ class DownloadService : Service() {
         if (id != -1) DownloadTracker.update(id) { state = DownloadState.CANCELLED }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Download loop
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun doDownload(
         id: Int,
         url: String,
         fileName: String,
         mime: String,
+        ua: String,
+        cookies: String?,
         notifId: Int
     ) {
         DownloadTracker.update(id) { state = DownloadState.RUNNING }
 
         try {
-            val request = WebRequest.Builder(url).build()
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", ua)
+                .apply { if (!cookies.isNullOrEmpty()) header("Cookie", cookies) }
+                .build()
 
-            // GeckoResult.poll() blocks the calling thread until the fetch
-            // resolves — intended by GeckoView specifically for background-
-            // thread callers like this executor pool. Timeout matches the old
-            // OkHttp connectTimeout(30s); reading has no timeout (large files).
-            val response = geckoExecutor.fetch(request).poll(30_000)
-                ?: run { fail(id, notifId, fileName, "Request timed out"); return }
+            val response = okClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                fail(id, notifId, fileName, "HTTP ${response.code}")
+                return
+            }
 
-            val resp = response
-            run {
-                if (resp.statusCode !in 200..299) {
-                    fail(id, notifId, fileName, "HTTP ${resp.statusCode}")
-                    return
-                }
+            val totalBytes = response.body?.contentLength() ?: -1L
+            DownloadTracker.update(id) { this.totalBytes = totalBytes }
 
-                val totalBytes = resp.headers["Content-Length"]?.toLongOrNull() ?: -1L
-                DownloadTracker.update(id) { this.totalBytes = totalBytes }
+            val (outputStream, filePath) = createOutputFile(fileName, mime)
 
-                val (outputStream, filePath) = createOutputFile(fileName, mime)
+            try {
+                val body  = response.body ?: throw IOException("Empty body")
+                val buf   = ByteArray(16 * 1024)
+                val input = body.byteStream()
+                var done  = 0L
 
-                try {
-                    val body  = resp.body ?: throw IOException("Empty body")
-                    val buf   = ByteArray(16 * 1024)
-                    var done  = 0L
+                val WINDOW_MS   = 5_000L
+                val UPDATE_MS   = 800L
 
-                    // Time-based sliding window — keeps samples from the last WINDOW_MS
-                    val WINDOW_MS   = 5_000L   // look back 5 seconds for raw speed
-                    val UPDATE_MS   = 800L     // update UI / notification every 800 ms
+                val SPEED_ALPHA = 0.20
+                val ETA_ALPHA   = 0.10
 
-                    // EMA constants: low alpha = very stable display, slow to react
-                    // alpha=0.20 for speed:  ~5 updates (~4s) to fully reflect a change
-                    // alpha=0.10 for ETA:    ~10 updates (~8s) — barely flickers
-                    val SPEED_ALPHA = 0.20
-                    val ETA_ALPHA   = 0.10
+                val winTime  = ArrayDeque<Long>()
+                val winBytes = ArrayDeque<Long>()
+                var smoothedSpeed = 0L
+                var smoothedEta   = -1L
+                var lastUpdateMs  = 0L
 
-                    val winTime  = ArrayDeque<Long>()
-                    val winBytes = ArrayDeque<Long>()
-                    var smoothedSpeed = 0L
-                    var smoothedEta   = -1L
-                    var lastUpdateMs  = 0L
-
-                    loop@ while (true) {
-                        if (DownloadTracker.getById(id)?.state == DownloadState.CANCELLED) {
-                            body.close(); outputStream.close()
-                            deletePartial(filePath)
-                            notifManager.cancel(notifId)
-                            return  // non-local return; use{} closes response
-                        }
-
-                        val n = body.read(buf)
-                        if (n == -1) break@loop
-
-                        outputStream.write(buf, 0, n)
-                        done += n
-
-                        val now = System.currentTimeMillis()
-
-                        // ── Only compute + update every UPDATE_MS ─────────────────
-                        if (now - lastUpdateMs < UPDATE_MS) continue@loop
-                        lastUpdateMs = now
-
-                        // Time-based window: discard samples older than WINDOW_MS
-                        winTime.addLast(now); winBytes.addLast(done)
-                        while (winTime.size > 1 && (now - winTime.first()) > WINDOW_MS) {
-                            winTime.removeFirst(); winBytes.removeFirst()
-                        }
-
-                        // Raw speed over the window
-                        val rawSpeed: Long = if (winTime.size >= 2) {
-                            val dtSec = (winTime.last() - winTime.first()) / 1000.0
-                            val db    = winBytes.last() - winBytes.first()
-                            if (dtSec > 0) (db / dtSec).toLong() else smoothedSpeed
-                        } else smoothedSpeed
-
-                        // EMA on speed — damps short spikes completely
-                        smoothedSpeed = if (smoothedSpeed == 0L) rawSpeed
-                                        else ((SPEED_ALPHA * rawSpeed) + ((1 - SPEED_ALPHA) * smoothedSpeed)).toLong()
-
-                        // Raw ETA from smoothed speed, then EMA on ETA
-                        val rawEta = if (smoothedSpeed > 0 && totalBytes > 0)
-                                         (totalBytes - done) / smoothedSpeed else -1L
-                        smoothedEta = when {
-                            rawEta < 0         -> -1L
-                            smoothedEta <= 0   -> rawEta
-                            else -> ((ETA_ALPHA * rawEta) + ((1 - ETA_ALPHA) * smoothedEta)).toLong()
-                        }
-
-                        DownloadTracker.update(id) {
-                            downloadedBytes  = done
-                            speedBytesPerSec = smoothedSpeed
-                            etaSeconds       = smoothedEta
-                        }
-
-                        val pct = if (totalBytes > 0) ((done * 100) / totalBytes).toInt() else -1
-                        updateProgressNotif(notifId, fileName, pct, done, totalBytes, smoothedSpeed, id)
+                loop@ while (true) {
+                    if (DownloadTracker.getById(id)?.state == DownloadState.CANCELLED) {
+                        input.close(); outputStream.close()
+                        deletePartial(filePath)
+                        notifManager.cancel(notifId)
+                        return
                     }
 
-                    outputStream.close(); body.close()
-                    finalizeFile(filePath, fileName, mime)
+                    val n = input.read(buf)
+                    if (n == -1) break@loop
+
+                    outputStream.write(buf, 0, n)
+                    done += n
+
+                    val now = System.currentTimeMillis()
+
+                    if (now - lastUpdateMs < UPDATE_MS) continue@loop
+                    lastUpdateMs = now
+
+                    winTime.addLast(now); winBytes.addLast(done)
+                    while (winTime.size > 1 && (now - winTime.first()) > WINDOW_MS) {
+                        winTime.removeFirst(); winBytes.removeFirst()
+                    }
+
+                    val rawSpeed: Long = if (winTime.size >= 2) {
+                        val dtSec = (winTime.last() - winTime.first()) / 1000.0
+                        val db    = winBytes.last() - winBytes.first()
+                        if (dtSec > 0) (db / dtSec).toLong() else smoothedSpeed
+                    } else smoothedSpeed
+
+                    smoothedSpeed = if (smoothedSpeed == 0L) rawSpeed
+                                    else ((SPEED_ALPHA * rawSpeed) + ((1 - SPEED_ALPHA) * smoothedSpeed)).toLong()
+
+                    val rawEta = if (smoothedSpeed > 0 && totalBytes > 0)
+                                     (totalBytes - done) / smoothedSpeed else -1L
+                    smoothedEta = when {
+                        rawEta < 0         -> -1L
+                        smoothedEta <= 0   -> rawEta
+                        else -> ((ETA_ALPHA * rawEta) + ((1 - ETA_ALPHA) * smoothedEta)).toLong()
+                    }
 
                     DownloadTracker.update(id) {
-                        state           = DownloadState.COMPLETED
-                        downloadedBytes = done
-                        this.filePath   = filePath
+                        downloadedBytes  = done
+                        speedBytesPerSec = smoothedSpeed
+                        etaSeconds       = smoothedEta
                     }
-                    notifManager.cancel(notifId)
-                    showCompletedNotif(notifId, fileName, filePath, mime)
 
-                } catch (e: IOException) {
-                    try { outputStream.close() } catch (_: Exception) {}
-                    // ⚠️ body غير مرئي هنا (مُعرَّف داخل try) فلا يمكن إغلاقه
-                    // صراحة عند هذا المسار النادر (خطأ IO أثناء القراءة).
-                    // WebResponse ليس Closeable مثل OkHttp Response القديم —
-                    // سيُغلَق التدفق عند جمع القمامة له. ليس مثالياً، لكنه
-                    // نفس مستوى الضمان الذي كان موجوداً فعلياً قبل هذا التغيير.
-                    if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED) {
-                        deletePartial(filePath)
-                        fail(id, notifId, fileName, e.message ?: "IO error")
-                    } else {
-                        notifManager.cancel(notifId)
-                    }
+                    val pct = if (totalBytes > 0) ((done * 100) / totalBytes).toInt() else -1
+                    updateProgressNotif(notifId, fileName, pct, done, totalBytes, smoothedSpeed, id)
                 }
-            } // end run{} (was response.use{} — WebResponse isn't Closeable, only its body stream is)
+
+                outputStream.close(); input.close()
+                finalizeFile(filePath, fileName, mime)
+
+                DownloadTracker.update(id) {
+                    state           = DownloadState.COMPLETED
+                    downloadedBytes = done
+                    this.filePath   = filePath
+                }
+                notifManager.cancel(notifId)
+                showCompletedNotif(notifId, fileName, filePath, mime)
+
+            } catch (e: IOException) {
+                try { outputStream.close() } catch (_: Exception) {}
+                if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED) {
+                    deletePartial(filePath)
+                    fail(id, notifId, fileName, e.message ?: "IO error")
+                } else {
+                    notifManager.cancel(notifId)
+                }
+            }
 
         } catch (e: Exception) {
             if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED)
@@ -260,10 +228,6 @@ class DownloadService : Service() {
             .setAutoCancel(true)
             .build())
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // File helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun createOutputFile(fileName: String, mime: String): Pair<OutputStream, String> {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -314,10 +278,6 @@ class DownloadService : Service() {
         } catch (_: Exception) {}
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Notifications
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             notifManager.createNotificationChannel(
@@ -330,7 +290,6 @@ class DownloadService : Service() {
         }
     }
 
-    /** Tap-to-open downloads page intent — reused in several notifications */
     private fun openDownloadsPagePi(): PendingIntent = PendingIntent.getActivity(
         this, 0,
         Intent(this, DownloadsActivity::class.java)
@@ -338,7 +297,6 @@ class DownloadService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    /** Updates (or creates) the persistent foreground notification with download count. */
     private fun refreshSummaryNotif(activeNow: Int) {
         val text = when {
             activeNow > 1 -> "$activeNow downloads in progress"
@@ -422,24 +380,13 @@ class DownloadService : Service() {
             .build())
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Self-management
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun stopWhenIdle() {
-        // BUG-B FIX: a new download may have arrived between the decrementAndGet()
-        // call and this method. Re-check before actually stopping the service.
-        if (activeCount.get() > 0) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
             stopForeground(STOP_FOREGROUND_REMOVE)
         else
             @Suppress("DEPRECATION") stopForeground(true)
         stopSelf()
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Formatters
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun formatBytes(b: Long): String = when {
         b < 1_024L         -> "$b B"

@@ -1,11 +1,1 @@
-Stability release: a full audit of the app found and fixed 29 behavior bugs, including several critical ones.
-
-- Fixed camera/microphone access not working on websites (video calls, voice input, etc.)
-- Fixed file upload fields not working on websites
-- Fixed the back button sometimes showing a blank white screen
-- Fixed background tabs occasionally affecting the address bar, progress bar, or showing the wrong error/security warning on the active tab
-- Fixed the Home button not always navigating home
-- Fixed gamepad/TV remote input being unresponsive right after launch
-- Fixed several download manager and tab-switching glitches and crashes
-
-No new features in this release — just making everything that already exists work correctly.
+Moved to a new GitHub home; fixed the in-app update checker and About screen link accordingly.

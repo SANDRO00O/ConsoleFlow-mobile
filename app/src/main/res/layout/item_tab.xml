@@ -1,66 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.cardview.widget.CardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="@dimen/tab_card_height"
-    android:layout_margin="@dimen/tab_card_margin"
-    app:cardBackgroundColor="#111111"
-    app:cardCornerRadius="10dp"
-    app:cardElevation="2dp"
-    android:focusable="true">
+    android:layout_height="240dp"
+    android:layout_margin="6dp"
+    android:orientation="vertical"
+    android:padding="12dp">
 
-    <FrameLayout
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingBottom="10dp">
 
         <ImageView
-            android:id="@+id/tabThumbnail"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop" />
+            android:id="@+id/tabFavicon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/home"
+            android:scaleType="fitCenter" />
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="72dp"
-            android:layout_gravity="bottom"
-            android:background="@drawable/tab_gradient" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/tabTitle"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="8dp"
-            android:paddingBottom="8dp">
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="New Tab"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
-            <ImageView
-                android:id="@+id/tabFavicon"
-                android:layout_width="@dimen/tab_favicon_size"
-                android:layout_height="@dimen/tab_favicon_size"
-                android:layout_marginEnd="6dp"
-                android:scaleType="fitCenter" />
+        <ImageView
+            android:id="@+id/tabClose"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="2dp"
+            android:src="@drawable/ic_tab_close" />
+    </LinearLayout>
 
-            <TextView
-                android:id="@+id/tabTitle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textColor="#FFFFFF"
-                android:textSize="@dimen/tab_title_text_size" />
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/tabThumbnail"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:background="#1A1A1A"
+        app:shapeAppearanceOverlay="@style/RoundedThumbnail" />
 
-            <ImageView
-                android:id="@+id/tabClose"
-                android:layout_width="@dimen/tab_close_size"
-                android:layout_height="@dimen/tab_close_size"
-                android:padding="4dp"
-                android:src="@drawable/close"
-                android:tint="#CCCCCC"
-                android:focusable="true"
-                android:background="@drawable/bottom_btn_ripple" />
-        </LinearLayout>
-    </FrameLayout>
-</androidx.cardview.widget.CardView>
+</LinearLayout>

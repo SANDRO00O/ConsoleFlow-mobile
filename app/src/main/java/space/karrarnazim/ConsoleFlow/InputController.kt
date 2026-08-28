@@ -6,30 +6,13 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.webkit.WebView
 import kotlin.math.abs
 
-/**
- * InputController — مركز إدارة كل المدخلات في ConsoleFlow.
- *
- * المصادر المدعومة:
- *  ┌────────────────┬──────────────────────────────────────────────────────┐
- *  │ ريموت تلفزيون │ D-pad · OK/Back · Menu · Channel+/− · Page Up/Down  │
- *  │ جويستيك        │ A/B/X/Y · L1/R1/L2/R2 · Start/Select · L3/R3       │
- *  │                │ عصا يسار → cursor   ·   عصا يمين → تمرير            │
- *  │ كيبورد         │ Ctrl+L/T/W/R/F/Tab · Alt+←/→ · F5/F12 · Escape     │
- *  │ ماوس           │ عجلة التمرير (عمودي + أفقي)                         │
- *  └────────────────┴──────────────────────────────────────────────────────┘
- *
- * قواعد ثابتة:
- *  • event.repeatCount != 0  → يُتجاهل (لا تكرار عند الضغط المستمر)
- *  • KEYCODE_BACK            → لا يُستهلَك أبداً (يذهب لـ BackPressedDispatcher)
- *  • getCenteredAxis         → النمط الرسمي من توثيق Android بـ range.flat
- *  • isFromSource()          → الطريقة الرسمية بدل bitwise AND اليدوي
- */
 class InputController(private val h: Handlers) {
 
     interface Handlers {
-        fun getActiveSession(): GeckoTabSession?
+        fun getWebView(): WebView?
         fun isTopBarVisible(): Boolean
         fun isTabsOverlayVisible(): Boolean
         fun showTopBar()
@@ -50,30 +33,21 @@ class InputController(private val h: Handlers) {
         fun dismissTopOverlay(): Boolean
     }
 
-    // ── عصا يمين: تمرير عبر Handler loop (~60fps) ─────────────────────────
     private val handler    = Handler(Looper.getMainLooper())
     private var scrollX    = 0f
     private var scrollY    = 0f
     private var scrollJob: Runnable? = null
 
-    // ── عصا يسار: مؤشر افتراضي ─────────────────────────────────────────────
     private var cursor: CursorController? = null
     fun setCursorController(c: CursorController) { cursor = c }
 
-    /** هل يوجد overlay يحجب WebView حالياً؟ */
     private fun overlayActive() = h.isTopBarVisible() || h.isTabsOverlayVisible()
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  نقاط الدخول (تُستدعى من Activity)
-    // ─────────────────────────────────────────────────────────────────────
-
-    /** يُستدعى من Activity.dispatchKeyEvent(). يعيد true إن استهلك الحدث. */
     fun onKeyDown(event: KeyEvent): Boolean {
         if (event.action != KeyEvent.ACTION_DOWN) return false
-        if (event.repeatCount != 0) return false   // تجاهل التكرار عند الضغط المستمر
+        if (event.repeatCount != 0) return false
 
         return when {
-            // أزرار جويستيك (غير D-pad): تعيين خاص
             event.isFromSource(InputDevice.SOURCE_GAMEPAD)
                 && event.keyCode !in DPAD_KEYS -> handleGamepad(event)
 
@@ -83,7 +57,6 @@ class InputController(private val h: Handlers) {
         }
     }
 
-    /** يُستدعى من Activity.onGenericMotionEvent(). */
     fun onGenericMotion(event: MotionEvent): Boolean = when {
         event.isFromSource(InputDevice.SOURCE_JOYSTICK)
             && event.action == MotionEvent.ACTION_MOVE  -> handleJoystick(event)
@@ -94,13 +67,11 @@ class InputController(private val h: Handlers) {
         else -> false
     }
 
-    /** يُستدعى من Activity.onDestroy(). */
     fun release() {
         stopScrollLoop()
         cursor = null
     }
 
-    /** يوقف تمرير العصا اليمنى فورًا حتى لا يظل عالقًا بعد نقرة أو تبديل واجهة. */
     fun stopScrollLoop() {
         scrollJob?.let { handler.removeCallbacks(it) }
         scrollJob = null
@@ -108,14 +79,9 @@ class InputController(private val h: Handlers) {
         scrollY = 0f
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  أزرار الجويستيك
-    // ─────────────────────────────────────────────────────────────────────
-
     private fun handleGamepad(event: KeyEvent): Boolean = when (event.keyCode) {
 
         KeyEvent.KEYCODE_BUTTON_A -> {
-            // إن كان المؤشر ظاهراً → انقر عنده. وإلا → نشّط عنصر الصفحة.
             when {
                 cursor?.isVisible == true -> {
                     val handled = performCursorClick()
@@ -131,7 +97,6 @@ class InputController(private val h: Handlers) {
             }
         }
 
-        // BUTTON_B → لا يُستهلَك. يصل إلى onBackPressedDispatcher.
         KeyEvent.KEYCODE_BUTTON_B      -> false
 
         KeyEvent.KEYCODE_BUTTON_X      -> { h.showTabs();       true }
@@ -147,10 +112,6 @@ class InputController(private val h: Handlers) {
 
         else -> false
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    //  اختصارات الكيبورد
-    // ─────────────────────────────────────────────────────────────────────
 
     private fun handleCtrl(event: KeyEvent): Boolean = when (event.keyCode) {
         KeyEvent.KEYCODE_L   -> { h.focusUrlBar();     true }
@@ -171,19 +132,15 @@ class InputController(private val h: Handlers) {
         else -> false
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  D-pad / ريموت / أسهم الكيبورد / مفاتيح أخرى
-    // ─────────────────────────────────────────────────────────────────────
-
     private fun handleGenericKey(event: KeyEvent): Boolean {
-        val wv by lazy { h.getActiveSession() }
+        val wv by lazy { h.getWebView() }
 
         return when (event.keyCode) {
 
             KeyEvent.KEYCODE_DPAD_UP -> when {
                 overlayActive()                              -> false
                 wv != null && !wv!!.canScrollVertically(-1) -> { h.showTopBar(); true }
-                else                                        -> false  // WebView تتمرر بنفسها
+                else                                        -> false
             }
 
             KeyEvent.KEYCODE_DPAD_DOWN -> when {
@@ -196,7 +153,7 @@ class InputController(private val h: Handlers) {
                 val v = wv ?: return false
                 when {
                     v.canScrollHorizontally(-1) -> { v.scrollBy(-DPAD_SCROLL, 0); true }
-                    v.canGoBack               -> { h.navigateBack();            true }
+                    v.canGoBack()               -> { h.navigateBack();            true }
                     else                        -> false
                 }
             }
@@ -206,26 +163,13 @@ class InputController(private val h: Handlers) {
                 val v = wv ?: return false
                 when {
                     v.canScrollHorizontally(1) -> { v.scrollBy(DPAD_SCROLL, 0); true }
-                    v.canGoForward           -> { h.navigateForward();         true }
+                    v.canGoForward()           -> { h.navigateForward();         true }
                     else                       -> false
                 }
             }
 
-            KeyEvent.KEYCODE_DPAD_CENTER -> when {
-                overlayActive() -> false
-                // BUG-P FIX: some gamepads (notably PS-style pads through
-                // generic Bluetooth HID adapters) report their confirm
-                // button as DPAD_CENTER rather than BUTTON_A. Without this
-                // check, pressing it while the virtual cursor was visible
-                // ignored the cursor entirely and activated whatever DOM
-                // element happened to have focus instead — clicking the
-                // wrong thing. Mirrors KEYCODE_BUTTON_A's own logic.
-                cursor?.isVisible == true -> {
-                    val handled = performCursorClick()
-                    cursor?.keepVisible()
-                    handled
-                }
-                else -> { activateWebElement(); true }
+            KeyEvent.KEYCODE_DPAD_CENTER -> {
+                if (overlayActive()) false else { activateWebElement(); true }
             }
 
             KeyEvent.KEYCODE_F5           -> { h.reload();           true }
@@ -241,14 +185,9 @@ class InputController(private val h: Handlers) {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Joystick — نمط المعالجة الرسمي من توثيق Android
-    // ─────────────────────────────────────────────────────────────────────
-
     private fun handleJoystick(event: MotionEvent): Boolean {
         val device = event.device ?: return false
 
-        // الأمر الرسمي: اعالج القيم التاريخية أولاً ثم القيمة الحالية
         for (i in 0 until event.historySize) {
             processJoystickInput(event, device, i)
         }
@@ -257,15 +196,12 @@ class InputController(private val h: Handlers) {
     }
 
     private fun processJoystickInput(event: MotionEvent, device: InputDevice, histPos: Int) {
-        // عصا يسار → المؤشر الافتراضي
         val lx = getCenteredAxis(event, device, MotionEvent.AXIS_X,  histPos)
         val ly = getCenteredAxis(event, device, MotionEvent.AXIS_Y,  histPos)
         cursor?.updateStick(lx, ly)
 
-        // أي حركة من الجويستيك تبقي المؤشر حياً أثناء التنقّل بين الواجهات.
         cursor?.keepVisible()
 
-        // عصا يمين → تمرير الصفحة؛ الاحتياط بـ HAT axes إن كانت عصا اليمين في مركزها
         var rx = getCenteredAxis(event, device, MotionEvent.AXIS_Z,      histPos)
         var ry = getCenteredAxis(event, device, MotionEvent.AXIS_RZ,     histPos)
         if (rx == 0f && ry == 0f) {
@@ -275,12 +211,6 @@ class InputController(private val h: Handlers) {
         setScrollAxes(rx, ry)
     }
 
-    /**
-     * getCenteredAxis — التطبيق الرسمي من توثيق Android.
-     *
-     * يستخدم قيمة flat المُبلَّغ عنها من الجهاز نفسه، لذلك تعمل dead zone
-     * بشكل صحيح مع كل أنواع الكنترولرز بغض النظر عن الماركة.
-     */
     private fun getCenteredAxis(
         event: MotionEvent, device: InputDevice, axis: Int, histPos: Int
     ): Float {
@@ -289,10 +219,6 @@ class InputController(private val h: Handlers) {
                     else             event.getHistoricalAxisValue(axis, histPos)
         return if (abs(value) > range.flat) value else 0f
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    //  حلقة تمرير عصا اليمين
-    // ─────────────────────────────────────────────────────────────────────
 
     private fun setScrollAxes(x: Float, y: Float) {
         scrollX = x
@@ -308,7 +234,7 @@ class InputController(private val h: Handlers) {
                     return
                 }
 
-                h.getActiveSession()?.scrollBy(
+                h.getWebView()?.scrollBy(
                     (scrollX * SCROLL_SPEED).toInt(),
                     (scrollY * SCROLL_SPEED).toInt()
                 )
@@ -319,21 +245,13 @@ class InputController(private val h: Handlers) {
         handler.post(scrollJob!!)
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  عجلة الماوس
-    // ─────────────────────────────────────────────────────────────────────
-
     private fun handleMouseWheel(event: MotionEvent): Boolean {
         val v  = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
         val hz = event.getAxisValue(MotionEvent.AXIS_HSCROLL)
         if (v == 0f && hz == 0f) return false
-        h.getActiveSession()?.scrollBy((-hz * MOUSE_SPEED).toInt(), (-v * MOUSE_SPEED).toInt())
+        h.getWebView()?.scrollBy((-hz * MOUSE_SPEED).toInt(), (-v * MOUSE_SPEED).toInt())
         return true
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-    //  تنشيط عنصر الصفحة (زر OK / A)
-    // ─────────────────────────────────────────────────────────────────────
 
     private fun performCursorClick(): Boolean {
         val c = cursor ?: return false
@@ -341,7 +259,7 @@ class InputController(private val h: Handlers) {
     }
 
     private fun activateWebElement() {
-        val wv = h.getActiveSession() ?: return
+        val wv = h.getWebView() ?: return
         stopScrollLoop()
         wv.requestFocus()
         val t  = SystemClock.uptimeMillis()
@@ -349,16 +267,12 @@ class InputController(private val h: Handlers) {
         wv.dispatchKeyEvent(KeyEvent(t, t + 50L, KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_DPAD_CENTER, 0))
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  ثوابت
-    // ─────────────────────────────────────────────────────────────────────
-
     private companion object {
-        const val DPAD_SCROLL    = 200     // px لكل ضغطة D-pad أفقي
-        const val PAGE_SCROLL    = 720     // px لـ Page Up/Down
-        const val SCROLL_SPEED   = 18f     // px/tick لتمرير عصا اليمين
-        const val MOUSE_SPEED    = 80f     // px لكل نقرة عجلة ماوس
-        const val SCROLL_TICK_MS = 16L     // ~60fps
+        const val DPAD_SCROLL    = 200
+        const val PAGE_SCROLL    = 720
+        const val SCROLL_SPEED   = 18f
+        const val MOUSE_SPEED    = 80f
+        const val SCROLL_TICK_MS = 16L
 
         val DPAD_KEYS = setOf(
             KeyEvent.KEYCODE_DPAD_UP,

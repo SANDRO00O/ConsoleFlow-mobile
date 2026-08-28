@@ -14,7 +14,6 @@ import androidx.appcompat.app.AppCompatActivity
 
 class DownloadsActivity : AppCompatActivity() {
 
-    // ── Colour palette — black base like main UI ──────────────────────────
     private val cBg           = Color.BLACK
     private val cSurface      = Color.parseColor("#111111")
     private val cSurfaceHigh  = Color.parseColor("#1C1C1C")
@@ -29,7 +28,7 @@ class DownloadsActivity : AppCompatActivity() {
     private lateinit var container: LinearLayout
     private lateinit var emptyLayout: LinearLayout
     private lateinit var scrollView: ScrollView
-    private lateinit var clearBtn: TextView   // shown/hidden dynamically
+    private lateinit var clearBtn: TextView
     private var clearResetRunnable: Runnable? = null
     private val clearHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -40,17 +39,6 @@ class DownloadsActivity : AppCompatActivity() {
         setContentView(buildRoot())
         DownloadTracker.downloads.observe(this) { render(it) }
     }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // BUG-C FIX: cancel any pending "Clear done → Clear" reset animation
-        // so the Runnable doesn't leak a reference to clearBtn after the Activity dies.
-        clearResetRunnable?.let { clearHandler.removeCallbacks(it) }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Root layout
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun buildRoot(): View {
         val root = LinearLayout(this).apply {
@@ -80,8 +68,6 @@ class DownloadsActivity : AppCompatActivity() {
         return root
     }
 
-    // ── Top app bar ───────────────────────────────────────────────────────────
-
     private fun buildTopBar(): View {
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -109,7 +95,6 @@ class DownloadsActivity : AppCompatActivity() {
             }
         }
 
-        // Hidden by default — shown only when there's something to clear
         clearBtn = TextView(this).apply {
             text = "Clear"
             textSize = 13f
@@ -118,17 +103,13 @@ class DownloadsActivity : AppCompatActivity() {
             background = roundedBg(cSurface, 20f)
             visibility = View.GONE
             setOnClickListener {
-                // 1. Show "Clear done" immediately
                 this.text = "Clear done"
                 setTextColor(cSuccess)
 
-                // 2. Cancel any pending reset
                 clearResetRunnable?.let { clearHandler.removeCallbacks(it) }
 
-                // 3. Actually clear the list
                 DownloadTracker.clearFinished()
 
-                // 4. After 2s, fade back to "Clear" (or hide if nothing left)
                 clearResetRunnable = Runnable {
                     animate()
                         .alpha(0f)
@@ -136,7 +117,6 @@ class DownloadsActivity : AppCompatActivity() {
                         .withEndAction {
                             text = "Clear"
                             setTextColor(cPrimary)
-                            // visibility is controlled by render() — if nothing left it stays gone
                             alpha = 1f
                         }
                         .start()
@@ -156,8 +136,6 @@ class DownloadsActivity : AppCompatActivity() {
         setBackgroundColor(cOutline)
         layoutParams = LinearLayout.LayoutParams(MATCH, 1)
     }
-
-    // ── Empty state ───────────────────────────────────────────────────────────
 
     private fun buildEmptyState(): LinearLayout {
         return LinearLayout(this).apply {
@@ -188,10 +166,6 @@ class DownloadsActivity : AppCompatActivity() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Rendering
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun render(items: List<DownloadItem>) {
         if (items.isEmpty()) {
             scrollView.visibility  = View.GONE
@@ -203,8 +177,6 @@ class DownloadsActivity : AppCompatActivity() {
         scrollView.visibility  = View.VISIBLE
         emptyLayout.visibility = View.GONE
 
-        // Show "Clear" only when there's at least one finished item
-        // Don't override text if we're currently showing the "Clear done" feedback
         val hasFinished = items.any {
             it.state == DownloadState.COMPLETED ||
             it.state == DownloadState.FAILED    ||
@@ -218,10 +190,6 @@ class DownloadsActivity : AppCompatActivity() {
         items.reversed().forEach { container.addView(buildCard(it)) }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // M3-style card on black background
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun buildCard(item: DownloadItem): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -232,7 +200,6 @@ class DownloadsActivity : AppCompatActivity() {
             }
         }
 
-        // ── Row 1: tonal icon · info column · action chip ─────────────────
         val row1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity     = Gravity.CENTER_VERTICAL
@@ -261,7 +228,6 @@ class DownloadsActivity : AppCompatActivity() {
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
 
-        // Badge line for non-running states
         val badge = when (item.state) {
             DownloadState.QUEUED    -> "Waiting…" to cOnSurfaceVar
             DownloadState.COMPLETED -> "Complete  ·  ${formatBytes(item.downloadedBytes)}" to cSuccess
@@ -283,7 +249,6 @@ class DownloadsActivity : AppCompatActivity() {
         buildActionChip(item)?.let { row1.addView(it) }
         card.addView(row1)
 
-        // ── Progress section (RUNNING) ─────────────────────────────────────
         if (item.state == DownloadState.RUNNING) {
             val pb = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                 layoutParams = LinearLayout.LayoutParams(MATCH, dp(4)).apply { topMargin = dp(12) }
@@ -319,8 +284,6 @@ class DownloadsActivity : AppCompatActivity() {
         return card
     }
 
-    // ── Action chip ───────────────────────────────────────────────────────────
-
     private fun buildActionChip(item: DownloadItem): View? {
         val lp = LinearLayout.LayoutParams(WRAP, dp(32)).apply { marginStart = dp(10) }
         fun chip(label: String, fg: Int, bg: Int, action: () -> Unit) =
@@ -348,10 +311,6 @@ class DownloadsActivity : AppCompatActivity() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // File open
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun openFile(item: DownloadItem) {
         val path = item.filePath ?: return
         try {
@@ -377,10 +336,6 @@ class DownloadsActivity : AppCompatActivity() {
             else null
         }
     }.getOrNull()
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     private val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
     private val WRAP  = LinearLayout.LayoutParams.WRAP_CONTENT

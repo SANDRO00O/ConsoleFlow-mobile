@@ -14,62 +14,38 @@ class AboutActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_about)
-        TvUtils.applyOverscanSafePadding(this, findViewById(android.R.id.content))
 
-        // ── back button
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
 
-        // ── banner
         loadBanner()
 
-        // ── current version
         findViewById<TextView>(R.id.tvVersion).text = "v${UpdateManager.currentVersion(this)}"
 
-        // ── links
         mapOf(
             R.id.linkWebsite   to "https://consoleflow.karrarnazim.space",
             R.id.linkDeveloper to "https://karrarnazim.space",
             R.id.linkPrivacy   to "https://consoleflow.karrarnazim.space/privacy",
-            R.id.linkGithub    to "https://github.com/SANDRO00O/ConsoleFlow-mobile"
+            R.id.linkGithub    to "https://github.com/ConsoleFlow-Group/ConsoleFlow-mobile"
         ).forEach { (viewId, url) ->
             findViewById<View>(viewId).setOnClickListener { openUrl(url) }
         }
 
-        // ── update check (uses cache if fresh, hits network if stale)
         startUpdateCheck(forceRefresh = false)
 
-        // ── manual check button
         findViewById<View>(R.id.btnCheckUpdate).setOnClickListener {
             startUpdateCheck(forceRefresh = true)
         }
     }
 
-    // ─── banner ──────────────────────────────────────────────────────────────
-
     private fun loadBanner() {
         val wv = findViewById<WebView>(R.id.bannerWebView)
 
-        // TV FIX: this used to compute height from raw
-        // resources.displayMetrics.widthPixels — the FULL screen width,
-        // ignoring overscan-safe padding applied to the root container on TV
-        // (see TvUtils). On a real TV panel that padding shrinks the banner's
-        // actual on-screen width by ~10%, but the height was still calculated
-        // from the wider, pre-padding figure — so the fixed-aspect-ratio
-        // banner rendered taller than the space actually available and got
-        // clipped. Measure the real parent width after layout instead of
-        // guessing from screen metrics.
-        val parentRow = wv.parent as View
-        parentRow.post {
-            val availableWidth = parentRow.width.takeIf { it > 0 }
-                ?: (resources.displayMetrics.widthPixels - (32 * resources.displayMetrics.density).toInt())
-            val bannerHeight = (availableWidth / 7.112f).toInt()
-            wv.layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, bannerHeight)
-            finishLoadingBanner(wv)
-        }
-    }
+        val horizontalPaddingPx = (32 * resources.displayMetrics.density).toInt()
+        val availableWidth      = resources.displayMetrics.widthPixels - horizontalPaddingPx
+        val bannerHeight        = (availableWidth / 7.112f).toInt()
 
-    private fun finishLoadingBanner(wv: WebView) {
+        wv.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, bannerHeight)
 
         wv.settings.loadWithOverviewMode    = true
         wv.settings.useWideViewPort         = true
@@ -90,8 +66,6 @@ class AboutActivity : AppCompatActivity() {
 
         wv.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
     }
-
-    // ─── update logic ────────────────────────────────────────────────────────
 
     private fun startUpdateCheck(forceRefresh: Boolean) {
         showState(R.id.updateLoading)
@@ -120,7 +94,6 @@ class AboutActivity : AppCompatActivity() {
         }
     }
 
-    /** Shows exactly one of the four update-state views, hides the rest. */
     private fun showState(targetId: Int) {
         listOf(R.id.updateLoading, R.id.updateUpToDate, R.id.updateAvailable, R.id.updateError)
             .forEach { id ->
@@ -129,12 +102,6 @@ class AboutActivity : AppCompatActivity() {
             }
     }
 
-    // ─── changelog formatter ─────────────────────────────────────────────────
-
-    /**
-     * Converts the raw GitHub Markdown release body to clean plain text
-     * suitable for a standard Android TextView.
-     */
     private fun formatChangelog(raw: String): String =
         raw.lines()
             .joinToString("\n") { line ->
@@ -150,8 +117,6 @@ class AboutActivity : AppCompatActivity() {
             .replace(Regex("""`(.+?)`""")) { it.groupValues[1] }
             .trimStart('\n')
             .trim()
-
-    // ─── helpers ─────────────────────────────────────────────────────────────
 
     private fun openUrl(url: String) {
         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))

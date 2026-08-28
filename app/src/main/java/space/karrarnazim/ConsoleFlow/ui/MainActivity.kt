@@ -6,7 +6,6 @@ import android.app.Activity
 import android.content.*
 import android.content.ClipboardManager
 import android.content.pm.*
-import android.content.res.ColorStateList
 import android.graphics.*
 import android.graphics.drawable.*
 import android.net.*
@@ -23,6 +22,7 @@ import androidx.activity.result.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.*
 import androidx.fragment.app.*
+import androidx.webkit.*
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import android.util.Patterns
 import android.speech.RecognizerIntent
@@ -37,7 +37,6 @@ import androidx.core.content.*
 import androidx.core.view.*
 import androidx.recyclerview.widget.*
 import androidx.swiperefreshlayout.widget.*
-import space.karrarnazim.ConsoleFlow.ui.adapters.SuggestionsAdapter
 import com.google.android.material.bottomsheet.*
 import com.google.android.material.dialog.*
 import com.google.android.material.floatingactionbutton.*
@@ -51,19 +50,9 @@ import java.util.concurrent.*
 
 class MainActivity : AppCompatActivity() {
 
-    // ── واجهة المستخدم ──────────────────────────────────────────────────────
     private lateinit var webViewContainer: FrameLayout
-    // BUG-AA FIX: ensureWebViewForTab's eviction picks
-    // `webViews.keys.firstOrNull { it != activeTabId }` and the comment there
-    // calls it "LRU eviction" — but a plain mutableMapOf() (insertion-order
-    // LinkedHashMap) made that pick the OLDEST-CREATED tab, not the least
-    // recently used one. A tab opened early but revisited constantly was the
-    // first eviction candidate, while one opened recently and never touched
-    // again stayed alive forever. accessOrder=true bumps an entry to the end
-    // on every get()/put(), so the entry actually at the front is genuinely
-    // the least-recently-used one — matching what the eviction code assumes.
-    private val webViews = LinkedHashMap<Int, GeckoTabSession>(16, 0.75f, true)
-    private val currentWebView: GeckoTabSession? get() = webViews[activeTabId]
+    private val webViews = mutableMapOf<Int, WebView>()
+    private val currentWebView: WebView? get() = webViews[activeTabId]
 
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var progressBar: ProgressBar
@@ -74,28 +63,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var findBar: LinearLayout
     private lateinit var bottomBar: LinearLayout
     private lateinit var fullscreenContainer: FrameLayout
-
-    // ── Search Overlay (full-screen, shown on URL bar tap) ──────────────────
-    private val suggestionsManager = SearchSuggestionsManager()
-    private lateinit var suggestionsAdapter: SuggestionsAdapter
-    private lateinit var suggestionsRecycler: RecyclerView
-    /** Root container of the full-screen search overlay, added programmatically. */
-    private var searchOverlayContainer: FrameLayout? = null
-    private lateinit var overlaySearchInput: EditText
-    private lateinit var overlayClearBtn: ImageView
-
-    /**
-     * True on Android TV (leanback). Used to pick wider grids and scaled
-     * programmatic views. The values-television/ resource qualifier handles
-     * all XML-defined dimensions automatically — this flag covers Kotlin code only.
-     */
-    private val isTV: Boolean by lazy { TvUtils.isTelevision(this) }
-
-    // Guards the one-time overscan-safe padding pass applied to the home
-    // overlay (see onResume). Runs once; TV overscan doesn't change at runtime.
-    private var homeOverlayOverscanApplied = false
-
-    private fun px(resId: Int) = resources.getDimensionPixelSize(resId)
     private lateinit var tabsOverlay: FrameLayout
     private lateinit var tabsRecycler: RecyclerView
     private lateinit var tabCount: TextView
@@ -106,18 +73,14 @@ class MainActivity : AppCompatActivity() {
     private var lastErrorUrl: String? = null
     private var tabGroupsContainer: LinearLayout? = null
 
-    // FIX #3 — dirty flag للـ home overlay بدلاً من rebuild فوري
     private var homeOverlayDirty = false
 
-    // FIX #4 — cache الـ home preview في الذاكرة لتجنب I/O على main thread
     private var homePreviewBitmapCache: Bitmap? = null
 
-    // ── الإعدادات والمديرون ────────────────────────────────────────────────
     private lateinit var prefsManager: PrefsManager
     private lateinit var bookmarkRepository: BookmarkRepository
     private lateinit var historyRepository: HistoryRepository
 
-    // FIX #9 — إضافة timeouts لـ OkHttp لمنع block لا نهائي
     private val okClient = OkHttpClient.Builder()
         .followRedirects(true)
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -125,26 +88,16 @@ class MainActivity : AppCompatActivity() {
         .callTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    // FIX #10 — fixed thread pool بدلاً من newCachedThreadPool اللانهائي
     private lateinit var ioExecutor: ExecutorService
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // ── الفيديو بملء الشاشة والأذونات ───────────────────────────────────────
-    // GeckoView renders fullscreen video in-place — no CustomView swap needed,
-    // unlike the old WebChromeClient API. Just track whether we're in it.
-    private var isFullscreenActive = false
-    // BUG-V FIX (preserved): holds the pending callback while the Android
-    // runtime permission dialog is open, so getUserMedia() actually resolves.
-    private var pendingPermissionResult: ((Boolean) -> Unit)? = null
-    // BUG-N FIX (preserved): holds the pending callback while the system file
-    // picker is open, for <input type="file">.
-    private var pendingFileChooserResult: ((List<Uri>?) -> Unit)? = null
+    private var customView: View? = null
+    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+    private var webPermissionRequest: PermissionRequest? = null
 
-    // ── القائمة السفلية المخزنة مؤقتاً ─────────────────────────────────────
     private var cachedMenuSheet: BottomSheetDialog? = null
     private var cachedMenuSheetView: View? = null
 
-    // ── الثوابت ─────────────────────────────────────────────────────────────
     private val HOME_URL = HOME_URL_CONST
 
     private val NO_INTERCEPT_DOMAINS = listOf(
@@ -161,9 +114,8 @@ class MainActivity : AppCompatActivity() {
         return normalized in LOCALHOST_HOSTS
     }
 
-    // ── إدارة الجلسات والتبويبات ───────────────────────────────────────────
     private lateinit var sessionManager: BrowserSessionManager
-    private lateinit var webViewFactory: GeckoSessionFactory
+    private lateinit var webViewFactory: BrowserWebViewFactory
 
     private var tabGroups: MutableList<TabGroup>
         get() = sessionManager.tabGroups
@@ -190,18 +142,16 @@ class MainActivity : AppCompatActivity() {
 
     private val currentGroup: TabGroup? get() = sessionManager.currentGroup
     private lateinit var tabAdapter: TabAdapter
-    // ── عقود نتائج الأذونات ومسح QR ────────────────────────────────────────
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
-        pendingPermissionResult?.invoke(perms.values.all { it })
-        pendingPermissionResult = null
+        if (perms.values.all { it }) webPermissionRequest?.grant(webPermissionRequest?.resources)
+        else webPermissionRequest?.deny()
     }
 
-    // POST_NOTIFICATIONS permission for download completion alerts (API 33+)
     private val notifPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* granted or denied — downloads work either way */ }
+    ) { }
 
     private val qrScanLauncher = registerForActivityResult(ScanContract()) { result: ScanIntentResult ->
         result.contents?.let { scanned -> navigateTo(scanned) }
@@ -214,180 +164,119 @@ class MainActivity : AppCompatActivity() {
         transcript?.let { query -> if (query.isNotBlank()) navigateTo(query) }
     }
 
-    // BUG-N FIX: completes the <input type="file"> flow started by onShowFileChooser
-    private val fileChooserLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val data = result.data
-        val uris: List<Uri>? = when {
-            result.resultCode != RESULT_OK || data == null -> null
-            data.clipData != null -> List(data.clipData!!.itemCount) { i -> data.clipData!!.getItemAt(i).uri }
-            data.data != null -> listOf(data.data!!)
-            else -> null
-        }
-        pendingFileChooserResult?.invoke(uris)
-        pendingFileChooserResult = null
-    }
+    private var lastStatusBarTop = 0
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  دورة حياة النشاط
-    // ─────────────────────────────────────────────────────────────────────────
+    // pads swipeRefresh with the status bar inset when topBar is gone (e.g. home page)
+    private fun applyContentTopInset() {
+        if (!::swipeRefresh.isInitialized) return
+        val topInset = if (topBar.visibility == View.VISIBLE) 0 else lastStatusBarTop
+        swipeRefresh.setPadding(
+            swipeRefresh.paddingLeft,
+            topInset,
+            swipeRefresh.paddingRight,
+            swipeRefresh.paddingBottom
+        )
+    }
 
     @Suppress("UNCHECKED_CAST")
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        // ✅ إصلاح مشكلة "الواجهات تختلف قليلاً عن السابق": مع targetSdk 36
-        // (رُفع أثناء إصلاح أخطاء البناء)، Android يفرض عرض edge-to-edge
-        // إلزامياً (المحتوى يمتد خلف أشرطة الحالة/التنقل) بلا إمكانية
-        // تعطيله. التطبيق ما كان يستدعي setDecorFitsSystemWindows(false)
-        // إطلاقاً، فكان يعتمد على تصرّف افتراضي غير متوافق مع طريقة تعامل
-        // كود onApplyWindowInsetsListener الموجود أصلاً — هذا الاستدعاء
-        // يجعل الطرفين (النظام والتطبيق) متفقين على من المسؤول عن حساب
-        // المسافات، بدل تعارض ضمني ينتج عنه انزياح بصري طفيف بكل الواجهة.
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
         prefsManager = PrefsManager(this)
         bookmarkRepository = BookmarkRepository(prefsManager)
         historyRepository = HistoryRepository(prefsManager)
 
-        // FIX #10 — fixed thread pool محدود بعدد cores
         ioExecutor = Executors.newFixedThreadPool(
             Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
         )
 
-        // ⚠️ إصلاح خطأ حقيقي: ErudaAssetCache.preload() كانت مُعرَّفة في
-        // ConsoleToolsInjector.kt لكن ما انحطّت باستدعائها بأي مكان —
-        // يعني الكونسول كان سيفشل بصمت (eruda غير معرَّف، الخطأ يُبتلَع
-        // بصمت داخل try/catch الخاص بحقن السكربت). قراءة الملف I/O من
-        // assets فتُنفَّذ في خيط خلفي بدل حجب onCreate.
-        ioExecutor.execute {
-            runCatching {
-                assets.open("eruda.js").bufferedReader().use { it.readText() }
-            }.getOrNull()?.let { ErudaAssetCache.preload(it) }
-        }
-
         sessionManager = BrowserSessionManager()
-        webViewFactory = GeckoSessionFactory(
+        webViewFactory = BrowserWebViewFactory(
             activity = this,
             prefsManager = prefsManager,
+            okClient = okClient,
+            currentWebViewProvider = { currentWebView },
             isHomeUrl = { isHomeUrl(it) },
+            isLocalhostHost = { isLocalhostHost(it) },
+            noInterceptDomains = NO_INTERCEPT_DOMAINS,
             bookmarkRepository = bookmarkRepository,
             onOpenNewTab = { openNewTab(it) },
             onMarkHomeOverlayDirty = { homeOverlayDirty = true },
             onInvalidateHomePreviewCache = { invalidateHomePreviewCache() },
-            onSetSwipeRefresh = { enabled -> swipeRefresh.isEnabled = enabled && swipeRefreshAllowed() },
-            onPageStartedUi = { tab ->
-                // BUG-L FIX (preserved): only touch shared chrome UI when this
-                // is the tab currently on screen — a background tab starting a
-                // new navigation must never overwrite the visible address bar.
-                if (tab.tabId == activeTabId) {
-                    keepCursorAlive()
-                    progressBar.visibility = View.VISIBLE
-                    textUrl.setText(if (isHomeUrl(tab.url)) "" else tab.url)
-                    updateBookmarkIcon(tab.url ?: "")
-                    if (isHomeUrl(tab.url)) setTopBarVisible(false) else setTopBarVisible(true)
-                }
+            onNavigate = { navigateTo(it) },
+            onSetSwipeRefresh = { enabled -> swipeRefresh.isEnabled = enabled },
+            onPageStartedUi = { _, _, url ->
+                keepCursorAlive()
+                progressBar.visibility = View.VISIBLE
+                textUrl.setText(if (isHomeUrl(url)) "" else url)
+                updateBookmarkIcon(url ?: "")
+                if (isHomeUrl(url)) setTopBarVisible(false) else setTopBarVisible(true)
             },
-            onProgressChangedUi = { tab ->
-                // BUG-K FIX (preserved): a background tab loading must not
-                // move the active tab's progress bar.
-                if (tab.tabId == activeTabId) progressBar.progress = tab.progress
+            onProgressChangedUi = { _, progress ->
+                progressBar.progress = progress
             },
-            onFullScreenUi = { fullScreen ->
-                isFullscreenActive = fullScreen
-                setFullscreen(fullScreen)
+            onShowCustomViewUi = { view, callback ->
+                customView = view
+                customViewCallback = callback
+                fullscreenContainer.removeAllViews()
+                if (view != null) fullscreenContainer.addView(view)
+                fullscreenContainer.visibility = View.VISIBLE
+                webViewContainer.visibility = View.GONE
+                setFullscreen(true)
             },
-            onAndroidPermissionsNeededUi = { perms, onResult ->
-                // BUG-V FIX (preserved): getUserMedia() (camera/mic — video
-                // calls, WebRTC, voice input) must reach a real system prompt,
-                // not hang forever.
-                pendingPermissionResult = onResult
-                requestPermissionLauncher.launch(perms)
+            onHideCustomViewUi = {
+                hideCustomView()
             },
-            onShowFileChooserUi = { mimeTypes, onResult ->
-                // BUG-N FIX (preserved): <input type="file"> must open the
-                // system file/image/camera picker.
-                pendingFileChooserResult = onResult
-                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                    type = mimeTypes.firstOrNull()?.takeIf { it.isNotEmpty() } ?: "*/*"
-                    if (mimeTypes.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                }
-                val launched = runCatching { fileChooserLauncher.launch(intent) }.isSuccess
-                if (!launched) {
-                    pendingFileChooserResult = null
-                    Toast.makeText(this, "No file picker app available", Toast.LENGTH_SHORT).show()
-                    onResult(null)
-                }
+            onPermissionRequestUi = { request ->
+                webPermissionRequest = request
             },
-            onPageFinishedUi = { tab ->
-                // BUG-2 FIX (preserved): only touch UI state for the currently
-                // visible tab; a background tab finishing load must not hide
-                // the active tab's progress bar or its pull-to-refresh spinner.
-                val isActiveTab = tab.tabId == activeTabId
+            onPageFinishedUi = { tabId, view, url ->
+                keepCursorAlive()
+                swipeRefresh.isRefreshing = false
+                progressBar.visibility = View.INVISIBLE
 
-                if (isActiveTab) {
-                    keepCursorAlive()
-                    swipeRefresh.isRefreshing = false
-                    progressBar.visibility = View.INVISIBLE
-                }
-
-                val pageUrl = tab.url
-                if (pageUrl != null) {
+                url?.let { pageUrl ->
                     if (!isHomeUrl(pageUrl)) {
-                        val title = tab.title ?: "Unknown"
+                        val title = view.title ?: "Unknown"
                         ioExecutor.execute { historyRepository.addHistory(title, pageUrl) }
                     }
 
-                    currentGroup?.tabs?.find { it.id == tab.tabId }?.let { tabState ->
-                        tabState.title = tab.title ?: "Tab"
-                        tabState.url = if (isHomeUrl(pageUrl)) HOME_URL else pageUrl
-                        if (isHomeUrl(pageUrl) && tabState.ramThumbnail == null) {
-                            tabState.ramThumbnail = getHomePreviewBitmap()
-                            tabState.hasThumbnail = true
-                            tabState.thumbnailUrl = HOME_URL
-                        }
-                        // ✅ إصلاح فجوة معروفة (كانت سبب اختلاف شكل كاردات
-                        // التبويبات عن التصميم القديم): GeckoView ما عنده
-                        // onReceivedIcon، فكانت الأيقونة تبقى فارغة دائماً.
-                        // نفس خدمة الجلب المستخدَمة أصلاً لمفضلة الشاشة
-                        // الرئيسية، بشرط عدم الجلب المتكرر لنفس الرابط.
-                        if (!isHomeUrl(pageUrl) && tabState.faviconUrl != pageUrl) {
-                            tabState.faviconUrl = pageUrl
-                            fetchTabFavicon(tab.tabId, pageUrl)
+                    currentGroup?.tabs?.find { it.id == tabId }?.let { tab ->
+                        tab.title = view.title ?: "Tab"
+                        tab.url = if (isHomeUrl(pageUrl)) HOME_URL else pageUrl
+                        if (isHomeUrl(pageUrl) && tab.ramThumbnail == null) {
+                            tab.ramThumbnail = getHomePreviewBitmap()
+                            tab.hasThumbnail = true
+                            tab.thumbnailUrl = HOME_URL
                         }
                     }
-
-                    // BUG-1 FIX (preserved): returning to about:blank/home must
-                    // show the home overlay instead of a blank screen.
-                    if (isActiveTab && isHomeUrl(pageUrl)) showHomeOverlay()
-
                     refreshTabsRecycler()
                     savePersistentTabs()
                 }
 
-                // ⚠️ حُذف حقن viewport meta اليدوي القديم من هنا — كان
-                // ضرورياً في WebView لأنه ما عنده مكافئ أصلي. GeckoView عنده
-                // GeckoSessionSettings.VIEWPORT_MODE_DESKTOP (مُطبَّق في
-                // GeckoTabSession.setDesktopMode()) الذي يغني عن هذا تماماً.
-                // إبقاؤه كان سيعني منطقاً مكرَّراً بلا داعٍ.
+                if (prefsManager.desktopMode) {
+                    view.evaluateJavascript(
+                        "(function(){" +
+                            "var meta=document.querySelector('meta[name=\"viewport\"]');" +
+                            "if(meta){meta.setAttribute('content','width=1024');}" +
+                            "else{var nm=document.createElement('meta');nm.name='viewport';" +
+                            "nm.content='width=1024';document.head.appendChild(nm);" +
+                            "}})()",
+                        null
+                    )
+                }
             },
-            onReceivedIconUi = { tab ->
-                // NOTE: GeckoView's ContentDelegate has no onReceivedIcon
-                // equivalent to WebView's favicon callback — this currently
-                // only refreshes the tab title in the recycler. Favicon
-                // fetching needs a separate manual request (e.g. reading
-                // <link rel="icon"> after page load) — tracked as a follow-up,
-                // not silently faked here.
-                currentGroup?.tabs?.find { it.id == tab.tabId }?.let {
+            onReceivedIconUi = { tabId, icon ->
+                currentGroup?.tabs?.find { it.id == tabId }?.let { tab ->
+                    tab.faviconBitmap = icon
                     refreshTabsRecycler()
                 }
             },
             onReceivedErrorUi = { url -> showErrorOverlay(url) },
-            onApplyConsoleTools = { tab -> applyConsoleTools(tab) },
-            onDownloadStart = { url, contentType, contentLength, filename ->
-                handleDownloadRequest(url, contentType ?: "application/octet-stream", contentLength, filename)
+            onApplyConsoleTools = { view -> applyConsoleTools(view) },
+            onDownloadStart = { url, userAgent, contentDisposition, mimeType, contentLength ->
+                handleDownloadRequest(url, userAgent, contentDisposition, mimeType, contentLength)
             }
         )
 
@@ -395,7 +284,6 @@ class MainActivity : AppCompatActivity() {
         cursorController = CursorController(this).also { it.attach() }
         inputController  = buildInputController().also { it.setCursorController(cursorController) }
 
-        // Refresh menu mini-list while Downloads tab is open
         DownloadTracker.downloads.observe(this) {
             if (cachedMenuSheet?.isShowing == true) {
                 val pageDl = cachedMenuSheetView?.findViewById<View>(R.id.menuPageDownloads)
@@ -420,32 +308,22 @@ class MainActivity : AppCompatActivity() {
                 tabGroups.clear()
                 tabGroups.addAll(savedGroups)
                 activeGroupId = savedInstanceState.getInt("ACTIVE_GROUP_ID", tabGroups.first().id)
-                // BUG-W FIX: fall back to a real group if the saved id doesn't
-                // match any restored group (defensive — currentGroup would
-                // otherwise be null and the rest of this block silently no-ops).
-                if (tabGroups.none { it.id == activeGroupId }) activeGroupId = tabGroups.first().id
                 activeTabId   = savedInstanceState.getInt("ACTIVE_TAB_ID",   tabGroups.first().tabs.firstOrNull()?.id ?: 0)
                 nextTabId     = savedInstanceState.getInt("NEXT_TAB_ID", 100)
                 nextGroupId   = savedInstanceState.getInt("NEXT_GROUP_ID", 100)
 
-                // BUG-W FIX: mirrors loadPersistentTabs' self-heal (BUG-M) for a
-                // restored active group with zero tabs — without this, no
-                // WebView is ever created/attached below, leaving only the
-                // home overlay floating over an empty webViewContainer.
-                if (currentGroup?.tabs.isNullOrEmpty()) sessionManager.createNewTab(HOME_URL)
-
                 val activeTab = currentGroup?.tabs?.find { it.id == activeTabId }
                     ?: currentGroup?.tabs?.firstOrNull()
                 if (activeTab != null) {
-                    val wv = ensureWebViewForTab(activeTab)
-                    wv.setActive(true)
-                    webViewContainer.addView(wv.geckoView)
+                    val restoredState = savedInstanceState.getBundle("active_webview_state")
+                    val wv = ensureWebViewForTab(activeTab, restoredState)
+                    webViewContainer.addView(wv)
                     wv.requestFocus()
                 }
                 updateGroupsUI()
                 refreshTabsRecycler()
                 val activeTabUrl = currentGroup?.tabs?.find { it.id == activeTabId }?.url
-                if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay(immediate = true)
+                if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay()
                 else hideNativeOverlays(immediate = true)
             } else {
                 createNewGroup("Default")
@@ -458,16 +336,14 @@ class MainActivity : AppCompatActivity() {
             when {
                 tabsOverlay.visibility == View.VISIBLE -> { tabsOverlay.visibility = View.GONE; keepCursorAlive() }
                 nativeOverlayContainer.visibility == View.VISIBLE -> hideNativeOverlays()
-                // Dismiss the search overlay before any deeper back action.
-                searchOverlayContainer?.visibility == View.VISIBLE -> hideSearchOverlay()
                 topBar.visibility == View.VISIBLE && isHomeUrl(currentWebView?.url) -> setTopBarVisible(false)
-                isFullscreenActive -> hideCustomView()
+                customView != null -> hideCustomView()
                 findBar.visibility == View.VISIBLE -> {
                     findBar.visibility = View.GONE
                     currentWebView?.clearMatches()
                     keepCursorAlive()
                 }
-                currentWebView?.canGoBack == true -> currentWebView?.goBack()
+                currentWebView?.canGoBack() == true -> currentWebView?.goBack()
                 else -> finish()
             }
         }
@@ -490,50 +366,31 @@ class MainActivity : AppCompatActivity() {
         outState.putInt("ACTIVE_TAB_ID",   activeTabId)
         outState.putInt("NEXT_TAB_ID",     nextTabId)
         outState.putInt("NEXT_GROUP_ID",   nextGroupId)
-        // ⚠️ فجوة مُغلقة: TabState.sessionStateJson (يُحدَّث تلقائياً عبر
-        // GeckoSession.ProgressDelegate.onSessionStateChange — نمط دفع، لا
-        // استطلاع يدوي غير متزامن) هو مجرد حقل String عادي على tabGroups
-        // القابل للتسلسل أصلاً — فيُحفَظ هنا تلقائياً مع putSerializable
-        // بلا أي كود إضافي. هذا يستعيد تاريخ التصفح الفعلي داخل كل تبويب،
-        // وليس فقط الرابط الحالي.
+        currentWebView?.let { wv ->
+            val bundle = Bundle()
+            wv.saveState(bundle)
+            outState.putBundle("active_webview_state", bundle)
+        }
     }
 
     override fun onResume() {
         super.onResume()
         updateSearchEngineIcon()
         keepCursorAlive()
-        currentWebView?.setActive(true)
-
-        // BUG-5 FIX: SettingsActivity's "Clear Data" can't access the live WebViews,
-        // so it sets a flag. We honour it here where we have full access.
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.getBoolean("pending_full_clear", false)) {
-            prefs.edit().remove("pending_full_clear").apply()
-            clearData()
-        }
-
-        // BUG-R FIX: the user-agent / viewport settings are applied to a WebView
-        // once, at creation time (BrowserWebViewFactory). Toggling "Desktop Mode"
-        // from SettingsActivity only wrote a SharedPreferences value — any tab
-        // that was already open kept its old user-agent forever (the toggle
-        // looked like it simply didn't work). Re-sync every live WebView here;
-        // applyUserAgentToWebView is idempotent so this is a no-op when nothing
-        // changed.
-        webViews.values.forEach { it.setDesktopMode(prefsManager.desktopMode) }
 
         val root = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val extraTop = (resources.displayMetrics.density * 4f).toInt()
+            lastStatusBarTop = statusBarTop
 
-            (topBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
-                val newTopMargin = statusBarTop + extraTop
-                if (lp.topMargin != newTopMargin) {
-                    lp.topMargin = newTopMargin
-                    topBar.layoutParams = lp
-                }
-            }
+            topBar.setPadding(
+                topBar.paddingLeft,
+                statusBarTop + extraTop,
+                topBar.paddingRight,
+                topBar.paddingBottom
+            )
 
             tabsOverlay.setPadding(
                 tabsOverlay.paddingLeft,
@@ -549,68 +406,32 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // ✅ إصلاح "الواجهات تختلف قليلاً": الشاشة الرئيسية ما كانت
-            // تحصل على أي تعويض لأشرطة النظام على الهاتف (فقط padding
-            // التلفاز isTV كان يُطبَّق). بعد تفعيل edge-to-edge صراحة، تحتاج
-            // نفس تعويض statusBar/navBar الذي تحصل عليه topBar/bottomBar.
-            nativeOverlayContainer.setPadding(
-                nativeOverlayContainer.paddingLeft,
-                statusBarTop,
-                nativeOverlayContainer.paddingRight,
-                navBarBottom
-            )
+            applyContentTopInset()
 
             insets
         }
         root.requestApplyInsets()
-
-        // TV FIX: window insets only describe system bars (status/nav), not
-        // panel overscan. Most TV screens crop ~5% off every edge, so the
-        // home overlay's logo/tiles were rendered partly outside the visible
-        // picture. Apply once — no-op on phones.
-        if (!homeOverlayOverscanApplied && isTV) {
-            homeOverlayOverscanApplied = true
-            TvUtils.applyOverscanSafePadding(this, nativeOverlayContainer)
-        }
     }
 
     override fun onPause() {
         super.onPause()
-        currentWebView?.setActive(false)
         savePersistentTabs()
     }
 
     override fun onDestroy() {
         webViews.values.forEach { wv ->
-            webViewContainer.removeView(wv.geckoView)
+            webViewContainer.removeView(wv)
+            wv.clearHistory()
+            wv.removeAllViews()
             wv.destroy()
         }
         webViews.clear()
         ioExecutor.shutdown()
-        // Cancel any in-flight / debounced suggestion fetch so the OkHttp
-        // callback can't post to the main handler after the Activity is gone.
-        suggestionsManager.cancel()
         cachedMenuSheet?.dismiss()
         inputController.release()
         cursorController.detach()
         super.onDestroy()
     }
-
-    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
-        super.onConfigurationChanged(newConfig)
-        // BUG-Q FIX: MainActivity declares configChanges for orientation/screenSize
-        // so it is never recreated on rotation (intentional — avoids reloading
-        // every open WebView). But nothing was refreshing the virtual cursor's
-        // screen bounds, which were captured once in CursorController.attach().
-        // Wait for the new layout pass so decorView.width/height are accurate.
-        if (::cursorController.isInitialized) {
-            window.decorView.post { cursorController.refreshScreenBounds() }
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  التهيئة الأولية للواجهة
-    // ─────────────────────────────────────────────────────────────────────────
 
     @SuppressLint("ClickableViewAccessibility")
     private fun initViews() {
@@ -630,32 +451,16 @@ class MainActivity : AppCompatActivity() {
         nativeOverlayContainer = findViewById(R.id.nativeOverlayContainer)
         tabGroupsContainer     = findViewById(R.id.tabGroupsContainer)
 
-        // ── Search Overlay: adapter initialised here; the View tree is built
-        //    lazily in buildSearchOverlay() the first time showSearchOverlay() fires,
-        //    because at this point the root ConstraintLayout isn't fully measured yet.
-        suggestionsAdapter = SuggestionsAdapter(
-            context    = this,
-            onNavigate = { suggestion ->
-                hideSearchOverlay()
-                navigateTo(suggestion)
-            },
-            onFill = { suggestion ->
-                overlaySearchInput.setText(suggestion)
-                overlaySearchInput.setSelection(suggestion.length)
-            }
-        )
-
         buildNativeOverlays()
         setTopBarVisible(false, immediate = true)
 
-        // FIX #5 — نمرر ioExecutor للـ Adapter بدلاً من أن ينشئ هو thread pool خاص به
         tabAdapter = TabAdapter(
             context    = this,
             ioExecutor = ioExecutor,
             onTabClick = { tab -> switchToTab(tab) },
             onTabClose = { tab -> closeTab(tab) }
         )
-        tabsRecycler.layoutManager = GridLayoutManager(this, if (isTV) 4 else 2)
+        tabsRecycler.layoutManager = GridLayoutManager(this, 2)
         tabsRecycler.adapter       = tabAdapter
 
         updateSearchEngineIcon()
@@ -665,14 +470,14 @@ class MainActivity : AppCompatActivity() {
             val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val extraTop = (resources.displayMetrics.density * 4f).toInt()
+            lastStatusBarTop = statusBarTop
 
-            (topBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
-                val newTopMargin = statusBarTop + extraTop
-                if (lp.topMargin != newTopMargin) {
-                    lp.topMargin = newTopMargin
-                    topBar.layoutParams = lp
-                }
-            }
+            topBar.setPadding(
+                topBar.paddingLeft,
+                statusBarTop + extraTop,
+                topBar.paddingRight,
+                topBar.paddingBottom
+            )
 
             tabsOverlay.setPadding(
                 tabsOverlay.paddingLeft,
@@ -688,25 +493,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // ✅ نفس إصلاح "الواجهات تختلف قليلاً" مكرَّر هنا لاتساق الحالتين
-            // (هذا الملف فيه دالتان شبه متطابقتان لمعالجة الـinsets —
-            // ملاحظة قديمة في الكود لم تُحل بعد؛ التزمت بإصلاح الاثنتين
-            // بدل حذف إحداهما، تفادياً لتغيير سلوك لم يُطلَب حالياً).
-            nativeOverlayContainer.setPadding(
-                nativeOverlayContainer.paddingLeft,
-                statusBarTop,
-                nativeOverlayContainer.paddingRight,
-                navBarBottom
-            )
+            applyContentTopInset()
 
             insets
         }
         root.requestApplyInsets()
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  بناء الـ Overlays (مرة واحدة عند التهيئة)
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun buildNativeOverlays() {
         nativeOverlayContainer.removeAllViews()
@@ -715,26 +507,14 @@ class MainActivity : AppCompatActivity() {
         nativeHomeOverlay?.let  { nativeOverlayContainer.addView(it) }
         nativeErrorOverlay?.let { nativeOverlayContainer.addView(it) }
         hideNativeOverlays(immediate = true)
-        // FIX #3 — حفظ مرجع أيقونة محرك البحث من الـ View الجديد عبر tag
         homeSearchEngineIcon = nativeHomeOverlay?.findViewWithTag("home_search_engine_icon")
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Home Preview Bitmap — مع cache في الذاكرة
-    // ─────────────────────────────────────────────────────────────────────────
-
-    // FIX #4 — invalidate يُستدعى عند تغيير البيانات (bookmarks / search engine)
     private fun invalidateHomePreviewCache() {
         homePreviewBitmapCache = null
-        // BUG-7 FIX: also clear stale home-preview bitmaps cached inside TabState
-        // objects so the tabs overlay shows the refreshed home preview immediately.
-        tabGroups.forEach { group ->
-            group.tabs.filter { isHomeUrl(it.url) }.forEach { it.ramThumbnail = null }
-        }
     }
 
     fun getHomePreviewBitmap(force: Boolean = false): Bitmap {
-        // FIX #4 — أولاً: تحقق من الـ in-memory cache لتجنب File I/O على main thread
         if (!force) {
             homePreviewBitmapCache?.let { return it }
         }
@@ -749,7 +529,7 @@ class MainActivity : AppCompatActivity() {
             runCatching { sigFile.readText() }.getOrNull()?.let { stored ->
                 if (stored == key) {
                     BitmapFactory.decodeFile(cacheFile.absolutePath)?.let { cached ->
-                        homePreviewBitmapCache = cached   // FIX #4 — خزّن في الذاكرة
+                        homePreviewBitmapCache = cached
                         return cached
                     }
                 }
@@ -757,7 +537,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val rendered = renderHomePreviewBitmap(width, height)
-        homePreviewBitmapCache = rendered   // FIX #4 — خزّن في الذاكرة
+        homePreviewBitmapCache = rendered
         ioExecutor.execute {
             try {
                 FileOutputStream(cacheFile).use { out ->
@@ -785,35 +565,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setTopBarVisible(visible: Boolean, immediate: Boolean = false) {
-        // ✅ إصلاح جذري لمشكلة "الشريط العلوي يضل ينبض أثناء البحث":
-        // onLocationChange يُستدعى مرة واحدة لكل قفزة إعادة توجيه (سلوك
-        // طبيعي تماماً — أغلب محركات البحث تُعيد التوجيه مرة على الأقل)،
-        // وكل استدعاء كان يُعيد تشغيل أنيميشن الظهور/الاختفاء من الصفر حتى
-        // لو الشريط ظاهر أصلاً — يعني قفزة مرئية للأعلى وتلاشٍ وظهور من
-        // جديد، مرة لكل قفزة. هذا الحارس يمنع إعادة التشغيل لو الحالة
-        // الحالية تطابق الحالة المطلوبة أصلاً.
-        val alreadyInTargetState = if (visible) {
-            topBar.visibility == View.VISIBLE && topBar.alpha >= 0.99f
-        } else {
-            topBar.visibility != View.VISIBLE
-        }
-        if (alreadyInTargetState && !immediate) return
-
         keepCursorAlive()
-        // Search overlay belongs to the URL bar — close it when the bar hides.
-        if (!visible) hideSearchOverlay()
         if (immediate) {
             topBar.alpha      = if (visible) 1f else 0f
             topBar.visibility = if (visible) View.VISIBLE else View.GONE
+            applyContentTopInset()
             return
         }
         if (visible) {
             topBar.visibility = View.VISIBLE
+            applyContentTopInset()
             topBar.translationY = -topBar.height.toFloat() * 0.2f
             topBar.animate().alpha(1f).translationY(0f).setDuration(160).start()
         } else {
             topBar.animate().alpha(0f).translationY(-topBar.height.toFloat() * 0.2f)
-                .setDuration(120).withEndAction { topBar.visibility = View.GONE }.start()
+                .setDuration(120).withEndAction {
+                    topBar.visibility = View.GONE
+                    applyContentTopInset()
+                }.start()
         }
     }
 
@@ -848,30 +617,6 @@ class MainActivity : AppCompatActivity() {
             .onFailure { Toast.makeText(this, "Voice search unavailable", Toast.LENGTH_SHORT).show() }
     }
 
-    /** يجلب أيقونة موقع حقيقية لكارد تبويب — يغلق فجوة onReceivedIcon المفقودة بـGeckoView. */
-    private fun fetchTabFavicon(tabId: Int, url: String) {
-        ioExecutor.execute {
-            try {
-                val host = runCatching { Uri.parse(url).host }.getOrNull().orEmpty()
-                if (host.isEmpty()) return@execute
-                val faviconUrl = "https://www.google.com/s2/favicons?sz=64&domain=$host"
-                val request = Request.Builder().url(faviconUrl).build()
-                okClient.newCall(request).execute().use { response ->
-                    val body   = response.body ?: return@use
-                    val bitmap = BitmapFactory.decodeStream(body.byteStream()) ?: return@use
-                    mainHandler.post {
-                        currentGroup?.tabs?.find { it.id == tabId }?.let { tabState ->
-                            tabState.faviconBitmap = bitmap
-                            refreshTabsRecycler()
-                        }
-                    }
-                }
-            } catch (_: Exception) {
-                // فشل صامت — تبقى الأيقونة الافتراضية، بلا أثر على استقرار التطبيق.
-            }
-        }
-    }
-
     private fun loadBookmarkFavicon(url: String, target: ImageView) {
         ioExecutor.execute {
             try {
@@ -898,7 +643,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildHomeOverlay(loadFavicons: Boolean = true): View {
         val dp   = resources.displayMetrics.density
-        fun px(r: Int) = resources.getDimensionPixelSize(r)
         val root = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -957,7 +701,7 @@ class MainActivity : AppCompatActivity() {
         val settingsBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
             setColorFilter(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(px(R.dimen.home_settings_btn), px(R.dimen.home_settings_btn))
+            layoutParams = LinearLayout.LayoutParams((40*dp).toInt(), (40*dp).toInt())
             alpha = 0.85f
             setPadding((9*dp).toInt(), (9*dp).toInt(), (9*dp).toInt(), (9*dp).toInt())
             setBackgroundResource(R.drawable.bottom_btn_ripple)
@@ -976,7 +720,7 @@ class MainActivity : AppCompatActivity() {
             setPadding((14*dp).toInt(), (8*dp).toInt(), (10*dp).toInt(), (8*dp).toInt())
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                px(R.dimen.home_bar_height)
+                LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = (26*dp).toInt() }
         }
         content.addView(searchBar)
@@ -985,8 +729,7 @@ class MainActivity : AppCompatActivity() {
             tag = "home_search_engine_icon"
             setImageResource(currentSearchEngineIconRes())
             setColorFilter(Color.parseColor("#7E7E7E"))
-            val sz = px(R.dimen.home_search_icon)
-            layoutParams = LinearLayout.LayoutParams(sz, sz)
+            layoutParams = LinearLayout.LayoutParams((20*dp).toInt(), (20*dp).toInt())
         }
         homeSearchEngineIcon = searchIcon
         searchBar.addView(searchIcon)
@@ -999,10 +742,16 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.TRANSPARENT)
             setPadding((12*dp).toInt(), 0, (8*dp).toInt(), 0)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            // Display-only for typing; tapping or D-pad focusing opens the search overlay.
-            isFocusableInTouchMode = false
-            setOnFocusChangeListener { _, hasFocus -> if (hasFocus) showSearchOverlay("") }
-            setOnClickListener { showSearchOverlay("") }
+            imeOptions  = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            inputType   = android.text.InputType.TYPE_CLASS_TEXT or
+                          android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    val query = text.toString().trim()
+                    if (query.isNotEmpty()) navigateTo(query)
+                    hideKeyboard(); true
+                } else false
+            }
         }
         searchBar.addView(searchInput)
 
@@ -1034,40 +783,10 @@ class MainActivity : AppCompatActivity() {
         }
         content.addView(fixedHeader)
 
-        fun brandMonogram(title: String): kotlin.Pair<Int, String>? = when (title) {
-            // ألوان العلامة التجارية الرسمية الحقيقية لكل موقع.
-            "GitHub"   -> Color.parseColor("#181717") to "G"
-            "GitLab"   -> Color.parseColor("#FC6D26") to "G"
-            "Codeberg" -> Color.parseColor("#2185D0") to "C"
-            "F-Droid"  -> Color.parseColor("#1976D2") to "F"
-            else -> null
-        }
-
-        fun monogramDrawable(letter: String, bgColor: Int): android.graphics.drawable.Drawable {
-            val size = 256
-            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bmp)
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bgColor }
-            canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
-            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE
-                textSize = size * 0.5f
-                textAlign = Paint.Align.CENTER
-                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-            }
-            val textY = size / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
-            canvas.drawText(letter, size / 2f, textY, textPaint)
-            return android.graphics.drawable.BitmapDrawable(resources, bmp)
-        }
-
         fun bookmarkGrid(items: List<kotlin.Pair<String, String>>, loadRemoteIcons: Boolean) {
             if (items.isEmpty()) return
-            val tileSz   = px(R.dimen.home_bookmark_tile)
-            val textSzSp = resources.getDimension(R.dimen.home_bookmark_text_size) /
-                           resources.displayMetrics.scaledDensity
             val grid = GridLayout(this).apply {
-                columnCount = if (isTV) 6 else 4
-                useDefaultMargins = true
+                columnCount = 4; useDefaultMargins = true
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             }
@@ -1082,28 +801,20 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 val icon = ImageView(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(tileSz, tileSz)
-                    setBackgroundResource(R.drawable.bookmark_icon_circle_bg)
-                    clipToOutline = true
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    setPadding(0, 0, 0, 0)
+                    layoutParams = LinearLayout.LayoutParams((44*dp).toInt(), (44*dp).toInt())
+                    setBackgroundResource(R.drawable.tab_card_bg)
+                    scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    setPadding((8*dp).toInt(), (8*dp).toInt(), (8*dp).toInt(), (8*dp).toInt())
                     setImageResource(R.drawable.ic_favicon_fallback)
-                }
-                // ✅ دائرة بلون العلامة التجارية الحقيقي + الحرف الأول تظهر
-                // فوراً (بلا حاجة شبكة) — بديل صادق لعدم القدرة على تحميل
-                // صور شعارات حقيقية محلياً بالأدوات المتاحة حالياً. تُستبدَل
-                // لاحقاً بالأيقونة الحقيقية لو نجح الجلب عبر الشبكة.
-                brandMonogram(title)?.let { (bg, letter) ->
-                    icon.setImageDrawable(monogramDrawable(letter, bg))
                 }
                 val label = TextView(this).apply {
                     text = title
                     setTextColor(Color.WHITE)
-                    textSize = textSzSp; maxLines = 1
+                    textSize = 10.5f; maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     gravity = Gravity.CENTER_HORIZONTAL
                     setPadding((2*dp).toInt(), (6*dp).toInt(), (2*dp).toInt(), 0)
-                    layoutParams = LinearLayout.LayoutParams(tileSz + (10*dp).toInt(),
+                    layoutParams = LinearLayout.LayoutParams((54*dp).toInt(),
                         LinearLayout.LayoutParams.WRAP_CONTENT)
                 }
                 item.addView(icon); item.addView(label)
@@ -1116,10 +827,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         val fixedSites = listOf(
-            "GitHub"   to "https://github.com",
-            "GitLab"   to "https://gitlab.com",
-            "Codeberg" to "https://codeberg.org",
-            "F-Droid"  to "https://f-droid.org"
+            "GitHub"       to "https://github.com",
+            "Stack Overflow" to "https://stackoverflow.com",
+            "MDN"          to "https://developer.mozilla.org",
+            "Kotlin"       to "https://kotlinlang.org"
         )
         bookmarkGrid(fixedSites, loadFavicons)
 
@@ -1211,8 +922,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        buttonRow.addView(makeButton("Retry") { hideNativeOverlays(immediate = true); currentWebView?.reload() })
-        buttonRow.addView(makeButton("Home")  { goHome() })
+        buttonRow.addView(makeButton("Retry") { hideNativeOverlays(); currentWebView?.reload() })
+        buttonRow.addView(makeButton("Home")  { showHomeOverlay() })
         buttonRow.addView(makeButton("Close") { hideNativeOverlays() })
 
         val updateUrlText = {
@@ -1239,39 +950,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * ⚠️ يستبدل JsBridge المحذوف بالخطأ (انظر التوضيح المفصّل في ملخص هذه
-     * الجولة). القديم كان يعطّل swipe-refresh فقط أثناء اللمس الفعلي على
-     * لوحة eruda (دقة عالية عبر JS). GeckoView لا يملك addJavascriptInterface
-     * فبنيت الحل الصحيح (WebExtension) مهمة كبيرة منفصلة — كحل عملي فوري
-     * أدق تقريب ممكن بلا جسر: تعطيل "اسحب للتحديث" بالكامل طالما الكونسول
-     * ظاهر، بدل فقط أثناء اللمس الفعلي. تقريب أخشن لكنه يحل نفس المشكلة
-     * الأصلية (تعارض السحب مع سحب لوحة eruda) بلا أي جسر جافاسكربت.
-     */
-    private fun swipeRefreshAllowed(): Boolean = !prefsManager.consoleEnabled
-
     private fun hideNativeOverlays(immediate: Boolean = false) {
         keepCursorAlive()
         nativeHomeOverlay?.let  { fadeOverlay(it, false, immediate) }
         nativeErrorOverlay?.let { fadeOverlay(it, false, immediate) }
         nativeOverlayContainer.visibility = View.GONE
         swipeRefresh.isRefreshing = false
-        swipeRefresh.isEnabled    = swipeRefreshAllowed()
+        swipeRefresh.isEnabled    = true
     }
 
-    // FIX #7 — showHomeOverlay تتحقق من dirty flag وتُعيد البناء عند الحاجة فقط
-    private fun showHomeOverlay(immediate: Boolean = false) {
+    private fun showHomeOverlay() {
         keepCursorAlive()
         if (homeOverlayDirty) {
             buildNativeOverlays()
             homeOverlayDirty = false
         }
         lastErrorUrl = null
-        setTopBarVisible(false, immediate = immediate)
-        nativeErrorOverlay?.let { fadeOverlay(it, false, immediate = immediate) }
+        setTopBarVisible(false)
+        nativeErrorOverlay?.let { fadeOverlay(it, false) }
         nativeHomeOverlay?.let {
             nativeOverlayContainer.visibility = View.VISIBLE
-            fadeOverlay(it, true, immediate = immediate)
+            fadeOverlay(it, true)
             nativeOverlayContainer.bringToFront()
             swipeRefresh.isRefreshing = false
             swipeRefresh.isEnabled    = false
@@ -1296,36 +995,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  الحفظ الدائم (SharedPreferences)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    // FIX #1 — أخذ snapshot كامل على الـ main thread قبل الكتابة في الخلفية
-    // يمنع ConcurrentModificationException الصامت
 private fun savePersistentTabs() {
-        // ⚠️ فجوة مُغلقة: نُزامن sessionStateJson من كل جلسة حيّة إلى TabState
-        // المقابل لها قبل الكتابة، حتى يحمل الملف المحفوظ آخر حالة معروفة —
-        // هذا يستبدل onSaveInstanceState اليدوي غير الممكن مزامنته (انظر
-        // GeckoTabSession.sessionStateJson).
-        webViews.forEach { (id, wv) ->
-            wv.sessionStateJson?.let { json ->
-                tabGroups.forEach { g -> g.tabs.find { it.id == id }?.sessionStateJson = json }
-            }
-        }
         sessionManager.saveToStorage(this)
     }
 
     fun loadPersistentTabs(intentUrl: String?) {
         if (sessionManager.restoreFromStorage(this) && sessionManager.tabGroups.isNotEmpty()) {
-            // BUG-M FIX: self-heal a corrupted/stale save where the active
-            // group ended up with zero tabs (e.g. an old app version, or a
-            // manually edited prefs file). Without this, activeTab below is
-            // null, ensureWebViewForTab is never called, and the app boots
-            // into a fully blank screen — no WebView, no overlay, nothing.
-            if (currentGroup?.tabs.isNullOrEmpty()) {
-                sessionManager.createNewTab(HOME_URL)
-            }
-
             val activeGroupTabs = currentGroup?.tabs
             val preferredTabId = activeTabId
             val activeTab = activeGroupTabs?.find { it.id == preferredTabId } ?: activeGroupTabs?.firstOrNull()
@@ -1333,18 +1008,14 @@ private fun savePersistentTabs() {
 
             if (activeTab != null) {
                 val wv = ensureWebViewForTab(activeTab)
-                wv.setActive(true)
-                if (webViewContainer.indexOfChild(wv.geckoView) == -1) webViewContainer.addView(wv.geckoView)
-                // BUG-3 FIX: request focus so TV remote / keyboard / gamepad events
-                // are delivered to the WebView immediately on cold start.
-                wv.requestFocus()
+                if (webViewContainer.indexOfChild(wv) == -1) webViewContainer.addView(wv)
             }
 
             updateGroupsUI()
             refreshTabsRecycler()
 
             val activeTabUrl = currentGroup?.tabs?.find { it.id == activeTabId }?.url
-            if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay(immediate = true)
+            if (isHomeUrl(activeTabUrl) && intentUrl.isNullOrEmpty()) showHomeOverlay()
             else hideNativeOverlays(immediate = true)
 
             if (!intentUrl.isNullOrEmpty()) openNewTab(intentUrl)
@@ -1352,10 +1023,6 @@ private fun savePersistentTabs() {
         }
         createNewGroup("Default", if (!intentUrl.isNullOrEmpty()) intentUrl else HOME_URL)
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  إدارة المجموعات والتبويبات
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun updateGroupsUI() {
         tabGroupsContainer?.removeAllViews()
@@ -1399,25 +1066,15 @@ private fun savePersistentTabs() {
                                     Toast.makeText(context, "Cannot delete the last group", Toast.LENGTH_SHORT).show()
                                     return@showModernPopup
                                 }
-                                val wasActiveGroup = activeGroupId == group.id
                                 group.tabs.forEach { t ->
                                     ioExecutor.execute { File(cacheDir, "thumb_${t.id}.webp").delete() }
                                     webViews[t.id]?.destroy()
                                     webViews.remove(t.id)
                                 }
                                 tabGroups.remove(group)
-
-                                if (wasActiveGroup) {
-                                    // BUG-H FIX: previously only activeGroupId/activeTabId
-                                    // were updated here. The just-destroyed WebView stayed
-                                    // attached as the visible child of webViewContainer —
-                                    // a frozen screen, and any later goBack()/loadUrl() on it
-                                    // throws "WebView cannot be used after destroy()".
-                                    // switchToTab() does the full job: creates/attaches the
-                                    // new tab's WebView and refreshes the whole UI.
+                                if (activeGroupId == group.id) {
                                     activeGroupId = tabGroups.first().id
-                                    val newActiveTab = currentGroup?.tabs?.firstOrNull()
-                                    if (newActiveTab != null) switchToTab(newActiveTab) else openNewTab(HOME_URL)
+                                    activeTabId   = currentGroup?.tabs?.firstOrNull()?.id ?: 0
                                 }
                                 sanitizeActiveTabSelection()
                                 updateGroupsUI(); refreshTabsRecycler(); savePersistentTabs()
@@ -1437,7 +1094,6 @@ private fun savePersistentTabs() {
         updateGroupsUI()
     }
 
-    // FIX #6 — استخدام DiffUtil عبر submitUpdate في TabAdapter
     private fun refreshTabsRecycler() {
         sanitizeActiveTabSelection()
         val newTabs = currentGroup?.tabs?.toList() ?: emptyList()
@@ -1471,8 +1127,8 @@ private fun savePersistentTabs() {
             currentGroup?.tabs?.add(newTab)
 
             val wv = ensureWebViewForTab(newTab)
-            if (wv.geckoView.parent == null && webViewContainer.childCount == 0) {
-                webViewContainer.addView(wv.geckoView)
+            if (wv.parent == null && webViewContainer.childCount == 0) {
+                webViewContainer.addView(wv)
             }
             switchToTab(newTab)
             refreshTabsRecycler()
@@ -1487,20 +1143,13 @@ private fun savePersistentTabs() {
         val shouldAnimateOverlay = tabsOverlay.visibility == View.VISIBLE
 
         val executeSwitch = {
-            val previousWebView = currentWebView
             val targetWebView = ensureWebViewForTab(tab)
             activeTabId = tab.id
             keepCursorAlive()
 
-            // ⚠️ يُغلق فجوة setActive المكتشفة بالمراجعة الرابعة: التبويب
-            // المغادَر يتوقف عن استهلاك موارد الخلفية، والتبويب الجديد
-            // يُفعَّل.
-            if (previousWebView !== targetWebView) previousWebView?.setActive(false)
-            targetWebView.setActive(true)
-
             webViewContainer.removeAllViews()
-            webViewContainer.addView(targetWebView.geckoView)
-            targetWebView.requestFocus()   // keyboard / TV-remote / gamepad focus
+            webViewContainer.addView(targetWebView)
+            targetWebView.requestFocus()
             if (::inputController.isInitialized) inputController.stopScrollLoop()
             updateUIForCurrentWebView(targetWebView)
 
@@ -1529,7 +1178,6 @@ private fun savePersistentTabs() {
         }
     }
 
-    // FIX #6 — حذف notifyItemRemoved اليدوي، نستخدم refreshTabsRecycler مع DiffUtil
     private fun closeTab(tab: TabState) {
         keepCursorAlive()
         val group = currentGroup ?: return
@@ -1548,11 +1196,13 @@ private fun savePersistentTabs() {
         fun destroyClosedTabWebView() {
             closingWebView?.let { wv ->
                 runCatching {
-                    if (webViewContainer.indexOfChild(wv.geckoView) >= 0) {
-                        webViewContainer.removeView(wv.geckoView)
+                    if (webViewContainer.indexOfChild(wv) >= 0) {
+                        webViewContainer.removeView(wv)
                     }
                 }
                 runCatching { wv.stopLoading() }
+                runCatching { wv.clearHistory() }
+                runCatching { wv.removeAllViews() }
                 runCatching { wv.destroy() }
             }
         }
@@ -1572,24 +1222,20 @@ private fun savePersistentTabs() {
         } else {
             destroyClosedTabWebView()
             sanitizeActiveTabSelection()
-            refreshTabsRecycler()  // DiffUtil يتولى الـ animation
+            refreshTabsRecycler()
             savePersistentTabs()
         }
     }
 
-    // FIX #11 — LRU eviction: لا نحتفظ بأكثر من MAX_LIVE_WEBVIEWS في الذاكرة
-    private fun ensureWebViewForTab(tab: TabState): GeckoTabSession {
+    private fun ensureWebViewForTab(tab: TabState, restoreState: Bundle? = null): WebView {
         webViews[tab.id]?.let { return it }
 
-        // طرد الجلسة الأقل استخداماً إذا تجاوزنا الحد الأقصى
         if (webViews.size >= MAX_LIVE_WEBVIEWS) {
             val evictId = webViews.keys.firstOrNull { it != activeTabId }
             if (evictId != null) {
-                webViews[evictId]?.let { session ->
-                    if (webViewContainer.indexOfChild(session.geckoView) >= 0) {
-                        webViewContainer.removeView(session.geckoView)
-                    }
-                    session.destroy()
+                webViews[evictId]?.let { wv ->
+                    if (webViewContainer.indexOfChild(wv) >= 0) webViewContainer.removeView(wv)
+                    wv.destroy()
                 }
                 webViews.remove(evictId)
             }
@@ -1597,28 +1243,8 @@ private fun savePersistentTabs() {
 
         val wv = webViewFactory.create(tab.id)
         webViews[tab.id] = wv
-        // ✅ إصلاح جذري إضافي: تعطيل الجلسة فوراً عند إنشائها كافتراضي آمن
-        // — لا نثق بالحالة الافتراضية الداخلية غير الموثَّقة لـGeckoView.
-        // المستدعي (switchToTab أو مسارات الاستعادة الباردة) هو من يُفعِّلها
-        // صراحةً فقط عندما تصبح التبويب المعروض فعلياً على الشاشة.
-        wv.setActive(false)
-        // ⚠️ فجوة مُغلقة: نستعيد تاريخ التصفح/موضع التمرير/بيانات النماذج من
-        // sessionStateJson المحفوظ (يُحدَّث تلقائياً — انظر GeckoTabSession
-        // وGeckoSessionDelegates.onSessionStateChange). هذا يستعيد فعلياً زر
-        // "الرجوع" داخل التبويب بعد إعادة إنشاء العملية، وليس فقط الرابط
-        // الحالي كما كان الحال في المرحلة 2.
-        val savedStateJson = tab.sessionStateJson
-        if (savedStateJson != null) {
-            val restored = runCatching {
-                org.mozilla.geckoview.GeckoSession.SessionState.fromString(savedStateJson)
-            }.getOrNull()
-            if (restored != null) {
-                wv.session.restoreState(restored)
-            } else if (!isHomeUrl(tab.url)) {
-                wv.loadUrl(tab.url)
-            } else {
-                wv.loadUrl(HOME_URL)
-            }
+        if (restoreState != null) {
+            runCatching { wv.restoreState(restoreState) }
         } else if (!isHomeUrl(tab.url)) {
             wv.loadUrl(tab.url)
         } else {
@@ -1632,7 +1258,7 @@ private fun savePersistentTabs() {
         tabCount.text = totalTabs.toString()
     }
 
-    private fun updateUIForCurrentWebView(wv: GeckoTabSession) {
+    private fun updateUIForCurrentWebView(wv: WebView) {
         keepCursorAlive()
         val url = wv.url ?: HOME_URL
         textUrl.setText(if (isHomeUrl(url)) "" else url)
@@ -1641,13 +1267,9 @@ private fun savePersistentTabs() {
         progressBar.visibility = if (wv.progress < 100) View.VISIBLE else View.INVISIBLE
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  التقاط صور مصغرة للتبويبات
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun captureAndStoreThumbnail(onComplete: (() -> Unit)? = null) {
         val wv = currentWebView
-        if (wv == null || wv.geckoView.width <= 0 || wv.geckoView.height <= 0 || !wv.geckoView.isAttachedToWindow) {
+        if (wv == null || wv.width <= 0 || wv.height <= 0 || !wv.isAttachedToWindow) {
             currentGroup?.tabs?.find { it.id == activeTabId }?.let {
                 if (isHomeUrl(it.url)) {
                     it.hasThumbnail = true
@@ -1667,61 +1289,40 @@ private fun savePersistentTabs() {
             onComplete?.invoke(); return
         }
 
-        val homeLike = isHomeUrl(currentUrl)
-        if (homeLike) {
-            val bitmap = getHomePreviewBitmap()
+        try {
+            val homeLike = isHomeUrl(currentUrl)
+            val bitmap   = if (homeLike) {
+                getHomePreviewBitmap()
+            } else {
+                val scale  = 0.3f
+                val w      = maxOf(1, (wv.width * scale).toInt())
+                val h      = maxOf(1, (wv.height * scale).toInt())
+                val bmp    = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
+                val canvas = Canvas(bmp)
+                canvas.scale(scale, scale)
+                canvas.translate(-wv.scrollX.toFloat(), -wv.scrollY.toFloat())
+                runCatching { wv.draw(canvas) }
+                bmp
+            }
+
             tabRef?.let {
-                it.hasThumbnail = true
-                it.thumbnailUrl = currentUrl
-                it.ramThumbnail = bitmap
+                it.hasThumbnail  = true
+                it.thumbnailUrl  = currentUrl
+                it.ramThumbnail  = bitmap
             }
             onComplete?.invoke()
+
             ioExecutor.execute {
                 try {
-                    FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out) }
+                    FileOutputStream(file).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out)
+                    }
                 } catch (e: Exception) { e.printStackTrace() }
             }
-            return
-        }
-
-        // BUG-taste note: capturePixels() is async — onComplete now fires from
-        // inside this callback instead of synchronously, which is why this
-        // function already took a callback parameter to begin with.
-        wv.capturePixels { fullBitmap ->
-            try {
-                val bitmap = if (fullBitmap != null) {
-                    val scale = 0.3f
-                    val w = maxOf(1, (fullBitmap.width * scale).toInt())
-                    val h = maxOf(1, (fullBitmap.height * scale).toInt())
-                    Bitmap.createScaledBitmap(fullBitmap, w, h, true)
-                } else {
-                    null
-                }
-
-                if (bitmap != null) {
-                    tabRef?.let {
-                        it.hasThumbnail = true
-                        it.thumbnailUrl = currentUrl
-                        it.ramThumbnail = bitmap
-                    }
-                    ioExecutor.execute {
-                        try {
-                            FileOutputStream(file).use { out ->
-                                bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out)
-                            }
-                        } catch (e: Exception) { e.printStackTrace() }
-                    }
-                }
-                onComplete?.invoke()
-            } catch (e: Exception) {
-                onComplete?.invoke()
-            }
+        } catch (e: Exception) {
+            onComplete?.invoke()
         }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  إنشاء WebView جديد مع جميع الإعدادات والمستمعين
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun setFullscreen(fullscreen: Boolean) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -1744,44 +1345,14 @@ private fun savePersistentTabs() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  مستمعات الأزرار
-    // ─────────────────────────────────────────────────────────────────────────
-
     @SuppressLint("ClickableViewAccessibility")
     private fun setupListeners() {
-        // ✅ تحسين دفاعي متعلق بمشكلة "الصفحة تنعاد عند التمرير": هذا
-        // الشرط يقرر هل يُسمح بسحب-للتحديث بالاعتماد على scrollY المُحدَّث
-        // فقط عبر GeckoSession.ScrollDelegate.onScrollChanged. لو هذا
-        // الاستدعاء يتأخر أو نادر، scrollY يبقى 0 (قيمته الافتراضية) رغم
-        // أن المستخدم فعلياً بمنتصف صفحة طويلة — فيُسمَح بسحب-للتحديث
-        // خطأً أثناء حركة تمرير عادية، وتُعاد الصفحة بلا قصد. القاعدة
-        // الآن: نفترض "لسا في وسط الصفحة" (نمنع السحب) افتراضياً، ولا نسمح
-        // به إلا بعد تأكيد فعلي واحد على الأقل بوصول scrollY=0 من الجلسة
-        // الحالية تحديداً.
-        swipeRefresh.setOnChildScrollUpCallback { _, _ ->
-            val tab = currentWebView
-            tab == null || !tab.hasConfirmedScrollPosition || tab.scrollY > 0
-        }
+        swipeRefresh.setOnChildScrollUpCallback { _, _ -> (currentWebView?.scrollY ?: 0) > 0 }
         swipeRefresh.setOnRefreshListener { currentWebView?.reload() }
 
-        textUrl.setOnEditorActionListener { _, _, _ ->
-            // textUrl is now display-only; typing happens inside the search overlay.
-            // If somehow an action fires here, open the overlay.
-            showSearchOverlay(textUrl.text.toString().trim())
-            true
-        }
-
-        // textUrl is display-only for typing; tapping/D-pad focusing it opens
-        // the full-screen search overlay pre-filled with the current URL.
-        // isFocusableInTouchMode=false: touch triggers onClick, not focus.
-        // isFocusable=true: TV D-pad can land here and gain focus → overlay.
-        textUrl.isFocusableInTouchMode = false
-        textUrl.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus) showSearchOverlay(textUrl.text.toString().trim())
-        }
-        textUrl.setOnClickListener {
-            showSearchOverlay(textUrl.text.toString().trim())
+        textUrl.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId != EditorInfo.IME_ACTION_GO) return@setOnEditorActionListener false
+            navigateTo(textUrl.text.toString().trim()); hideKeyboard(); true
         }
 
         textUrl.setOnLongClickListener {
@@ -1803,9 +1374,9 @@ private fun savePersistentTabs() {
             true
         }
 
-        findViewById<View>(R.id.btnBackArea).setOnClickListener    { currentWebView?.let { if (it.canGoBack)    it.goBack()    } }
-        findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward) it.goForward() } }
-        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { goHome() }
+        findViewById<View>(R.id.btnBackArea).setOnClickListener    { currentWebView?.let { if (it.canGoBack())    it.goBack()    } }
+        findViewById<View>(R.id.btnForwardArea).setOnClickListener { currentWebView?.let { if (it.canGoForward()) it.goForward() } }
+        findViewById<View>(R.id.btnHomeArea).setOnClickListener    { showHomeOverlay() }
 
         findViewById<View>(R.id.btnTabsArea).setOnClickListener {
             if (tabsOverlay.visibility == View.VISIBLE) {
@@ -1829,14 +1400,13 @@ private fun savePersistentTabs() {
 
         findViewById<View>(R.id.btnMenuArea).setOnClickListener { showMenuSheet() }
 
-        // FIX #7 — إزالة buildNativeOverlays() من هنا وتعويضها بـ dirty flag
         btnBookmark.setOnClickListener {
             val url = currentWebView?.url ?: return@setOnClickListener
             if (isHomeUrl(url)) return@setOnClickListener
             val added = bookmarkRepository.toggleBookmark(currentWebView?.title ?: "Bookmark", url)
             updateBookmarkIcon(url)
-            homeOverlayDirty = true       // FIX #7 — سيُعيد البناء عند الظهور فقط
-            invalidateHomePreviewCache()  // FIX #4 — إبطال cache الـ preview
+            homeOverlayDirty = true
+            invalidateHomePreviewCache()
             Toast.makeText(this, if (added) "Bookmarked" else "Removed", Toast.LENGTH_SHORT).show()
         }
 
@@ -1858,10 +1428,6 @@ private fun savePersistentTabs() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  التنقل والبحث
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun navigateTo(input: String) {
         val trimmed = input.trim()
         val finalUrl = when {
@@ -1873,25 +1439,11 @@ private fun savePersistentTabs() {
         loadUrlInstantly(finalUrl)
     }
 
-    /**
-     * BUG-Z FIX: single source of truth for "go home". Previously
-     * showHomeOverlay() was called directly from btnHomeArea and the
-     * gamepad/remote Home shortcut WITHOUT navigating the underlying
-     * WebView — the overlay appeared, but the old page stayed loaded
-     * underneath and reappeared unchanged on Back (and the tab's
-     * title/thumbnail never updated to reflect "home"). Only
-     * loadUrlInstantly's home branch paired the two correctly; this makes
-     * that the one place that defines what "home" actually means.
-     */
-    private fun goHome() {
-        showHomeOverlay()
-        currentWebView?.loadUrl(HOME_URL)
-        textUrl.setText("")
-    }
-
     private fun loadUrlInstantly(url: String) {
         if (isHomeUrl(url)) {
-            goHome()
+            showHomeOverlay()
+            currentWebView?.loadUrl(HOME_URL)
+            textUrl.setText("")
             return
         }
         setTopBarVisible(true)
@@ -1901,15 +1453,6 @@ private fun savePersistentTabs() {
         progressBar.visibility = View.VISIBLE
         currentWebView?.loadUrl(url)
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  قوائم منبثقة حديثة
-    // ─────────────────────────────────────────────────────────────────────────
-
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  القائمة الرئيسية (القائمة السفلية)
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun showMenuSheet() {
         keepCursorAlive()
@@ -1921,28 +1464,15 @@ private fun savePersistentTabs() {
             cachedMenuSheetView = layoutInflater.inflate(R.layout.layout_main_menu, null)
             cachedMenuSheet?.setContentView(cachedMenuSheetView!!)
 
-            // TV FIX: BottomSheetBehavior defaults to STATE_COLLAPSED, showing
-            // only peekHeight (~half the sheet) until the user drags it open.
-            // That drag gesture doesn't exist on a D-pad/remote — there is no
-            // touch input — so on TV the menu was permanently stuck showing
-            // only its first quarter with no way to reach the rest. Force it
-            // fully expanded immediately; gated to TV only so phone behavior
-            // (which nobody complained about) is untouched.
-            if (isTV) {
-                (cachedMenuSheetView!!.parent as? View)?.let { sheetInternal ->
-                    BottomSheetBehavior.from(sheetInternal).apply {
-                        state = BottomSheetBehavior.STATE_EXPANDED
-                        skipCollapsed = true
-                    }
-                }
-            }
-
             cachedMenuSheetView?.findViewById<View>(R.id.menuNightMode)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
-                // ⚠️ يستخدم الآن مسار DOM آمن من CSP (GeckoExtensionBridge.
-                // toggleNightMode) بدل eval عام — انظر التوضيح الحرج بمراجعة
-                // عميقة خامسة في content.js.
-                currentWebView?.let { GeckoExtensionBridge.toggleNightMode(it) }
+                currentWebView?.evaluateJavascript(
+                    "(function(){var el=document.getElementById('__cf_night');" +
+                    "if(el){el.remove();}else{var s=document.createElement('style');" +
+                    "s.id='__cf_night';s.textContent='html{filter:invert(1) hue-rotate(180deg)!important}" +
+                    "img,video,canvas{filter:invert(1) hue-rotate(180deg)!important}';" +
+                    "document.head.appendChild(s);}})()", null
+                )
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuBookmarks)?.setOnClickListener {
                 cachedMenuSheet?.dismiss(); BrowserDialogHelpers.showBookmarksDialog(
@@ -1966,26 +1496,15 @@ private fun savePersistentTabs() {
             cachedMenuSheetView?.findViewById<View>(R.id.menuFindInPage)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 findBar.visibility = View.VISIBLE
-                currentWebView?.setFindListener { current, total ->
+                currentWebView?.setFindListener { ord, total, _ ->
                     findViewById<TextView>(R.id.findMatches).text =
-                        if (total > 0) "${current + 1}/$total" else "0/0"
-                }
-                // BUG-O FIX: focus + show keyboard immediately, matching the
-                // behaviour of the keyboard/gamepad "find" shortcut
-                // (InputController.toggleFind) — previously this menu entry
-                // left the bar visible but required an extra manual tap.
-                val fi = findViewById<EditText>(R.id.findInput)
-                fi.requestFocus()
-                fi.post {
-                    (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                        .showSoftInput(fi, InputMethodManager.SHOW_IMPLICIT)
+                        if (total > 0) "${ord + 1}/$total" else "0/0"
                 }
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuDesktopMode)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 prefsManager.desktopMode = !prefsManager.desktopMode
-                webViews.values.forEach { it.setDesktopMode(prefsManager.desktopMode) }
-                // FIX #12 — حذف clearCache(true) الذي كان يمسح cache كل المواقع
+                webViews.values.forEach { WebViewSettingsHelper.applyUserAgentToWebView(this, it, prefsManager.desktopMode) }
                 currentWebView?.reload()
             }
             cachedMenuSheetView?.findViewById<View>(R.id.menuSettings)?.setOnClickListener {
@@ -2001,7 +1520,6 @@ private fun savePersistentTabs() {
                     .show()
             }
 
-            // ── Menu page tab chips ──────────────────────────────────────
             cachedMenuSheetView?.findViewById<View>(R.id.menuTabTools)?.setOnClickListener {
                 activateMenuTab(isTools = true)
             }
@@ -2009,7 +1527,6 @@ private fun savePersistentTabs() {
                 activateMenuTab(isTools = false)
             }
 
-            // ── Downloads mini page: open full activity ──────────────────
             cachedMenuSheetView?.findViewById<View>(R.id.menuDlOpenPage)?.setOnClickListener {
                 cachedMenuSheet?.dismiss()
                 startActivity(Intent(this, DownloadsActivity::class.java))
@@ -2017,7 +1534,6 @@ private fun savePersistentTabs() {
             }
         }
 
-        // Always reset to Tools tab on open
         activateMenuTab(isTools = true)
 
         val desktopLabel = cachedMenuSheetView?.findViewById<TextView>(R.id.menuDesktopModeLabel)
@@ -2031,10 +1547,6 @@ private fun savePersistentTabs() {
         updateMenuConsoleState()
         cachedMenuSheet?.show()
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Menu page switching
-    // ─────────────────────────────────────────────────────────────────────────
 
     private fun activateMenuTab(isTools: Boolean) {
         val v = cachedMenuSheetView ?: return
@@ -2094,7 +1606,6 @@ private fun savePersistentTabs() {
             return
         }
 
-        // Show last 4 downloads, newest first
         items.reversed().take(4).forEach { item ->
             listContainer.addView(buildMenuDlRow(item))
         }
@@ -2112,7 +1623,6 @@ private fun savePersistentTabs() {
             ).apply { bottomMargin = menuDp(2) }
         }
 
-        // Coloured state dot
         val dot = View(this).apply {
             background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -2123,7 +1633,6 @@ private fun savePersistentTabs() {
             }
         }
 
-        // Text column: filename + status
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -2181,24 +1690,13 @@ private fun savePersistentTabs() {
         else               -> "${"%.2f".format(b / 1_073_741_824.0)} GB"
     }
 
-
-
-
     private fun clearData() {
-        // BUG (migration): android.webkit.WebStorage/CookieManager operate on
-        // the SYSTEM WebView's storage — GeckoView keeps its own completely
-        // separate cookie jar and cache via GeckoRuntime.storageController.
-        // Calling only the old APIs here would make "Clear Data" a no-op that
-        // silently leaves every cookie and cached asset behind post-migration.
-        // ✅ تأكّد StorageController.ClearFlags.ALL فعلياً من توثيق Mozilla
-        // الرسمي (index-all.html: "ALL - Static variable in class
-        // org.mozilla.geckoview.StorageController.ClearFlags").
-        runCatching {
-            GeckoRuntimeManager.get(this).storageController
-                .clearData(org.mozilla.geckoview.StorageController.ClearFlags.ALL)
-        }
+        WebStorage.getInstance().deleteAllData()
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+        webViews.values.forEach { it.clearCache(true); it.clearHistory() }
         historyRepository.clearHistory()
-        invalidateHomePreviewCache()  // FIX #4 — أبطل الـ cache عند مسح البيانات
+        invalidateHomePreviewCache()
 
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .remove("SAVED_GROUPS").remove("ACTIVE_GROUP")
@@ -2214,21 +1712,10 @@ private fun savePersistentTabs() {
         Toast.makeText(this, "Data Cleared", Toast.LENGTH_SHORT).show()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  إعدادات User-Agent ووضع سطح المكتب
-    // ─────────────────────────────────────────────────────────────────────────
-
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  تحديث أيقونة محرك البحث والعلامة المرجعية
-    // ─────────────────────────────────────────────────────────────────────────
-
-    // FIX #3 — يُعيد resolve مرجع الأيقونة من الـ View الحي عبر tag
     private fun updateSearchEngineIcon() {
         val res = currentSearchEngineIconRes()
         imgSearchEngine.setImageResource(res)
         imgSearchEngine.colorFilter = null
-        // دائماً نحل المرجع من الـ hierarchy الحالي لتجنب المرجع الصوري
         val liveIcon = nativeHomeOverlay?.findViewWithTag<View>("home_search_engine_icon") as? ImageView
         if (liveIcon != null) homeSearchEngineIcon = liveIcon
         homeSearchEngineIcon?.setImageResource(res)
@@ -2240,10 +1727,6 @@ private fun savePersistentTabs() {
             if (!isHomeUrl(url) && prefsManager.isBookmarked(url)) 1.0f else 0.4f
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  أدوات مساعدة
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun hideKeyboard() {
         val token = currentFocus?.windowToken ?: textUrl.windowToken
         if (token != null) {
@@ -2252,241 +1735,12 @@ private fun savePersistentTabs() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Full-Screen Search Overlay
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Build the full-screen search overlay once, add it to the window's
-     * content view (above everything else) and store the reference.
-     *
-     * Called lazily the first time showSearchOverlay() runs so the
-     * root ConstraintLayout is already attached and measured.
-     */
-    private fun buildSearchOverlay() {
-        if (searchOverlayContainer != null) return
-        val dp  = resources.displayMetrics.density
-        fun px(r: Int) = resources.getDimensionPixelSize(r)
-        val ctx = this
-
-        // ── RecyclerView for suggestions ─────────────────────────────────
-        suggestionsRecycler = RecyclerView(ctx).apply {
-            layoutManager = LinearLayoutManager(ctx)
-            adapter       = suggestionsAdapter
-            itemAnimator  = null
-            overScrollMode = View.OVER_SCROLL_NEVER
-            // TV: the RecyclerView itself must NOT be focusable.
-            // D-pad focus goes directly to individual item rows (isFocusable=true
-            // in SuggestionsAdapter). If the RecyclerView itself is focusable,
-            // D-pad stops here and never enters the list.
-            isFocusable = false
-            descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
-        }
-
-        // Wire TV "UP on first row → back to search bar" callback now that
-        // overlaySearchInput will exist by the time the callback fires.
-        suggestionsAdapter.onBackToSearch = { overlaySearchInput.requestFocus() }
-
-        // ── Header row — height/sizes from dimens.xml (TV gets larger values) ──
-        val header = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity     = Gravity.CENTER_VERTICAL
-            setBackgroundColor(0xFF0D0D0D.toInt())
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                px(R.dimen.search_overlay_header)
-            )
-        }
-
-        val btnBack = ImageView(ctx).apply {
-            setImageResource(R.drawable.ic_back_arrow)
-            imageTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
-            scaleType     = ImageView.ScaleType.CENTER
-            layoutParams  = LinearLayout.LayoutParams(
-                px(R.dimen.search_overlay_btn),
-                LinearLayout.LayoutParams.MATCH_PARENT)
-            background    = ContextCompat.getDrawable(ctx, R.drawable.bottom_btn_ripple)
-            setOnClickListener { hideSearchOverlay() }
-        }
-
-        val searchIconInBar = ImageView(ctx).apply {
-            val sz = px(R.dimen.search_overlay_icon)
-            setImageResource(R.drawable.ic_search)
-            imageTintList = ColorStateList.valueOf(0xFF666666.toInt())
-            scaleType     = ImageView.ScaleType.CENTER_INSIDE
-            layoutParams  = LinearLayout.LayoutParams(sz, sz).also {
-                it.gravity = Gravity.CENTER_VERTICAL
-            }
-        }
-
-        overlaySearchInput = EditText(ctx).apply {
-            hint      = "Search or type URL"
-            setHintTextColor(0xFF555555.toInt())
-            setTextColor(0xFFFFFFFF.toInt())
-            textSize  = if (isTV) 18f else 16f
-            setSingleLine(true)
-            background = null
-            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH or
-                         android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
-            inputType  = android.text.InputType.TYPE_CLASS_TEXT or
-                         android.text.InputType.TYPE_TEXT_VARIATION_URI
-            layoutParams = LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f).also {
-                it.gravity    = Gravity.CENTER_VERTICAL
-                it.marginStart = (10 * dp).toInt()
-                it.marginEnd   = (4 * dp).toInt()
-            }
-            setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
-                    actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO) {
-                    val q = text.toString().trim()
-                    if (q.isNotEmpty()) { hideSearchOverlay(); navigateTo(q) }
-                    true
-                } else false
-            }
-            // TV: D-pad DOWN from the search bar moves focus to the first suggestion.
-            // Android's default traversal would land on the RecyclerView container
-            // (if focusable), never on the items. We do it explicitly instead.
-            setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_DOWN
-                    && keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                    && suggestionsAdapter.itemCount > 0) {
-                    suggestionsRecycler.getChildAt(0)?.requestFocus() ?: false
-                    true
-                } else false
-            }
-        }
-
-        overlayClearBtn = ImageView(ctx).apply {
-            setImageResource(R.drawable.ic_clear)
-            imageTintList = ColorStateList.valueOf(0xFF888888.toInt())
-            scaleType     = ImageView.ScaleType.CENTER
-            layoutParams  = LinearLayout.LayoutParams(
-                px(R.dimen.search_overlay_btn),
-                LinearLayout.LayoutParams.MATCH_PARENT)
-            background    = ContextCompat.getDrawable(ctx, R.drawable.bottom_btn_ripple)
-            visibility    = View.INVISIBLE
-            setOnClickListener {
-                overlaySearchInput.setText("")
-                overlaySearchInput.requestFocus()
-            }
-        }
-
-        header.addView(btnBack)
-        header.addView(searchIconInBar)
-        header.addView(overlaySearchInput)
-        header.addView(overlayClearBtn)
-
-        // ── Thin divider ─────────────────────────────────────────────────
-        val divider = View(ctx).apply {
-            setBackgroundColor(0xFF1C1C1C.toInt())
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, (1 * dp).toInt().coerceAtLeast(1)
-            )
-        }
-
-        // ── Content stack ────────────────────────────────────────────────
-        val vstack = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            addView(header)
-            addView(divider)
-            addView(suggestionsRecycler)
-        }
-
-        // ── Root container ───────────────────────────────────────────────
-        val container = FrameLayout(ctx).apply {
-            setBackgroundColor(0xFF000000.toInt())
-            visibility = View.GONE
-            addView(vstack)
-        }
-
-        // Add as the highest-z child of the Activity's root view
-        val rootContent = window.decorView
-            .findViewById<ViewGroup>(android.R.id.content)
-        rootContent.addView(container, ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ))
-        searchOverlayContainer = container
-
-        // ── TextWatcher: fetch suggestions while typing ──────────────────
-        overlaySearchInput.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {
-                overlayClearBtn.visibility =
-                    if (s.isNullOrEmpty()) View.INVISIBLE else View.VISIBLE
-            }
-            override fun afterTextChanged(s: android.text.Editable?) {
-                val query = s?.toString()?.trim() ?: ""
-                if (!prefsManager.suggestionsEnabled || query.length < 2) {
-                    suggestionsAdapter.items = emptyList(); return
-                }
-                val kind = resolveSearchEngineKind(prefsManager.searchEngine)
-                suggestionsManager.fetchDebounced(query, kind) { list ->
-                    suggestionsAdapter.items = list
-                }
-            }
-        })
-    }
-
-    /**
-     * Show the full-screen search overlay, optionally pre-filling with [prefill].
-     * The overlay slides up (40 dp) and fades in over 200 ms.
-     */
-    fun showSearchOverlay(prefill: String = "") {
-        buildSearchOverlay()
-        val container = searchOverlayContainer ?: return
-
-        // Cancel any in-progress hide animation before starting the show.
-        // Without this, the hide's withEndAction { visibility = GONE } fires
-        // AFTER we set visibility = VISIBLE, collapsing the overlay instantly.
-        container.animate().cancel()
-
-        container.visibility = View.VISIBLE
-        container.alpha      = 0f
-        container.translationY = resources.displayMetrics.density * 40f
-        container.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(200)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .start()
-
-        overlaySearchInput.setText(prefill)
-        overlaySearchInput.requestFocus()
-        overlaySearchInput.setSelection(prefill.length)
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-            .showSoftInput(overlaySearchInput, InputMethodManager.SHOW_IMPLICIT)
-    }
-
-    fun hideSearchOverlay() {
-        suggestionsManager.cancel()
-        if (::suggestionsAdapter.isInitialized) suggestionsAdapter.items = emptyList()
-        val container = searchOverlayContainer ?: return
-        if (container.visibility != View.VISIBLE) return
-        container.animate().cancel()
-        hideKeyboard()
-        container.animate()
-            .alpha(0f)
-            .translationY(resources.displayMetrics.density * 40f)
-            .setDuration(160)
-            .setInterpolator(android.view.animation.AccelerateInterpolator())
-            .withEndAction {
-                container.visibility = View.GONE
-                // TV: move focus to WebView so D-pad focus does NOT drift back to
-                // textUrl/searchInput (which would immediately re-open the overlay).
-                currentWebView?.requestFocus()
-            }
-            .start()
-    }
-
     private fun hideCustomView() {
         keepCursorAlive()
-        isFullscreenActive = false
+        customViewCallback?.onCustomViewHidden()
+        fullscreenContainer.visibility = View.GONE
+        webViewContainer.visibility    = View.VISIBLE
+        customView = null
         setFullscreen(false)
     }
 
@@ -2495,22 +1749,13 @@ private fun savePersistentTabs() {
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Download handling
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Called from BrowserWebViewFactory when WebView can't render a URL.
-     * Requests POST_NOTIFICATIONS on API 33+ (once), then fires the service.
-     */
     private fun handleDownloadRequest(
         url: String,
+        userAgent: String,
+        contentDisposition: String,
         mimeType: String,
-        contentLength: Long,
-        suggestedFilename: String?
+        contentLength: Long
     ) {
-        // Request notification permission on Android 13+ so completion
-        // notifications are visible. Downloads work either way.
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -2518,14 +1763,9 @@ private fun savePersistentTabs() {
             }
         }
 
-        val fileName = suggestedFilename?.takeIf { it.isNotBlank() }
-            ?: android.webkit.URLUtil.guessFileName(url, null, mimeType)
+        val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+        val cookies  = android.webkit.CookieManager.getInstance().getCookie(url) ?: ""
 
-        // ⚠️ فجوة مُغلقة: DownloadService لم يعد يحتاج كوكيز/UA مُستخرَجين
-        // يدوياً عبر android.webkit.CookieManager (الذي لا يرى كوكيز
-        // GeckoView إطلاقاً) — أصبح يجلب الملف عبر GeckoWebExecutor مباشرة،
-        // والذي يستخدم مخزن كوكيز GeckoView الحقيقي تلقائياً. انظر
-        // DownloadService.kt.
         androidx.core.content.ContextCompat.startForegroundService(
             this,
             Intent(this, DownloadService::class.java).apply {
@@ -2533,21 +1773,25 @@ private fun savePersistentTabs() {
                 putExtra(DownloadService.EXTRA_URL,      url)
                 putExtra(DownloadService.EXTRA_FILENAME, fileName)
                 putExtra(DownloadService.EXTRA_MIME,     mimeType)
+                putExtra(DownloadService.EXTRA_UA,       userAgent)
+                putExtra(DownloadService.EXTRA_COOKIES,  cookies)
             }
         )
 
         Toast.makeText(this, "Downloading: $fileName", Toast.LENGTH_SHORT).show()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Console (Eruda) — سكريبتات الحقن
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun toggleConsoleForCurrentPage() {
         val enable = !prefsManager.consoleEnabled
         prefsManager.consoleEnabled = enable
-        swipeRefresh.isEnabled = swipeRefreshAllowed()
-        currentWebView?.let { tab -> ConsoleToolsInjector.apply(tab, enable, "") }
+        currentWebView?.let { view ->
+            if (enable) {
+                view.evaluateJavascript(ConsoleScripts.initScript(), null)
+                view.evaluateJavascript(ConsoleScripts.touchHookScript(), null)
+            } else {
+                view.evaluateJavascript(ConsoleScripts.disableScript(), null)
+            }
+        }
         updateMenuConsoleState()
         Toast.makeText(this, if (enable) "Console enabled" else "Console disabled", Toast.LENGTH_SHORT).show()
     }
@@ -2560,14 +1804,24 @@ private fun savePersistentTabs() {
         }
     }
 
-    private fun applyConsoleTools(tab: GeckoTabSession) {
-        ConsoleToolsInjector.apply(tab, prefsManager.consoleEnabled, "")
+    private fun applyConsoleTools(view: WebView) {
+        if (prefsManager.consoleEnabled) {
+            view.evaluateJavascript(ConsoleScripts.initScript(), null)
+            view.evaluateJavascript(ConsoleScripts.touchHookScript(), null)
+        } else {
+            view.evaluateJavascript(ConsoleScripts.disableScript(), null)
+        }
     }
 
+    inner class SearchBridge {
+        @JavascriptInterface
+        fun navigate(input: String) { runOnUiThread { navigateTo(input) } }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Input Controller — TV remote · Gamepad · Keyboard · Mouse
-    // ─────────────────────────────────────────────────────────────────────────
+        @JavascriptInterface
+        fun setSwipeRefresh(enabled: Boolean) {
+            mainHandler.post { swipeRefresh.isEnabled = enabled }
+        }
+    }
 
     private lateinit var inputController: InputController
     private lateinit var cursorController: CursorController
@@ -2579,14 +1833,10 @@ private fun savePersistentTabs() {
         }
     }
 
-    /**
-     * Builds the InputController, wiring all browser actions via lambdas.
-     * Called once from onCreate() after initViews().
-     */
     private fun buildInputController(): InputController {
         return InputController(object : InputController.Handlers {
 
-            override fun getActiveSession(): GeckoTabSession? = currentWebView
+            override fun getWebView(): WebView? = currentWebView
 
             override fun isTopBarVisible() = topBar.visibility == View.VISIBLE
 
@@ -2599,14 +1849,14 @@ private fun savePersistentTabs() {
             override fun focusUrlBar() = showSearchTopBar()
 
             override fun navigateBack() {
-                currentWebView?.let { if (it.canGoBack) it.goBack() }
+                currentWebView?.let { if (it.canGoBack()) it.goBack() }
             }
 
             override fun navigateForward() {
-                currentWebView?.let { if (it.canGoForward) it.goForward() }
+                currentWebView?.let { if (it.canGoForward()) it.goForward() }
             }
 
-            override fun navigateHome() = goHome()
+            override fun navigateHome() = showHomeOverlay()
 
             override fun openNewTab() = this@MainActivity.openNewTab()
 
@@ -2634,9 +1884,9 @@ private fun savePersistentTabs() {
                     hideKeyboard()
                 } else {
                     findBar.visibility = View.VISIBLE
-                    currentWebView?.setFindListener { current, total ->
+                    currentWebView?.setFindListener { ord, total, _ ->
                         findViewById<TextView>(R.id.findMatches).text =
-                            if (total > 0) "${current + 1}/$total" else "0/0"
+                            if (total > 0) "${ord + 1}/$total" else "0/0"
                     }
                     val fi = findViewById<EditText>(R.id.findInput)
                     fi.requestFocus()
@@ -2671,7 +1921,6 @@ private fun savePersistentTabs() {
         })
     }
 
-    /** Cycle to the next tab in the active group (wraps around). */
     private fun nextTab() {
         keepCursorAlive()
         if (::inputController.isInitialized) inputController.stopScrollLoop()
@@ -2681,7 +1930,6 @@ private fun savePersistentTabs() {
         switchToTab(tabs[(idx + 1) % tabs.size])
     }
 
-    /** Cycle to the previous tab in the active group (wraps around). */
     private fun prevTab() {
         keepCursorAlive()
         if (::inputController.isInitialized) inputController.stopScrollLoop()
@@ -2691,30 +1939,13 @@ private fun savePersistentTabs() {
         switchToTab(tabs[(idx - 1 + tabs.size) % tabs.size])
     }
 
-    // ── dispatchKeyEvent ──────────────────────────────────────────────────────
-
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // BACK is always handled by onBackPressedDispatcher — never intercept it.
         if (event.keyCode == KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
 
         if (event.action == KeyEvent.ACTION_DOWN) {
             if (event.isFromSource(InputDevice.SOURCE_GAMEPAD) || event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_DPAD)) {
                 cursorArmed = true
             }
-
-            // When the search overlay is visible, ALL key events go directly to
-            // the focused view (EditText or suggestion row). InputController must
-            // not intercept them — DPAD_CENTER on a focused suggestion row must
-            // navigate to that suggestion, not call activateWebElement().
-            if (searchOverlayContainer?.visibility == View.VISIBLE) {
-                return super.dispatchKeyEvent(event)
-            }
-
-            // When an EditText (URL bar, find bar) owns focus, only intercept:
-            //   • Escape   → dismiss overlay
-            //   • Ctrl+*   → browser shortcuts still work while typing
-            //   • F5/F12   → function keys
-            // Everything else (typing, Enter, arrows inside the field) → super.
             val textFocused = currentFocus is EditText
             val isSpecialKey = event.isCtrlPressed
                             || event.keyCode == KeyEvent.KEYCODE_ESCAPE
@@ -2728,8 +1959,6 @@ private fun savePersistentTabs() {
 
         return super.dispatchKeyEvent(event)
     }
-
-    // ── dispatchGenericMotionEvent ────────────────────────────────────────────
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) {

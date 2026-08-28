@@ -5,52 +5,19 @@ id 'org.jetbrains.kotlin.android'
 
 android {
 namespace 'space.karrarnazim.ConsoleFlow'
-compileSdk 36
+compileSdk 35
 
 defaultConfig {
 applicationId "space.karrarnazim.ConsoleFlow"
-minSdk 26
-targetSdk 36
-versionCode 16
-versionName "3.0.0"
-// ✅ إصلاح استباقي: GeckoView ضخم جداً (مئات آلاف الدوال) — شبه مؤكد
-// سيتجاوز حد الـ64K method لملف dex واحد أثناء البناء بدون هذا.
-// minSdk 26 (≥21) يعني النظام يدعم multidex أصلياً وقت التشغيل، لكن
-// أداة D8 وقت البناء لا تزال تحتاج هذا العلم صراحةً.
-multiDexEnabled true
+minSdk 24
+targetSdk 35
+versionCode 14
+versionName "2.2.10"
 }
 
-// ✅ إصلاح جذري لمشكلة "حجم APK صار 500 ميجا": السبب المؤكَّد (لا تخمين)
-// هو أن GeckoView يحمل مكتبات native (‎.so) منفصلة لكل معمارية معالج
-// (arm64-v8a, armeabi-v7a, x86, x86_64) — أضخمها libxul.so وحده قد يتجاوز
-// 100+ ميجا *لكل معمارية*. الـAPK العادي (بلا splits) يحزم الأربع معماريات
-// كلها معاً في ملف واحد، رغم أن أي جهاز حقيقي يحتاج معمارية واحدة فقط منها.
-// splits.abi هو الحل الرسمي الموثَّق لهذا السيناريو تحديداً — ينتج APK
-// منفصل وأصغر بكثير لكل معمارية بدل ملف واحد ضخم يحوي كل شيء.
-splits {
-    abi {
-        enable true
-        reset()
-        include "arm64-v8a", "armeabi-v7a", "x86_64", "x86"
-        universalApk false
-    }
-}
-
-// كل APK ناتج عن splits يحتاج versionCode فريداً (رقم قياسي متفَق عليه لكل
-// معمارية) وإلا فآليات التحديث/التثبيت قد تلتبس بين النسخ. هذا هو الأسلوب
-// الموثَّق رسمياً من Google لهذا الغرض بالضبط.
-// ✅ إصلاح خطأ بناء حقيقي: 'ext.abiCodes' بلا تأهيل داخل closure متداخلة
-// (variant.outputs.each) لا يتحلّل لنفس 'ext' على مستوى المشروع — هذا سلوك
-// Groovy المعروف بدقّة تحليل الـclosure delegate. 'project.ext' الصريح هو
-// الحل الموثَّق لتفادي هذا الالتباس تحديداً.
-project.ext.abiCodes = ["armeabi-v7a": 1, "arm64-v8a": 2, "x86": 3, "x86_64": 4]
-android.applicationVariants.all { variant ->
-    variant.outputs.each { output ->
-        def abi = output.getFilter(com.android.build.OutputFile.ABI)
-        if (abi != null && project.ext.abiCodes.containsKey(abi)) {
-            output.versionCodeOverride = project.ext.abiCodes.get(abi) * 1000 + variant.versionCode
-        }
-    }
+dependenciesInfo {
+includeInApk = false
+includeInBundle = false
 }
 
 signingConfigs {
@@ -59,11 +26,6 @@ storeFile file(System.getenv("KEYSTORE_FILE") ?: "$rootDir/release.keystore")
 storePassword System.getenv("KEYSTORE_PASSWORD")
 keyAlias System.getenv("KEY_ALIAS")
 keyPassword System.getenv("KEY_PASSWORD")
-// V1 (JAR signing) is required for Android < 7.0 (API 24).
-// Without it, Android 5/6 shows "parse error" because V2-only APKs
-// cannot be verified on those devices.
-v1SigningEnabled true
-v2SigningEnabled true
 }
 }
 
@@ -74,50 +36,30 @@ minifyEnabled true
 proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
 }
 }
+
 compileOptions {
 sourceCompatibility JavaVersion.VERSION_17
 targetCompatibility JavaVersion.VERSION_17
 }
+
 kotlinOptions {
 jvmTarget = '17'
 }
+
 buildFeatures {
 viewBinding true
-// ✅ إصلاح خطأ تصريف حقيقي: توليد BuildConfig أصبح معطَّلاً افتراضياً منذ
-// AGP 8.0+ (تغيير افتراضي معروف) — بدونه، BuildConfig.DEBUG/VERSION_NAME
-// المستخدَمان في ConsoleFlowApplication.kt غير موجودين إطلاقاً.
-buildConfig true
 }
 }
-
-// ── مستودع Mozilla Maven (مطلوب لـ GeckoView) ──────────────────────────────
-// تمت إضافته في settings.gradle (dependencyResolutionManagement) بدل هنا —
-// FAIL_ON_PROJECT_REPOS يمنع أي repositories{} على مستوى الموديول.
 
 dependencies {
 implementation 'androidx.core:core-ktx:1.13.1'
 implementation 'androidx.appcompat:appcompat:1.7.0'
 implementation "androidx.core:core-splashscreen:1.0.1"
+implementation 'androidx.webkit:webkit:1.11.0'
 implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
 implementation 'com.google.android.material:material:1.12.0'
 implementation 'androidx.recyclerview:recyclerview:1.3.2'
 implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
-
-// ── نظام السجلات الاحترافي ────────────────────────────────────────────
-// Timber: المعيار الصناعي المؤكَّد بحثاً لواجهة تسجيل مرنة فوق
-// android.util.Log — يسمح بزرع "Tree" مخصَّص (انظر FileLoggingTree.kt)
-// يكتب لملف دوّار على القرص، بدل الاعتماد الكامل على logcat حي متصل بجهاز.
-implementation 'com.jakewharton.timber:timber:5.0.1'
-
-// ── GeckoView (محرك متصفح مستقل، Mozilla) ──────────────────────────────
-// حل محل androidx.webkit بالكامل — لم يعد هناك أي اعتماد على WebView
-// النظامي.
-// ✅ إصلاح خطأ بناء حقيقي: الرقم القديم (128.3.0) لم يكن موجوداً إطلاقاً في
-// مستودع Mozilla — سبّب فشل البناء الفعلي (رسالة الخطأ التي أرسلتها).
-// الرقم أدناه تحقّقت منه بجلب فعلي مباشر من mvnrepository.com/artifact/
-// org.mozilla.geckoview/geckoview وهو أحدث إصدار منشور فعلياً حتى تاريخه.
-// لو ظهر أحدث منه عند البناء، حدّثه من نفس الرابط.
-implementation "org.mozilla.geckoview:geckoview:150.0.20260511200624"
 }

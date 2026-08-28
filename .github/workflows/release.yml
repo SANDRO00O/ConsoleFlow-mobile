@@ -3,12 +3,6 @@ name: Build & Replace Release
 on:
   workflow_dispatch:
 
-# يمنع تشغيلين متزامنين لنفس سير العمل — إصدار (release) هو عملية تُنشئ/
-# تحذف tag فعلي على GitHub، وتشغيلان متوازيان قد يتصارعان على نفس الـtag.
-concurrency:
-  group: release-build
-  cancel-in-progress: false
-
 permissions:
   contents: write
 
@@ -16,7 +10,6 @@ jobs:
   build:
     name: Build Release APK and Replace Release
     runs-on: ubuntu-latest
-    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -27,75 +20,55 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: "17"
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
         with:
-          cache-read-only: false
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Read metadata
+      - name: Read Metadata
         id: metadata
         run: |
-          set -euo pipefail
-          name=$(jq -r '.release_name' builddata.json)
-          body=$(jq -r '.release_body' builddata.json)
-          pre=$(jq -r '.is_prerelease' builddata.json)
-          apk_name=$(jq -r '.apk_name' builddata.json)
-          tag=$(jq -r '.tag' builddata.json)
+          NAME=$(jq -r '.release_name' builddata.json)
+          BODY=$(jq -r '.release_body' builddata.json)
+          PRE=$(jq -r '.is_prerelease' builddata.json)
+          APK_NAME=$(jq -r '.apk_name' builddata.json)
+          TAG=$(jq -r '.tag' builddata.json)
 
-          # فشل مبكر وواضح لو أي حقل مطلوب فاضي أو مفقود، بدل اكتشاف الخطأ
-          # بعد 20 دقيقة من البناء عند خطوة الرفع.
-          for field_name in name apk_name tag; do
-            value="${!field_name}"
-            if [ -z "$value" ] || [ "$value" = "null" ]; then
-              echo "::error::builddata.json is missing a valid '$field_name' value"
-              exit 1
-            fi
-          done
+          echo "name=$NAME" >> $GITHUB_OUTPUT
 
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          {
-            echo "body<<EOF"
-            echo "$body"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-          echo "pre=$pre" >> "$GITHUB_OUTPUT"
-          echo "apk_custom_name=$apk_name" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "pre=$PRE" >> $GITHUB_OUTPUT
+          echo "apk_custom_name=$APK_NAME" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Delete existing release if it exists
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          tag="${{ steps.metadata.outputs.tag }}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release delete "$tag" -y
-          fi
-
-      # فشل مبكر وواضح لو أي سرّ توقيع ناقص، بدل فشل gradle بعد دقائق ببناء
-      # فعلي برسالة خطأ أقل وضوحاً.
-      - name: Verify signing secrets are present
-        run: |
-          missing=()
-          [ -z "${{ secrets.KEYSTORE_B64 }}" ] && missing+=("KEYSTORE_B64")
-          [ -z "${{ secrets.KEYSTORE_PASSWORD }}" ] && missing+=("KEYSTORE_PASSWORD")
-          [ -z "${{ secrets.KEY_ALIAS }}" ] && missing+=("KEY_ALIAS")
-          [ -z "${{ secrets.KEY_PASSWORD }}" ] && missing+=("KEY_PASSWORD")
-          if [ ${#missing[@]} -ne 0 ]; then
-            echo "::error::Missing required secrets: ${missing[*]}"
-            exit 1
+          TAG="${{ steps.metadata.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" -y
           fi
 
       - name: Restore keystore from secret
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
-        run: echo "$KEYSTORE_B64" | base64 --decode > release.keystore
+        run: |
+          echo "$KEYSTORE_B64" | base64 --decode > release.keystore
 
       - name: Build Release APK
         env:
@@ -103,36 +76,17 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          set -o pipefail
-          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-console.log
+        run: ./gradlew assembleRelease --no-daemon
 
-      # يحذف ملف الـkeystore فوراً بعد البناء، بنجاح أو فشل — لا يبقى ملف
-      # توقيع حسّاس على قرص الـrunner لحظة أطول من اللازم.
-      - name: Remove keystore file
-        if: always()
-        run: rm -f release.keystore
-
-      - name: Locate and rename APKs
+      - name: Locate and Rename APK
         id: apk
         run: |
-          set -euo pipefail
-          base_name="${{ steps.metadata.outputs.apk_custom_name }}"
-          base_name="${base_name%.apk}"
-          out_dir="app/build/outputs/apk/release"
-          found=0
-          # ✅ splits.abi ينتج APK منفصل لكل معمارية (بدل ملف واحد ضخم) —
-          # نرفعهم جميعاً للإصدار حتى يختار كل مستخدم النسخة المناسبة لجهازه.
-          while IFS= read -r -d '' apk_path; do
-            found=1
-            abi_suffix=$(basename "$apk_path" .apk | sed -E 's/.*-(arm64-v8a|armeabi-v7a|x86_64|x86)(-release)?(-unsigned)?$/\1/')
-            mv "$apk_path" "$out_dir/${base_name}-${abi_suffix}.apk"
-          done < <(find "$out_dir" -name "*.apk" -print0)
-          if [ "$found" -eq 0 ]; then
-            echo "::error::No release APK found under $out_dir"
-            exit 1
-          fi
-          echo "glob=$out_dir/${base_name}-*.apk" >> "$GITHUB_OUTPUT"
+          ORIGINAL_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          NEW_NAME="${{ steps.metadata.outputs.apk_custom_name }}"
+          NEW_PATH="app/build/outputs/apk/release/$NEW_NAME"
+
+          mv "$ORIGINAL_PATH" "$NEW_PATH"
+          echo "path=$NEW_PATH" >> $GITHUB_OUTPUT
 
       - name: Create new Release
         uses: softprops/action-gh-release@v2
@@ -141,17 +95,5 @@ jobs:
           name: ${{ steps.metadata.outputs.name }}
           prerelease: ${{ steps.metadata.outputs.pre }}
           body: ${{ steps.metadata.outputs.body }}
-          files: ${{ steps.apk.outputs.glob }}
+          files: ${{ steps.apk.outputs.path }}
           generate_release_notes: true
-
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-build-log
-          path: |
-            gradle-console.log
-            **/build/outputs/logs/**
-            **/build/reports/**
-          if-no-files-found: warn
-          retention-days: 7

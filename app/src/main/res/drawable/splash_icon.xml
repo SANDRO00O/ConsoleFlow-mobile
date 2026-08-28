@@ -5,12 +5,10 @@
     android:viewportWidth="512"
     android:viewportHeight="512">
 
-    <!-- Background -->
     <path
         android:fillColor="#000000"
         android:pathData="M0,0 L512,0 L512,512 L0,512 Z"/>
 
-    <!-- "C" letterform: large bold C shape -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="
@@ -26,7 +24,6 @@
           L380,162
           C358,144 325,130 280,130 Z"/>
 
-    <!-- White circle — the dot/o motif -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M370,220 A38,38 0 1 1 369.99,220 Z"/>

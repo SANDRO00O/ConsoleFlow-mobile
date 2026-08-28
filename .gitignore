@@ -1,0 +1,33 @@
+# Built application files
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Java/Kotlin class files
+*.class
+
+# Gradle
+.gradle/
+build/
+
+# Local configuration (SDK path — machine-specific, never commit)
+local.properties
+
+# Log files
+*.log
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.navigation/
+
+# Keystore files — never commit signing keys
+*.keystore
+*.jks
+release.keystore
+debug.keystore
+
+# macOS
+.DS_Store

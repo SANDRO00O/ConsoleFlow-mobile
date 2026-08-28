@@ -19,7 +19,6 @@
         <item name="android:colorForeground">#FFFFFF</item>
     </style>
 
-    <!-- Dark styled alert dialog matching app theme -->
     <style name="DarkDialog" parent="Theme.MaterialComponents.Dialog.Alert">
         <item name="android:colorBackground">#111111</item>
         <item name="android:textColorPrimary">#FFFFFF</item>
@@ -38,7 +37,6 @@
         <item name="android:textColor">#AAAAAA</item>
     </style>
 
-    <!-- Bottom sheet menu style -->
     <style name="AppBottomSheetDialogTheme" parent="Theme.MaterialComponents.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/AppBottomSheet</item>
         <item name="android:windowIsFloating">false</item>
@@ -56,7 +54,6 @@
         <item name="cornerSizeBottomLeft">0dp</item>
         <item name="cornerSizeBottomRight">0dp</item>
     </style>
-
 
     <style name="RoundedThumbnail" parent="">
         <item name="cornerFamily">rounded</item>

@@ -1,0 +1,77 @@
+name: "🐞 Bug Report"
+description: Report something that isn't working as expected.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the sections below — the more detail, the faster we can reproduce and fix it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you expect to happen instead?
+      placeholder: When I do X, Y happens instead of Z...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps so we can reproduce it ourselves.
+      placeholder: |
+        1. Open a new tab
+        2. Go to ...
+        3. Tap ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: device-type
+    attributes:
+      label: Device type
+      options:
+        - Phone
+        - Tablet
+        - Android TV
+        - Fire TV
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: android-version
+    attributes:
+      label: Android version
+      placeholder: e.g. Android 13
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: ConsoleFlow version
+      description: Found in Settings → About, or the APK filename.
+      placeholder: e.g. 2.2.10
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots (optional)
+      description: Drag and drop screenshots here, or paste any relevant Logcat output.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this hasn't been reported already.
+          required: true

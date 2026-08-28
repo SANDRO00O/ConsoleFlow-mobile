@@ -12,30 +12,15 @@ import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.WebView
 import android.widget.FrameLayout
 import kotlin.math.abs
 
-/**
- * CursorController — مؤشر افتراضي تحركه عصا التحكم اليسار.
- *
- * آلية العمل:
- *  1. InputController يُغذّيه بقيم المحور عبر updateStick(x, y).
- *  2. Choreographer.FrameCallback يُحدّث posX/posY مرة لكل VSYNC
- *     بمنحنى سرعة تربيعي: بطيء عند المركز، سريع عند الحافة.
- *  3. CursorView حجم ثابت، يُحرَّك بـ translationX/Y فقط —
- *     محتواه يُرسم مرة واحدة ويُركَّب على GPU بدون أي تكلفة CPU.
- *  4. performClick() يُرسل ACTION_DOWN + ACTION_UP حقيقيَّين عبر
- *     Activity.dispatchTouchEvent بإحداثيات المؤشر، فيصل الحدث
- *     لأي View أو WebView يقع تحت المؤشر تماماً كالنقر الحقيقي.
- *  5. CursorView يُعيد false من onTouchEvent فلا يحجب أي نقرة.
- *
- * يختفي تلقائياً بعد 3.5 ثانية من توقف العصا.
- */
 class CursorController(private val activity: Activity) {
 
     private val d      = activity.resources.displayMetrics.density
-    private val RADIUS = 12f * d                      // نصف قطر الدائرة بالبكسل
-    private val SIZE   = (RADIUS * 2f + 0.5f).toInt() // حجم الـ View بالبكسل
+    private val RADIUS = 12f * d
+    private val SIZE   = (RADIUS * 2f + 0.5f).toInt()
 
     val view = CursorView(activity)
 
@@ -47,7 +32,6 @@ class CursorController(private val activity: Activity) {
     private var screenW = 0f
     private var screenH = 0f
 
-    // قيم المحور الحالية (تُكتب وتُقرأ على Main thread فقط)
     private var axisX = 0f
     private var axisY = 0f
 
@@ -57,36 +41,16 @@ class CursorController(private val activity: Activity) {
     private val hideHandler = Handler(Looper.getMainLooper())
     private val hideTask    = Runnable { fadeOut() }
 
-    // ── دورة الحياة ───────────────────────────────────────────────────────
-
     fun attach() {
         val decor = activity.window.decorView as ViewGroup
         decor.addView(view, FrameLayout.LayoutParams(SIZE, SIZE))
-        // نُحدّد أبعاد الشاشة بعد انتهاء layout pass
-        decor.post { refreshScreenBounds(centerCursor = true) }
-    }
-
-    /**
-     * يُعاد قياس أبعاد الشاشة وتحديث حدود حركة المؤشر.
-     *
-     * BUG-Q FIX: MainActivity يُعلن configChanges لـ orientation/screenSize
-     * (لتجنّب إعادة إنشاء الـ Activity وفقدان حالة WebView عند الدوران)،
-     * لكن screenW/screenH كانا يُضبطان مرة واحدة فقط في attach() ولا
-     * يُحدَّثان أبداً بعد ذلك. نتيجة الدوران: المؤشر يبقى محصوراً بأبعاد
-     * الاتجاه القديم — قد يخرج فعلياً عن حدود الشاشة الجديدة أو يُحرَم من
-     * الوصول لمساحة الشاشة الجديدة. هذه الدالة تُستدعى من
-     * onConfigurationChanged في MainActivity.
-     */
-    fun refreshScreenBounds(centerCursor: Boolean = false) {
-        val decor = activity.window.decorView as? ViewGroup ?: return
-        val w = decor.width.toFloat()
-        val h = decor.height.toFloat()
-        if (w <= 0f || h <= 0f) return
-        screenW = w
-        screenH = h
-        posX = if (centerCursor) screenW / 2f else posX.coerceIn(RADIUS, screenW - RADIUS)
-        posY = if (centerCursor) screenH / 2f else posY.coerceIn(RADIUS, screenH - RADIUS)
-        applyPosition()
+        decor.post {
+            screenW = decor.width.toFloat()
+            screenH = decor.height.toFloat()
+            posX    = screenW / 2f
+            posY    = screenH / 2f
+            applyPosition()
+        }
     }
 
     fun detach() {
@@ -95,9 +59,6 @@ class CursorController(private val activity: Activity) {
         (activity.window.decorView as? ViewGroup)?.removeView(view)
     }
 
-    // ── واجهة المدخلات ────────────────────────────────────────────────────
-
-    /** يُستدعى من InputController بقيم عصا اليسار بعد معالجة dead zone. */
     fun updateStick(x: Float, y: Float) {
         axisX = x
         axisY = y
@@ -107,12 +68,9 @@ class CursorController(private val activity: Activity) {
         }
     }
 
-    /** يُرسل نقرة حقيقية على موضع المؤشر. يُعيد false إن كان المؤشر مخفياً. */
     fun performClick(): Boolean {
         if (!isVisible) return false
 
-        // نجعل المؤشر غير مرئي فقط أثناء إرسال النقرة حتى لا يلتقط
-        // هو نفسه اللمسة، ثم نعيده مباشرةً بعد الإرسال.
         hideHandler.removeCallbacks(hideTask)
         view.animate().cancel()
 
@@ -133,7 +91,6 @@ class CursorController(private val activity: Activity) {
         return handled
     }
 
-    /** يرسل نقرة نظامية مباشرة إلى العنصر الواقع تحت المؤشر. */
     private fun dispatchSystemTap(root: View, screenX: Float, screenY: Float): Boolean {
         val target = findTargetView(root, screenX, screenY) ?: return false
 
@@ -162,7 +119,6 @@ class CursorController(private val activity: Activity) {
         return downHandled || upHandled || target.performClick()
     }
 
-    /** يبحث عن أعمق View قابلة للتفاعل تحت إحداثيات الشاشة المعطاة. */
     private fun findTargetView(view: View, screenX: Float, screenY: Float): View? {
         if (view === this.view) return null
         if (view.visibility != View.VISIBLE || view.alpha <= 0.05f) return null
@@ -188,25 +144,21 @@ class CursorController(private val activity: Activity) {
     }
 
     private fun isTargetable(view: View): Boolean {
-        return view is org.mozilla.geckoview.GeckoView ||
+        return view is WebView ||
             view.isClickable ||
             view.isLongClickable ||
             view.hasOnClickListeners() ||
             view is android.widget.EditText
     }
 
-    /** ينعش المؤشر ويمنعه من الاختفاء عند تبديل التبويبات أو القوائم. */
     fun keepVisible() {
         revealCursor()
     }
 
-    /** مركز المؤشر الحالي على الشاشة، بوحدة البكسل. */
     fun screenPosition(): Pair<Float, Float> = posX to posY
 
     val isVisible: Boolean
         get() = view.visibility == View.VISIBLE && view.alpha > 0.05f
-
-    // ── حلقة Choreographer ────────────────────────────────────────────────
 
     private val frameCallback = Choreographer.FrameCallback {
         framePosted = false
@@ -223,22 +175,17 @@ class CursorController(private val activity: Activity) {
         }
     }
 
-    /** يُقدّم المؤشر خطوة واحدة بناءً على قيم العصا الحالية. */
     private fun advance() {
-        val maxPx = 20f * d   // أقصى سرعة بالبكسل/إطار عند قيمة ±1.0
-        // منحنى تربيعي: sign(v)·v²·maxPx
+        val maxPx = 20f * d
         posX = (posX + axisX * abs(axisX) * maxPx).coerceIn(RADIUS, screenW - RADIUS)
         posY = (posY + axisY * abs(axisY) * maxPx).coerceIn(RADIUS, screenH - RADIUS)
         applyPosition()
     }
 
-    /** يضع الـ View بحيث يكون مركز الدائرة عند (posX, posY). */
     private fun applyPosition() {
         view.translationX = posX - RADIUS
         view.translationY = posY - RADIUS
     }
-
-    // ── الظهور والاختفاء ──────────────────────────────────────────────────
 
     private fun revealCursor() {
         hideHandler.removeCallbacks(hideTask)
@@ -258,31 +205,22 @@ class CursorController(private val activity: Activity) {
             .start()
     }
 
-    // ── CursorView ────────────────────────────────────────────────────────
-    //
-    //  • حجم ثابت (SIZE × SIZE px).
-    //  • يُحرَّك بـ translationX/Y — لا invalidate() لكل إطار.
-    //  • onTouchEvent يُعيد false → النقرات تمر للـ Views التي تحته.
-
     inner class CursorView(ctx: Context) : View(ctx) {
         private val den = ctx.resources.displayMetrics.density
-        private val r   = 12f * den           // نصف قطر الدائرة
-        private val sw  = 2.2f * den          // سماكة البوردر
+        private val r   = 12f * den
+        private val sw  = 2.2f * den
 
-        // دائرة شفافة ببوردر أبيض
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color       = Color.WHITE
             style       = Paint.Style.STROKE
             strokeWidth = sw
         }
 
-        // نقطة مركز بيضاء للدقة في التوجيه
         private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(180, 255, 255, 255)
             style = Paint.Style.FILL
         }
 
-        // ومضة داخلية عند النقر
         private val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             style = Paint.Style.FILL
@@ -299,7 +237,6 @@ class CursorController(private val activity: Activity) {
             setLayerType(LAYER_TYPE_HARDWARE, null)
         }
 
-        /** ومضة بيضاء داخلية سريعة تؤكد النقر بصرياً. */
         fun animateClick() {
             flashAnim?.cancel()
             flashAnim = android.animation.ValueAnimator.ofInt(220, 0).apply {
@@ -324,23 +261,18 @@ class CursorController(private val activity: Activity) {
             val cy     = height / 2f
             val innerR = r - sw / 2f
 
-            // 1. ومضة داخلية (شفاف عادةً، أبيض لحظة النقر)
             if (flashAlpha > 0) {
                 flashPaint.alpha = flashAlpha
                 canvas.drawCircle(cx, cy, innerR, flashPaint)
             }
 
-            // 2. بوردر أبيض
             canvas.drawCircle(cx, cy, innerR, borderPaint)
 
-            // 3. نقطة مركز للدقة
             canvas.drawCircle(cx, cy, 2.4f * den, dotPaint)
         }
 
         override fun onTouchEvent(e: MotionEvent) = false
     }
-
-    // ── ثوابت ─────────────────────────────────────────────────────────────
 
     private companion object {
         const val HIDE_DELAY_MS = 3500L

@@ -3,13 +3,7 @@ name: Quick APK
 on:
   workflow_dispatch:
   push:
-    branches: ["**"]
-
-# يلغي أي تشغيل سابق لنفس الفرع لو دفعة جديدة وصلت أثناء البناء — يوفر
-# دقائق CI بدل تشغيل نسختين قديمة وجديدة بالتوازي بلا داعٍ.
-concurrency:
-  group: quick-apk-${{ github.ref }}
-  cancel-in-progress: true
+  pull_request:
 
 permissions:
   contents: read
@@ -18,7 +12,6 @@ jobs:
   build:
     name: Build quick APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -28,66 +21,28 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
-
-      # gradle/actions/setup-gradle هو البديل الرسمي الحديث لخطوات
-      # actions/cache اليدوية — يخزّن ~/.gradle/caches و~/.gradle/wrapper
-      # وحتى مخرجات build cache الخاصة بـGradle نفسه تلقائياً، ويُبطل
-      # الكاش بذكاء عند تغيّر ملفات build.gradle. بدون هذا، كل تشغيل كان
-      # سيُعيد تحميل GeckoView (100+ ميجا) من الصفر في كل مرة.
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
+          java-version: '17'
+          cache: gradle
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
       - name: Build debug APK
-        run: |
-          set -o pipefail
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-console.log
+        run: ./gradlew assembleDebug --no-daemon
 
-      - name: Locate and rename APKs
-        id: apk
+      - name: Rename APK
+        id: rename
         run: |
-          set -euo pipefail
-          mkdir -p apk-output
-          short_sha="${GITHUB_SHA::7}"
-          found=0
-          # ✅ splits.abi ينتج ملف APK منفصل لكل معمارية الآن (بدل ملف واحد
-          # ضخم يحوي الأربع معاً) — نجمعهم كلهم بدل انتقاء واحد عشوائياً.
-          while IFS= read -r -d '' apk_path; do
-            found=1
-            base_name=$(basename "$apk_path" .apk)
-            cp "$apk_path" "apk-output/ConsoleFlow-quick-${short_sha}-${base_name}.apk"
-          done < <(find app/build/outputs/apk/debug -name '*.apk' -print0)
-          if [ "$found" -eq 0 ]; then
-            echo "::error::No APK found under app/build/outputs/apk/debug"
-            exit 1
-          fi
+          APK_PATH=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)
+          SHORT_SHA="${GITHUB_SHA::7}"
+          NEW_NAME="ConsoleFlow-quick-${SHORT_SHA}.apk"
+          cp "$APK_PATH" "$NEW_NAME"
+          echo "apk_path=$NEW_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ConsoleFlow-quick-apk
-          path: apk-output/*.apk
+          path: ${{ steps.rename.outputs.apk_path }}
           if-no-files-found: error
           retention-days: 14
-
-      # ⚠️ يستبدل نسخة سابقة كانت ترفع فقط build/outputs/logs و
-      # build/reports — وهذان لا يحويان رسالة "BUILD FAILED" الفعلية،
-      # فقط تقارير جانبية (شجرة دمج المانيفست، تحذيرات deprecation).
-      # gradle-console.log أعلاه هو نص التيرمنال الحقيقي الذي يحوي سبب
-      # الفشل الفعلي — هذا اكتُشف بعد رفع سجل فشل حقيقي لم يحوِ السبب.
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: |
-            gradle-console.log
-            **/build/outputs/logs/**
-            **/build/reports/**
-          if-no-files-found: warn
-          retention-days: 7
