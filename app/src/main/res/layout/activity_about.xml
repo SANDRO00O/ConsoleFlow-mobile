@@ -6,6 +6,7 @@
     android:background="#000000">
 
     <LinearLayout
+        android:id="@+id/aboutTopBar"
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:gravity="center_vertical"
@@ -52,6 +53,7 @@
         android:background="#1A1A1A" />
 
     <ScrollView
+        android:id="@+id/aboutScroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:overScrollMode="never"

@@ -94,7 +94,7 @@ open class SettingsRepository(context: Context) {
             try {
                 val obj = bookmarks.optJSONObject(i) ?: JSONObject(bookmarks.getString(i))
                 list.add(Pair(obj.getString("title"), obj.getString("url")))
-            } catch (e: Exception) { }
+            } catch (e: Exception) { AppLogger.w("SettingsRepository", "Skipped a malformed bookmark entry", e) }
         }
         return list
     }
@@ -106,13 +106,16 @@ open class SettingsRepository(context: Context) {
             try {
                 val obj = history.optJSONObject(i) ?: JSONObject(history.getString(i))
                 list.add(Pair(obj.getString("title"), obj.getString("url")))
-            } catch (e: Exception) { }
+            } catch (e: Exception) { AppLogger.w("SettingsRepository", "Skipped a malformed history entry", e) }
         }
         return list
     }
 
     private fun getList(key: String): JSONArray {
         val jsonStr = prefs.getString(key, "[]")
-        return try { JSONArray(jsonStr) } catch (e: Exception) { JSONArray() }
+        return try { JSONArray(jsonStr) } catch (e: Exception) {
+            AppLogger.e("SettingsRepository", "Failed to parse stored '$key', resetting to empty", e)
+            JSONArray()
+        }
     }
 }

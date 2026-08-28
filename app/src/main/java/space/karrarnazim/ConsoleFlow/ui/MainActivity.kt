@@ -1317,9 +1317,12 @@ private fun savePersistentTabs() {
                     FileOutputStream(file).use { out ->
                         bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out)
                     }
-                } catch (e: Exception) { e.printStackTrace() }
+                } catch (e: Exception) {
+                    AppLogger.w("MainActivity", "Failed to save tab thumbnail to disk", e)
+                }
             }
         } catch (e: Exception) {
+            AppLogger.w("MainActivity", "Failed to generate tab thumbnail", e)
             onComplete?.invoke()
         }
     }

@@ -29,15 +29,28 @@ class DownloadsActivity : AppCompatActivity() {
     private lateinit var emptyLayout: LinearLayout
     private lateinit var scrollView: ScrollView
     private lateinit var clearBtn: TextView
+    private lateinit var topBar: LinearLayout
     private var clearResetRunnable: Runnable? = null
     private val clearHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor     = cBg
-        window.navigationBarColor = cBg
-        setContentView(buildRoot())
+        val root = buildRoot()
+        setContentView(root)
+        applyInsets(root)
         DownloadTracker.downloads.observe(this) { render(it) }
+    }
+
+    private fun applyInsets(root: View) {
+        val scrollBaseBottom = scrollView.paddingBottom
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val statusBarTop = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
+            val navBarBottom = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars()).bottom
+            topBar.setPadding(topBar.paddingLeft, statusBarTop, topBar.paddingRight, topBar.paddingBottom)
+            scrollView.setPadding(scrollView.paddingLeft, scrollView.paddingTop, scrollView.paddingRight, scrollBaseBottom + navBarBottom)
+            insets
+        }
+        root.requestApplyInsets()
     }
 
     private fun buildRoot(): View {
@@ -76,6 +89,7 @@ class DownloadsActivity : AppCompatActivity() {
             setPadding(dp(4), dp(8), dp(8), dp(8))
             layoutParams = LinearLayout.LayoutParams(MATCH, dp(64))
         }
+        topBar = bar
 
         val back = ImageView(this).apply {
             setImageResource(R.drawable.arrow_left)
@@ -320,7 +334,8 @@ class DownloadsActivity : AppCompatActivity() {
                 setDataAndType(uri, item.mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             })
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            AppLogger.w("DownloadsActivity", "No app found to open $path (mime=${item.mimeType})", e)
             Toast.makeText(this, "No app found to open this file", Toast.LENGTH_SHORT).show()
         }
     }

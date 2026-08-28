@@ -8,12 +8,16 @@ import android.webkit.WebView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 class AboutActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_about)
+
+        applyInsets()
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
 
@@ -120,6 +124,21 @@ class AboutActivity : AppCompatActivity() {
 
     private fun openUrl(url: String) {
         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
+    private fun applyInsets() {
+        val root = findViewById<View>(android.R.id.content)
+        val topBar = findViewById<View>(R.id.aboutTopBar)
+        val scroll = findViewById<View>(R.id.aboutScroll)
+        val scrollBaseBottom = scroll.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            topBar.setPadding(topBar.paddingLeft, statusBarTop, topBar.paddingRight, topBar.paddingBottom)
+            scroll.setPadding(scroll.paddingLeft, scroll.paddingTop, scroll.paddingRight, scrollBaseBottom + navBarBottom)
+            insets
+        }
+        root.requestApplyInsets()
     }
 
     override fun finish() {

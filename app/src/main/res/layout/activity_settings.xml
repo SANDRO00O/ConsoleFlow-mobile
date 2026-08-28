@@ -6,6 +6,7 @@
     android:background="#000000">
 
     <LinearLayout
+        android:id="@+id/settingsTopBar"
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:gravity="center_vertical"
@@ -52,6 +53,7 @@
         android:background="#1A1A1A" />
 
     <ScrollView
+        android:id="@+id/settingsScroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:overScrollMode="never"
@@ -207,6 +209,56 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="Injected on every page load"
+                            android:textColor="#555555"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:src="@drawable/arrow_right"
+                        android:tint="#333333" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginHorizontal="18dp"
+                    android:background="#1A1A1A" />
+
+                <LinearLayout
+                    android:id="@+id/settingLogs"
+                    android:layout_width="match_parent"
+                    android:layout_height="60dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="18dp"
+                    android:background="@drawable/menu_item_ripple">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_logs"
+                        android:tint="#888888" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="14dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="View Logs"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Session activity and crash reports"
                             android:textColor="#555555"
                             android:textSize="12sp" />
                     </LinearLayout>
