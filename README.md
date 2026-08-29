@@ -166,5 +166,5 @@ ConsoleFlow is licensed under the **GNU General Public License v3.0**. See [LICE
 ---
 
 <p align="center">
-Built by <a href="https://karrarnazim.space">Karrar Nazim</a> and <a href="https://github.com/ConsoleFlow-Group/ConsoleFlow-mobile/graphs/contributors">contributors</a>.
+Built by <a href="https://karrarnazim.pages.dev">Karrar Nazim</a> and <a href="https://github.com/ConsoleFlow-Group/ConsoleFlow-mobile/graphs/contributors">contributors</a>.
 </p>

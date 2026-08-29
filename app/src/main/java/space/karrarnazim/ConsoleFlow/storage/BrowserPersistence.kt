@@ -50,7 +50,7 @@ object BrowserPersistence {
                 .putInt("NEXT_GROUP_ID", nextGroupId)
                 .apply()
         } catch (e: Exception) {
-            e.printStackTrace()
+            AppLogger.e("BrowserPersistence", "Failed to save tab state", e)
         }
     }
 
@@ -99,7 +99,7 @@ object BrowserPersistence {
                 nextGroupId = prefs.getInt("NEXT_GROUP_ID", 100)
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            AppLogger.e("BrowserPersistence", "Failed to restore tab state, starting fresh", e)
             null
         }
     }

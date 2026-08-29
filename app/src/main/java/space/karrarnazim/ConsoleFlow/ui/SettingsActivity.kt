@@ -17,6 +17,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.os.Bundle
 
 class SettingsActivity : AppCompatActivity() {
@@ -38,6 +40,8 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
         prefsManager = PrefsManager(this)
 
+        applyInsets()
+
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
 
         updateSearchEngineValue()
@@ -51,6 +55,11 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.settingCustomJs).setOnClickListener { showCustomJsDialog() }
+
+        findViewById<View>(R.id.settingLogs).setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java))
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+        }
 
         findViewById<View>(R.id.settingClearData).setOnClickListener { showClearDataDialog() }
 
@@ -245,6 +254,21 @@ class SettingsActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun applyInsets() {
+        val root = findViewById<View>(android.R.id.content)
+        val topBar = findViewById<View>(R.id.settingsTopBar)
+        val scroll = findViewById<View>(R.id.settingsScroll)
+        val scrollBaseBottom = scroll.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            topBar.setPadding(topBar.paddingLeft, statusBarTop, topBar.paddingRight, topBar.paddingBottom)
+            scroll.setPadding(scroll.paddingLeft, scroll.paddingTop, scroll.paddingRight, scrollBaseBottom + navBarBottom)
+            insets
+        }
+        root.requestApplyInsets()
     }
 
     override fun finish() {

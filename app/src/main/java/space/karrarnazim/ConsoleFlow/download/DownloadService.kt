@@ -198,6 +198,7 @@ class DownloadService : Service() {
             } catch (e: IOException) {
                 try { outputStream.close() } catch (_: Exception) {}
                 if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED) {
+                    AppLogger.e("DownloadService", "Download failed (IO) for $fileName", e)
                     deletePartial(filePath)
                     fail(id, notifId, fileName, e.message ?: "IO error")
                 } else {
@@ -206,9 +207,10 @@ class DownloadService : Service() {
             }
 
         } catch (e: Exception) {
-            if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED)
+            if (DownloadTracker.getById(id)?.state != DownloadState.CANCELLED) {
+                AppLogger.e("DownloadService", "Download failed for $fileName", e)
                 fail(id, notifId, fileName, e.message ?: "Network error")
-            else
+            } else
                 notifManager.cancel(notifId)
         } finally {
             val remaining = activeCount.decrementAndGet()

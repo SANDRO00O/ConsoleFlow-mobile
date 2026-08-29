@@ -164,6 +164,20 @@ class MainActivity : AppCompatActivity() {
         transcript?.let { query -> if (query.isNotBlank()) navigateTo(query) }
     }
 
+    private var lastStatusBarTop = 0
+
+    // pads swipeRefresh with the status bar inset when topBar is gone (e.g. home page)
+    private fun applyContentTopInset() {
+        if (!::swipeRefresh.isInitialized) return
+        val topInset = if (topBar.visibility == View.VISIBLE) 0 else lastStatusBarTop
+        swipeRefresh.setPadding(
+            swipeRefresh.paddingLeft,
+            topInset,
+            swipeRefresh.paddingRight,
+            swipeRefresh.paddingBottom
+        )
+    }
+
     @Suppress("UNCHECKED_CAST")
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -369,13 +383,15 @@ class MainActivity : AppCompatActivity() {
             val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val extraTop = (resources.displayMetrics.density * 4f).toInt()
+            lastStatusBarTop = statusBarTop
 
-            topBar.setPadding(
-                topBar.paddingLeft,
-                statusBarTop + extraTop,
-                topBar.paddingRight,
-                topBar.paddingBottom
-            )
+            (topBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                val desiredTop = statusBarTop + extraTop
+                if (lp.topMargin != desiredTop) {
+                    lp.topMargin = desiredTop
+                    topBar.layoutParams = lp
+                }
+            }
 
             tabsOverlay.setPadding(
                 tabsOverlay.paddingLeft,
@@ -390,6 +406,8 @@ class MainActivity : AppCompatActivity() {
                     bottomBar.layoutParams = lp
                 }
             }
+
+            applyContentTopInset()
 
             insets
         }
@@ -453,13 +471,15 @@ class MainActivity : AppCompatActivity() {
             val statusBarTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             val navBarBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val extraTop = (resources.displayMetrics.density * 4f).toInt()
+            lastStatusBarTop = statusBarTop
 
-            topBar.setPadding(
-                topBar.paddingLeft,
-                statusBarTop + extraTop,
-                topBar.paddingRight,
-                topBar.paddingBottom
-            )
+            (topBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                val desiredTop = statusBarTop + extraTop
+                if (lp.topMargin != desiredTop) {
+                    lp.topMargin = desiredTop
+                    topBar.layoutParams = lp
+                }
+            }
 
             tabsOverlay.setPadding(
                 tabsOverlay.paddingLeft,
@@ -474,6 +494,8 @@ class MainActivity : AppCompatActivity() {
                     bottomBar.layoutParams = lp
                 }
             }
+
+            applyContentTopInset()
 
             insets
         }
@@ -549,15 +571,20 @@ class MainActivity : AppCompatActivity() {
         if (immediate) {
             topBar.alpha      = if (visible) 1f else 0f
             topBar.visibility = if (visible) View.VISIBLE else View.GONE
+            applyContentTopInset()
             return
         }
         if (visible) {
             topBar.visibility = View.VISIBLE
+            applyContentTopInset()
             topBar.translationY = -topBar.height.toFloat() * 0.2f
             topBar.animate().alpha(1f).translationY(0f).setDuration(160).start()
         } else {
             topBar.animate().alpha(0f).translationY(-topBar.height.toFloat() * 0.2f)
-                .setDuration(120).withEndAction { topBar.visibility = View.GONE }.start()
+                .setDuration(120).withEndAction {
+                    topBar.visibility = View.GONE
+                    applyContentTopInset()
+                }.start()
         }
     }
 
@@ -1292,9 +1319,12 @@ private fun savePersistentTabs() {
                     FileOutputStream(file).use { out ->
                         bitmap.compress(Bitmap.CompressFormat.WEBP, 80, out)
                     }
-                } catch (e: Exception) { e.printStackTrace() }
+                } catch (e: Exception) {
+                    AppLogger.w("MainActivity", "Failed to save tab thumbnail to disk", e)
+                }
             }
         } catch (e: Exception) {
+            AppLogger.w("MainActivity", "Failed to generate tab thumbnail", e)
             onComplete?.invoke()
         }
     }
@@ -1325,7 +1355,8 @@ private fun savePersistentTabs() {
         swipeRefresh.setOnChildScrollUpCallback { _, _ -> (currentWebView?.scrollY ?: 0) > 0 }
         swipeRefresh.setOnRefreshListener { currentWebView?.reload() }
 
-        textUrl.setOnEditorActionListener { _, _, _ ->
+        textUrl.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId != EditorInfo.IME_ACTION_GO) return@setOnEditorActionListener false
             navigateTo(textUrl.text.toString().trim()); hideKeyboard(); true
         }
 

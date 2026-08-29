@@ -84,6 +84,7 @@ object UpdateManager {
         http.newCall(req).enqueue(object : Callback {
 
             override fun onFailure(call: Call, e: IOException) {
+                AppLogger.w("UpdateManager", "Update check failed, using cached release info", e)
                 val cached = getCached(ctx)
                 val upd    = cached != null && compare(currentVersion(ctx), cached.latestVersion) < 0
                 main.post { callback(cached, upd) }
@@ -115,6 +116,7 @@ object UpdateManager {
 
                         main.post { callback(info, upd) }
                     } catch (e: Exception) {
+                        AppLogger.w("UpdateManager", "Failed to parse release info from GitHub", e)
                         onFailure(call, IOException(e))
                     }
                 }

@@ -40,7 +40,8 @@ class BrowserWebViewClient(
         return try {
             activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            AppLogger.w("WebViewClient", "No app found to handle intent for $url", e)
             true
         }
     }
@@ -62,7 +63,8 @@ class BrowserWebViewClient(
         if (url == "https://eruda.local/eruda.js") {
             return try {
                 WebResourceResponse("application/javascript", "utf-8", activity.assets.open("eruda.js"))
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                AppLogger.e("WebViewClient", "Failed to load bundled eruda.js asset", e)
                 null
             }
         }

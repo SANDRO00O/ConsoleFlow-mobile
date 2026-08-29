@@ -17,6 +17,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <application
+        android:name=".ConsoleFlowApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -29,7 +30,7 @@
 
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|keyboard|navigation"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|keyboard|navigation|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/AppTheme.SplashScreen"
@@ -53,21 +54,28 @@
 
         <activity
             android:name=".SettingsActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|uiMode"
             android:exported="false"
             android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustPan" />
 
         <activity
             android:name=".AboutActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|uiMode"
             android:exported="false"
             android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustPan" />
 
         <activity
             android:name=".DownloadsActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|uiMode"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:windowSoftInputMode="adjustPan" />
+
+        <activity
+            android:name=".LogsActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|navigation|uiMode"
             android:exported="false"
             android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustPan" />
@@ -76,6 +84,16 @@
             android:name=".DownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>
