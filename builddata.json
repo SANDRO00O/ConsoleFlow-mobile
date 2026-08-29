@@ -1,7 +1,7 @@
 {
-  "release_name": "v2.2.10 ConsoleFlow",
-  "release_body": "## What is new\n\n- The project moved to a new home: https://github.com/ConsoleFlow-Group/ConsoleFlow-mobile\n- Fixed the in-app update checker and the About screen's GitHub link to point to the new repository",
-  "apk_name": "ConsoleFlow_v2.2.10.apk",
+  "release_name": "v2.2.11 ConsoleFlow",
+  "release_body": "## What is new\n\n- Fixed the status bar overlapping the browser content on the home page\n- Fixed search and downloads sometimes firing twice from a single Enter/Go press\n- Fixed the app appearing to launch/restart twice on cold start\n- Added a new in-app Logs screen (Settings \u2192 View Logs) with session activity, crash capture, and share/clear actions\n- Fixed the status bar overlapping content on the About, Settings, and Downloads screens\n- Fixed the address bar getting clipped at the top and bottom on devices with a taller status bar (e.g. Android 16)\n- Updated the developer link to karrarnazim.pages.dev",
+  "apk_name": "ConsoleFlow_v2.2.11.apk",
   "is_prerelease": false,
-  "tag": "v2.2.10"
+  "tag": "v2.2.11"
 }

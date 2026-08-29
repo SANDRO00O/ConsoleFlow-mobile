@@ -84,7 +84,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="v2.2.10"
+                    android:text="v2.2.11"
                     android:textColor="#444444"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -355,7 +355,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="karrarnazim.space"
+                            android:text="karrarnazim.pages.dev"
                             android:textColor="#666666"
                             android:textSize="12sp" />
                     </LinearLayout>

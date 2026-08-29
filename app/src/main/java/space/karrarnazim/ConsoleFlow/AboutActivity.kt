@@ -27,7 +27,7 @@ class AboutActivity : AppCompatActivity() {
 
         mapOf(
             R.id.linkWebsite   to "https://consoleflow.karrarnazim.space",
-            R.id.linkDeveloper to "https://karrarnazim.space",
+            R.id.linkDeveloper to "https://karrarnazim.pages.dev",
             R.id.linkPrivacy   to "https://consoleflow.karrarnazim.space/privacy",
             R.id.linkGithub    to "https://github.com/ConsoleFlow-Group/ConsoleFlow-mobile"
         ).forEach { (viewId, url) ->
